@@ -1,0 +1,82 @@
+# ============================================================
+# 女娲 Nuwa — Git 忽略规则
+# 原则：只跟踪源码/配置/文档/规格；排除模型权重、数据集、
+# 虚拟环境、构建产物、缓存与临时文件等大体积或可再生内容。
+# ============================================================
+
+# ---------- 大体积资产（绝不入库） ----------
+# 模型权重目录（~47GB）
+/models/
+# 音频数据集与真人语音素材（版权/隐私敏感，~8.6GB）
+/assets/
+# Python 虚拟环境（~6GB）
+/envs/
+ai_env/
+.venv/
+venv/
+# 各类缓存（~4GB）
+/cache/
+checkpoints/
+**/.cache/
+# 第三方引擎与 vendored 依赖（可按需自行克隆）
+/engine/
+/vendor/
+/external/
+
+# ---------- 构建产物 ----------
+# Rust
+target/
+*.rs.bk
+# 前端
+node_modules/
+dist/
+app/web/dist/
+
+# ---------- 运行输出 / 用户内容 ----------
+/output/
+data/
+output/
+results/
+
+# ---------- 模型权重文件扩展名（兜底） ----------
+*.pth
+*.ckpt
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.onnx
+
+# ---------- 临时 / 调试文件 ----------
+temp_*
+tmp_*
+*_test.wav
+*_test.json
+debug_tts.*
+screenshot-*.png
+*.tmp
+
+# ---------- 归档 ----------
+*.zip
+*.tar
+*.tar.gz
+package/
+
+# ---------- 日志 ----------
+*.log
+
+# ---------- Python ----------
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# ---------- IDE / 编辑器 ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---------- 操作系统 ----------
+.DS_Store
+Thumbs.db
