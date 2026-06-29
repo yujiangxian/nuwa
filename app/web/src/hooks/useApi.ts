@@ -109,7 +109,9 @@ export function useTranscribe() {
       const { data } = await apiClient.post<AsrUploadResponse>(
         '/api/inference/asr/upload',
         fd,
-        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 }
+        // ASR 经 Python 子进程每次冷加载模型（实测 Paraformer 冷启 ~35s），
+        // 叠加较长音频识别耗时，60s 易超时误报；放宽到 180s。
+        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 180000 }
       );
       return data;
     },
@@ -136,7 +138,10 @@ export function useSynthesize() {
           ref_audio: args.refAudio ?? '',
           ref_text: args.refText ?? '',
         },
-        { timeout: 120000 }
+        // TTS 经 Python 子进程每次冷加载模型（CosyVoice 冷启 ~20s）且当前 ONNX
+        // 回退 CPU 推理（RTF≈3.9），合成一句正常长度回复实测可达 ~140s，
+        // 120s 会在后端实际成功前 abort 并误报失败；放宽到 300s。
+        { timeout: 300000 }
       );
       return data;
     },
