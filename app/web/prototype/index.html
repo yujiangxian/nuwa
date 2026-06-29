@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoxCPM</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter','system-ui','sans-serif'], mono: ['JetBrains Mono','monospace'] },
+        }
+      }
+    }
+  </script>
+  <style>
+    /* ===== Ocean Theme + Apple HIG ===== */
+    :root {
+      --bg: #080C14;
+      --bg-elevated: #0c1220;
+      --surface: rgba(255,255,255,0.015);
+      --surface-hover: rgba(255,255,255,0.035);
+      --surface-active: rgba(255,255,255,0.05);
+      --border: rgba(255,255,255,0.04);
+      --border-active: rgba(255,255,255,0.10);
+      --primary: #48CAE4;
+      --primary-dim: #0096C7;
+      --primary-glow: rgba(72,202,228,0.35);
+      --primary-glow-strong: rgba(72,202,228,0.55);
+      --warm: #90E0EF;
+      --text-primary: #E0F7FA;
+      --text-secondary: #6A9EAD;
+      --text-muted: #3A5A6A;
+      --ambient: rgba(72,202,228,0.04);
+      --danger: #FF6B6B;
+    }
+
+    * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.05) transparent; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.05); border-radius: 3px; }
+
+    html { font-size: 15px; }
+
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: 'Inter', system-ui, sans-serif;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Ambient glow center */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 45%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 70vw; height: 70vw;
+      max-width: 900px; max-height: 900px;
+      background: radial-gradient(ellipse, var(--ambient) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Noise texture */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.02'/%3E%3C/svg%3E");
+      opacity: 0.35;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .material-symbols-outlined {
+      font-variation-settings: 'opsz' 24, 'wght' 400, 'FILL' 0, 'GRAD' 0;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    /* ===== Glass (核心毛玻璃) ===== */
+    .glass {
+      background: var(--surface);
+      backdrop-filter: blur(40px) saturate(1.3);
+      -webkit-backdrop-filter: blur(40px) saturate(1.3);
+      border: 1px solid var(--border);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 8px 32px rgba(0,0,0,0.25);
+      transition: background 0.3s ease, border-color 0.3s ease;
+    }
+    .glass-hover:hover {
+      background: var(--surface-hover);
+      border-color: var(--border-active);
+    }
+
+    /* Glow edge (顶部微光边缘) */
+    .glow-edge { position: relative; }
+    .glow-edge::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: inherit;
+      padding: 1px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, transparent 35%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    /* ===== Breathing animations ===== */
+    @keyframes breathe {
+      0%, 100% { transform: scale(1); opacity: 0.30; }
+      50% { transform: scale(1.12); opacity: 0.85; }
+    }
+    .breathe { animation: breathe 5s ease-in-out infinite; }
+
+    @keyframes breathe-delayed {
+      0%, 100% { transform: scale(1); opacity: 0.20; }
+      50% { transform: scale(1.18); opacity: 0.70; }
+    }
+    .breathe-delayed { animation: breathe-delayed 6.5s ease-in-out infinite; animation-delay: -2.5s; }
+
+    /* ===== Controls ===== */
+    .btn-icon {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--text-secondary);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-icon:hover { background: var(--surface-hover); color: var(--text-primary); }
+    .btn-icon:active { transform: scale(0.94); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dim) 100%);
+      color: var(--bg);
+      border-radius: 12px;
+      padding: 10px 24px;
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: 0.01em;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 24px var(--primary-glow);
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn-primary:hover {
+      box-shadow: 0 0 40px var(--primary-glow-strong);
+      transform: translateY(-1px);
+    }
+    .btn-primary:active { transform: scale(0.97); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border-radius: 10px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-ghost:hover { background: var(--surface-hover); border-color: var(--border-active); color: var(--text-primary); }
+
+    /* Apple-style slider */
+    .slider-track {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.06);
+      outline: none; cursor: pointer;
+    }
+    .slider-track::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.06); }
+    .slider-track::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--text-primary);
+      cursor: pointer;
+      border: 3px solid var(--bg);
+      box-shadow: 0 0 0 0 rgba(72,202,228,0);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      margin-top: -6px;
+    }
+    .slider-track::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 16px var(--primary-glow);
+    }
+
+    /* Mode pill */
+    .mode-pill {
+      padding: 7px 20px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+      white-space: nowrap;
+    }
+    .mode-pill:hover { color: var(--text-primary); }
+    .mode-pill.active {
+      background: rgba(255,255,255,0.06);
+      color: var(--text-primary);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+    }
+
+    /* Track / voice item */
+    .voice-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 1px solid transparent;
+    }
+    .voice-item:hover { background: var(--surface-hover); }
+    .voice-item.active {
+      background: rgba(72,202,228,0.06);
+      border-color: rgba(72,202,228,0.12);
+    }
+
+    /* Chip */
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: transparent;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .chip:hover { border-color: var(--border-active); color: var(--text-primary); }
+    .chip.active {
+      background: rgba(72,202,228,0.08);
+      color: var(--primary);
+      border-color: rgba(72,202,228,0.2);
+    }
+
+    /* Textarea */
+    .input-textarea {
+      width: 100%; background: transparent; border: none;
+      color: var(--text-primary); font-size: 15px; line-height: 1.7;
+      resize: none; outline: none;
+      caret-color: var(--primary);
+    }
+    .input-textarea::placeholder { color: var(--text-muted); }
+
+    /* Select */
+    .select-styled {
+      appearance: none; -webkit-appearance: none;
+      background: var(--surface); color: var(--text-primary);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 9px 32px 9px 14px;
+      font-size: 13px; cursor: pointer; width: 100%;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236A9EAD' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center;
+      transition: all 0.2s ease;
+    }
+    .select-styled:hover { border-color: var(--border-active); }
+
+    /* Play FAB */
+    .play-fab {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dim) 100%);
+      color: var(--bg);
+      border: none;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 0 40px var(--primary-glow);
+      transition: all 0.25s ease;
+    }
+    .play-fab:hover { transform: scale(1.08); box-shadow: 0 0 60px var(--primary-glow-strong); }
+    .play-fab:active { transform: scale(0.95); }
+
+    /* Progress */
+    .progress-track {
+      height: 3px; border-radius: 2px;
+      background: rgba(255,255,255,0.06);
+      position: relative; cursor: pointer;
+    }
+    .progress-fill {
+      height: 100%; border-radius: 2px;
+      background: var(--primary);
+      width: 0%;
+      box-shadow: 0 0 8px var(--primary-glow);
+    }
+    .progress-thumb {
+      position: absolute; top: 50%; transform: translate(-50%, -50%);
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--text-primary);
+      border: 2px solid var(--bg);
+      opacity: 0; transition: opacity 0.2s ease;
+    }
+    .progress-track:hover .progress-thumb { opacity: 1; }
+
+    /* Drawer overlay */
+    .drawer-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(12px);
+      z-index: 30;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.35s ease;
+    }
+    .drawer-overlay.open { opacity: 1; pointer-events: auto; }
+
+    /* Modal */
+    .modal-bg {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(16px);
+      z-index: 50;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .modal-bg.open { opacity: 1; pointer-events: auto; }
+    .modal-panel {
+      background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, var(--surface) 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 32px 80px rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 20px;
+    }
+
+    /* Section label */
+    .section-label {
+      font-size: 11px; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    /* History item mini-wave */
+    .mini-wave { display: flex; align-items: flex-end; gap: 2px; height: 18px; }
+    .mini-wave span {
+      width: 2.5px; background: var(--primary);
+      border-radius: 1px; opacity: 0.25;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.96) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .animate-fade-in { animation: fadeIn 0.3s cubic-bezier(0.4,0,0.2,1); }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+  </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col">
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="relative z-20 flex items-center justify-between px-5 py-3 shrink-0" style="border-bottom: 1px solid var(--border);">
+    <div class="flex items-center gap-3">
+      <button class="btn-icon md:hidden" id="btn-drawer-left">
+        <span class="material-symbols-outlined">menu</span>
+      </button>
+      <div class="flex items-center gap-2.5">
+        <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, var(--primary), var(--primary-dim)); box-shadow: 0 0 16px var(--primary-glow);">
+          <span class="material-symbols-outlined" style="font-size: 18px; color: var(--bg);">graphic_eq</span>
+        </div>
+        <span class="text-base font-semibold tracking-tight" style="color: var(--text-primary);">VoxCPM</span>
+      </div>
+    </div>
+
+    <!-- Center Mode Pills -->
+    <div class="hidden md:flex items-center gap-1 glass rounded-full px-1.5 py-1">
+      <button class="mode-pill active" data-mode="voice-design">声音设计</button>
+      <button class="mode-pill" data-mode="controllable">可控克隆</button>
+      <button class="mode-pill" data-mode="ultimate">极致克隆</button>
+    </div>
+
+    <div class="flex items-center gap-1">
+      <button class="btn-icon" id="btn-settings" title="设置">
+        <span class="material-symbols-outlined">settings</span>
+      </button>
+      <button class="btn-icon md:hidden" id="btn-drawer-right" title="参数">
+        <span class="material-symbols-outlined">tune</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===================== MAIN LAYOUT ===================== -->
+  <div class="flex flex-1 min-h-0 relative z-10">
+
+    <!-- === LEFT SIDEBAR === -->
+    <aside id="sidebar-left"
+      class="absolute md:relative z-40 w-[260px] h-full flex flex-col shrink-0 transition-transform duration-300 ease-out md:translate-x-0 -translate-x-full"
+      style="background: var(--bg); border-right: 1px solid var(--border);">
+      <div class="p-5 pb-3">
+        <div class="flex items-center justify-between mb-4">
+          <span class="section-label">声音库</span>
+          <button class="btn-icon" style="width:28px;height:28px;" title="添加">
+            <span class="material-symbols-outlined" style="font-size:18px;">add</span>
+          </button>
+        </div>
+        <div class="relative">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2" style="font-size:18px; color: var(--text-muted);">search</span>
+          <input type="text" placeholder="搜索声音..."
+            class="w-full rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none"
+            style="background: var(--surface); color: var(--text-primary); border: 1px solid var(--border);">
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-4 pb-4">
+        <div class="flex gap-1.5 mb-3 overflow-x-auto pb-1">
+          <button class="chip active">全部</button>
+          <button class="chip">人声</button>
+          <button class="chip">角色</button>
+          <button class="chip">自定义</button>
+        </div>
+
+        <div class="space-y-1" id="voice-list">
+          <div class="voice-item active" data-voice="jyy">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: linear-gradient(135deg, rgba(72,202,228,0.15), rgba(0,150,199,0.1)); border: 1px solid rgba(72,202,228,0.15);">
+              <span class="material-symbols-outlined" style="font-size:18px; color: var(--primary);">face</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium truncate" style="color: var(--text-primary);">佳怡音色</div>
+              <div class="text-xs truncate" style="color: var(--text-secondary);">清晰 · 温暖 · 女声</div>
+            </div>
+          </div>
+
+          <div class="voice-item" data-voice="stefanie">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: linear-gradient(135deg, rgba(255,107,157,0.1), rgba(255,107,157,0.05)); border: 1px solid rgba(255,107,157,0.1);">
+              <span class="material-symbols-outlined" style="font-size:18px; color: #FF6B9D;">music_note</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium truncate" style="color: var(--text-primary);">孙燕姿</div>
+              <div class="text-xs truncate" style="color: var(--text-secondary);">唱歌 · 甜美 · 明星</div>
+            </div>
+          </div>
+
+          <div class="voice-item" data-voice="narrator">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: linear-gradient(135deg, rgba(82,183,136,0.1), rgba(82,183,136,0.05)); border: 1px solid rgba(82,183,136,0.1);">
+              <span class="material-symbols-outlined" style="font-size:18px; color: #52B788;">record_voice_over</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium truncate" style="color: var(--text-primary);">旁白君</div>
+              <div class="text-xs truncate" style="color: var(--text-secondary);">沉稳 · 磁性 · 男声</div>
+            </div>
+          </div>
+
+          <div class="voice-item" data-voice="anime-girl">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: linear-gradient(135deg, rgba(123,130,225,0.1), rgba(123,130,225,0.05)); border: 1px solid rgba(123,130,225,0.1);">
+              <span class="material-symbols-outlined" style="font-size:18px; color: #7B82E1;">smart_toy</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium truncate" style="color: var(--text-primary);">二次元少女</div>
+              <div class="text-xs truncate" style="color: var(--text-secondary);">活泼 · 元气 · 角色</div>
+            </div>
+          </div>
+
+          <div class="voice-item" data-voice="english-narrator">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style="background: linear-gradient(135deg, rgba(212,175,55,0.1), rgba(212,175,55,0.05)); border: 1px solid rgba(212,175,55,0.1);">
+              <span class="material-symbols-outlined" style="font-size:18px; color: #D4AF37;">language</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium truncate" style="color: var(--text-primary);">英文主播</div>
+              <div class="text-xs truncate" style="color: var(--text-secondary);">标准 · 专业 · 英音</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="h-px my-4" style="background: var(--border);"></div>
+
+        <div>
+          <span class="section-label mb-2 block">当前模型</span>
+          <select class="select-styled">
+            <option>GPT-SoVITS v2</option>
+            <option>Fish Speech</option>
+            <option>CosyVoice2</option>
+            <option>Chatterbox</option>
+          </select>
+        </div>
+      </div>
+    </aside>
+
+    <!-- === CENTER === -->
+    <main class="flex-1 flex flex-col min-w-0 relative">
+      <!-- Mobile Mode Pills -->
+      <div class="md:hidden flex gap-2 p-4 pb-0 overflow-x-auto">
+        <button class="chip active text-xs">声音设计</button>
+        <button class="chip text-xs">可控克隆</button>
+        <button class="chip text-xs">极致克隆</button>
+      </div>
+
+      <!-- Waveform Stage -->
+      <div class="flex-1 flex flex-col items-center justify-center relative px-6 md:px-10">
+        <!-- Breathing ambient orbs -->
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden">
+          <div class="w-[420px] h-[420px] rounded-full breathe blur-3xl" style="background: radial-gradient(circle, rgba(72,202,228,0.07) 0%, transparent 65%);"></div>
+          <div class="absolute w-[300px] h-[300px] rounded-full breathe-delayed blur-2xl" style="background: radial-gradient(circle, rgba(144,224,239,0.05) 0%, transparent 60%);"></div>
+        </div>
+
+        <!-- Canvas -->
+        <div class="relative w-full max-w-xl">
+          <canvas id="waveform-canvas" class="w-full" height="200" style="max-height: 240px;"></canvas>
+          <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <button id="btn-center-play" class="play-fab pointer-events-auto" title="播放/暂停">
+              <span class="material-symbols-outlined" style="font-size: 28px;" id="icon-center-play">play_arrow</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-8 text-center relative">
+          <p id="status-text" class="text-sm font-medium" style="color: var(--text-secondary);">准备就绪</p>
+          <p class="text-xs mt-1 font-mono" style="color: var(--text-muted);">0:00 / 0:00</p>
+        </div>
+      </div>
+
+      <!-- Text Input -->
+      <div class="mx-5 mb-3 glass glow-edge rounded-2xl p-5">
+        <div class="flex items-start gap-3">
+          <span class="material-symbols-outlined shrink-0 mt-1" style="color: var(--text-muted);">edit_note</span>
+          <textarea id="input-text" class="input-textarea flex-1" rows="2" placeholder="输入要合成的文本..."></textarea>
+          <div class="flex flex-col gap-1 shrink-0">
+            <button class="btn-icon" style="width:28px;height:28px;" title="清空">
+              <span class="material-symbols-outlined" style="font-size:16px;">close</span>
+            </button>
+            <button class="btn-icon" style="width:28px;height:28px;" title="粘贴">
+              <span class="material-symbols-outlined" style="font-size:16px;">content_paste</span>
+            </button>
+          </div>
+        </div>
+        <div class="flex items-center justify-between mt-3 pt-3" style="border-top: 1px solid var(--border);">
+          <span class="text-xs font-mono" style="color: var(--text-muted);">0 / 500 字</span>
+          <button class="btn-primary" id="btn-generate">
+            <span class="material-symbols-outlined" style="font-size:18px;">auto_fix_high</span>
+            开始合成
+          </button>
+        </div>
+      </div>
+
+      <!-- History -->
+      <div class="mx-5 mb-3 glass rounded-2xl overflow-hidden">
+        <button id="toggle-history" class="w-full flex items-center justify-between px-5 py-3.5 cursor-pointer bg-transparent border-none" style="color: var(--text-primary);">
+          <div class="flex items-center gap-2.5">
+            <span class="material-symbols-outlined" style="font-size:18px; color: var(--text-muted);">history</span>
+            <span class="text-sm font-medium">生成历史</span>
+          </div>
+          <span class="material-symbols-outlined transition-transform duration-200" id="history-chevron" style="color: var(--text-muted);">expand_more</span>
+        </button>
+        <div id="history-content" class="hidden px-5 pb-4">
+          <div class="space-y-1">
+            <div class="voice-item" style="padding: 8px 10px;">
+              <button class="btn-icon" style="width:26px;height:26px;">
+                <span class="material-symbols-outlined" style="font-size:16px;">play_arrow</span>
+              </button>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm truncate" style="color: var(--text-primary);">你好，我是人工智能助手...</div>
+                <div class="text-xs" style="color: var(--text-secondary);">佳怡音色 · 2 分钟前</div>
+              </div>
+              <div class="mini-wave">
+                <span style="height:6px"></span><span style="height:14px"></span><span style="height:10px"></span><span style="height:18px"></span><span style="height:8px"></span><span style="height:12px"></span><span style="height:6px"></span>
+              </div>
+            </div>
+            <div class="voice-item" style="padding: 8px 10px;">
+              <button class="btn-icon" style="width:26px;height:26px;">
+                <span class="material-symbols-outlined" style="font-size:16px;">play_arrow</span>
+              </button>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm truncate" style="color: var(--text-primary);">今天天气真好，我想去公园散步...</div>
+                <div class="text-xs" style="color: var(--text-secondary);">旁白君 · 15 分钟前</div>
+              </div>
+              <div class="mini-wave">
+                <span style="height:8px"></span><span style="height:12px"></span><span style="height:16px"></span><span style="height:10px"></span><span style="height:14px"></span><span style="height:8px"></span><span style="height:10px"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- === RIGHT SIDEBAR === -->
+    <aside id="sidebar-right"
+      class="absolute right-0 md:relative z-40 w-[280px] h-full flex flex-col shrink-0 transition-transform duration-300 ease-out md:translate-x-0 translate-x-full"
+      style="background: var(--bg); border-left: 1px solid var(--border);">
+      <div class="p-5 pb-2 flex items-center justify-between">
+        <span class="section-label">参数控制</span>
+        <button class="btn-icon md:hidden" id="btn-close-right" style="width:28px;height:28px;">
+          <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto px-5 pb-5 space-y-6">
+        <!-- Speed -->
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <label class="text-sm font-medium" style="color: var(--text-primary);">语速</label>
+            <span class="text-xs font-mono px-2 py-0.5 rounded-lg" style="background: var(--surface); color: var(--primary); border: 1px solid rgba(72,202,228,0.15);" id="val-speed">1.0x</span>
+          </div>
+          <input type="range" class="slider-track" min="0.5" max="2.0" step="0.1" value="1.0" id="slider-speed">
+          <div class="flex justify-between mt-1.5">
+            <span class="text-xs" style="color: var(--text-muted);">慢</span>
+            <span class="text-xs" style="color: var(--text-muted);">快</span>
+          </div>
+        </div>
+
+        <!-- Pitch -->
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <label class="text-sm font-medium" style="color: var(--text-primary);">音调</label>
+            <span class="text-xs font-mono px-2 py-0.5 rounded-lg" style="background: var(--surface); color: var(--primary); border: 1px solid rgba(72,202,228,0.15);" id="val-pitch">0</span>
+          </div>
+          <input type="range" class="slider-track" min="-12" max="12" step="1" value="0" id="slider-pitch">
+          <div class="flex justify-between mt-1.5">
+            <span class="text-xs" style="color: var(--text-muted);">低</span>
+            <span class="text-xs" style="color: var(--text-muted);">高</span>
+          </div>
+        </div>
+
+        <!-- Temperature -->
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <label class="text-sm font-medium" style="color: var(--text-primary);">创意度</label>
+            <span class="text-xs font-mono px-2 py-0.5 rounded-lg" style="background: var(--surface); color: var(--primary); border: 1px solid rgba(72,202,228,0.15);" id="val-temp">0.6</span>
+          </div>
+          <input type="range" class="slider-track" min="0" max="1" step="0.05" value="0.6" id="slider-temp">
+          <div class="flex justify-between mt-1.5">
+            <span class="text-xs" style="color: var(--text-muted);">稳定</span>
+            <span class="text-xs" style="color: var(--text-muted);">创意</span>
+          </div>
+        </div>
+
+        <!-- Top K -->
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <label class="text-sm font-medium" style="color: var(--text-primary);">采样多样性</label>
+            <span class="text-xs font-mono px-2 py-0.5 rounded-lg" style="background: var(--surface); color: var(--primary); border: 1px solid rgba(72,202,228,0.15);" id="val-topk">20</span>
+          </div>
+          <input type="range" class="slider-track" min="1" max="50" step="1" value="20" id="slider-topk">
+        </div>
+
+        <div class="h-px" style="background: var(--border);"></div>
+
+        <!-- Reference Audio -->
+        <div>
+          <label class="text-sm font-medium mb-2.5 block" style="color: var(--text-primary);">参考音频</label>
+          <div class="glass rounded-xl p-3.5 glow-edge">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: rgba(72,202,228,0.08); border: 1px solid rgba(72,202,228,0.12);">
+                <span class="material-symbols-outlined" style="font-size:16px; color: var(--primary);">audio_file</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm truncate" style="color: var(--text-primary);">ref_sample_01.wav</div>
+                <div class="text-xs" style="color: var(--text-secondary);">3.2s · 44.1kHz</div>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn-ghost text-xs py-1.5" style="flex:1; justify-content:center;">
+                <span class="material-symbols-outlined" style="font-size:15px;">upload</span>上传
+              </button>
+              <button class="btn-ghost text-xs py-1.5" style="flex:1; justify-content:center;">
+                <span class="material-symbols-outlined" style="font-size:15px;">play_arrow</span>试听
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Emotion -->
+        <div>
+          <label class="text-sm font-medium mb-2.5 block" style="color: var(--text-primary);">情感风格</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button class="chip active text-xs">中性</button>
+            <button class="chip text-xs">温柔</button>
+            <button class="chip text-xs">活泼</button>
+            <button class="chip text-xs">严肃</button>
+            <button class="chip text-xs">悲伤</button>
+            <button class="chip text-xs">兴奋</button>
+          </div>
+        </div>
+
+        <div class="h-px" style="background: var(--border);"></div>
+
+        <!-- Advanced -->
+        <button id="toggle-advanced" class="w-full flex items-center justify-between cursor-pointer bg-transparent border-none" style="color: var(--text-primary);">
+          <span class="text-sm font-medium">高级参数</span>
+          <span class="material-symbols-outlined transition-transform duration-200" id="advanced-chevron" style="color: var(--text-muted);">expand_more</span>
+        </button>
+        <div id="advanced-content" class="hidden space-y-4">
+          <div>
+            <label class="text-xs mb-1.5 block" style="color: var(--text-secondary);">分割阈值 (秒)</label>
+            <input type="range" class="slider-track" min="1" max="10" step="0.5" value="3">
+          </div>
+          <div>
+            <label class="text-xs mb-1.5 block" style="color: var(--text-secondary);">重绘比例</label>
+            <input type="range" class="slider-track" min="0" max="1" step="0.1" value="0.3">
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ===================== BOTTOM BAR ===================== -->
+  <div class="relative z-20 mx-3 mb-3 glass glow-edge rounded-2xl flex items-center px-4 py-2.5 gap-4 shrink-0">
+    <div class="flex items-center gap-1">
+      <button class="btn-icon" title="上一段">
+        <span class="material-symbols-outlined" style="font-size:20px;">skip_previous</span>
+      </button>
+      <button class="btn-icon" style="width:40px;height:40px;" title="播放/暂停" id="btn-play">
+        <span class="material-symbols-outlined" style="font-size:22px;" id="icon-play">play_arrow</span>
+      </button>
+      <button class="btn-icon" title="下一段">
+        <span class="material-symbols-outlined" style="font-size:20px;">skip_next</span>
+      </button>
+    </div>
+
+    <div class="flex-1 flex items-center gap-3 min-w-0">
+      <span class="text-xs font-mono shrink-0" style="color: var(--text-muted);" id="time-current">0:00</span>
+      <div class="flex-1 progress-track" id="progress-track">
+        <div class="progress-fill" id="progress-fill"></div>
+        <div class="progress-thumb" id="progress-thumb" style="left: 0%;"></div>
+      </div>
+      <span class="text-xs font-mono shrink-0" style="color: var(--text-muted);" id="time-total">0:00</span>
+    </div>
+
+    <div class="hidden md:flex items-center gap-2">
+      <button class="btn-icon" id="btn-mute">
+        <span class="material-symbols-outlined" style="font-size:20px;" id="icon-volume">volume_up</span>
+      </button>
+      <input type="range" class="slider-track" style="width:70px;" min="0" max="100" value="80" id="slider-volume">
+    </div>
+
+    <div class="flex items-center gap-0.5">
+      <button class="btn-icon" title="下载">
+        <span class="material-symbols-outlined" style="font-size:20px;">download</span>
+      </button>
+      <button class="btn-icon" title="分享">
+        <span class="material-symbols-outlined" style="font-size:20px;">share</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Overlays -->
+  <div class="drawer-overlay md:hidden" id="overlay-left"></div>
+  <div class="drawer-overlay md:hidden" id="overlay-right"></div>
+
+  <!-- ===================== SETTINGS MODAL ===================== -->
+  <div class="modal-bg" id="modal-settings">
+    <div class="modal-panel animate-fade-in w-full max-w-sm mx-5 overflow-hidden" style="max-height: 82vh; display: flex; flex-direction: column;">
+      <div class="flex items-center justify-between px-6 py-4" style="border-bottom: 1px solid var(--border);">
+        <h2 class="text-base font-semibold" style="color: var(--text-primary);">设置</h2>
+        <button class="btn-icon" id="btn-close-settings">
+          <span class="material-symbols-outlined" style="font-size:20px;">close</span>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+        <!-- Theme -->
+        <div>
+          <label class="section-label mb-3 block">外观</label>
+          <div class="flex gap-3">
+            <label class="flex-1 cursor-pointer">
+              <input type="radio" name="theme" value="dark" class="hidden peer" checked>
+              <div class="glass rounded-xl p-3 text-center border border-transparent transition-all peer-checked:border-[rgba(72,202,228,0.3)] peer-checked:bg-[rgba(72,202,228,0.05)]">
+                <span class="material-symbols-outlined" style="font-size:26px; color: var(--text-secondary);">dark_mode</span>
+                <div class="text-xs mt-1.5 font-medium" style="color: var(--text-primary);">深色</div>
+              </div>
+            </label>
+            <label class="flex-1 cursor-pointer">
+              <input type="radio" name="theme" value="light" class="hidden peer">
+              <div class="glass rounded-xl p-3 text-center border border-transparent transition-all peer-checked:border-[rgba(72,202,228,0.3)] peer-checked:bg-[rgba(72,202,228,0.05)]">
+                <span class="material-symbols-outlined" style="font-size:26px; color: var(--text-secondary);">light_mode</span>
+                <div class="text-xs mt-1.5 font-medium" style="color: var(--text-primary);">浅色</div>
+              </div>
+            </label>
+            <label class="flex-1 cursor-pointer">
+              <input type="radio" name="theme" value="system" class="hidden peer">
+              <div class="glass rounded-xl p-3 text-center border border-transparent transition-all peer-checked:border-[rgba(72,202,228,0.3)] peer-checked:bg-[rgba(72,202,228,0.05)]">
+                <span class="material-symbols-outlined" style="font-size:26px; color: var(--text-secondary);">desktop_windows</span>
+                <div class="text-xs mt-1.5 font-medium" style="color: var(--text-primary);">跟随系统</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Backend -->
+        <div>
+          <label class="section-label mb-2 block">后端地址</label>
+          <input type="text" value="http://localhost:9880"
+            class="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
+            style="background: var(--surface); color: var(--text-primary); border: 1px solid var(--border);">
+        </div>
+
+        <!-- Models Dir -->
+        <div>
+          <label class="section-label mb-2 block">模型目录</label>
+          <div class="flex gap-2">
+            <input type="text" value="./models"
+              class="flex-1 rounded-xl px-4 py-2.5 text-sm outline-none"
+              style="background: var(--surface); color: var(--text-primary); border: 1px solid var(--border);">
+            <button class="btn-icon" style="width:38px;height:38px;">
+              <span class="material-symbols-outlined" style="font-size:18px;">folder_open</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="h-px" style="background: var(--border);"></div>
+
+        <!-- Language -->
+        <div>
+          <label class="section-label mb-2 block">界面语言</label>
+          <select class="select-styled">
+            <option>简体中文</option>
+            <option>English</option>
+            <option>日本語</option>
+          </select>
+        </div>
+
+        <!-- Auto Play -->
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm font-medium" style="color: var(--text-primary);">合成后自动播放</div>
+            <div class="text-xs mt-0.5" style="color: var(--text-secondary);">音频生成完成后立即播放</div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" class="sr-only peer" checked>
+            <div class="w-11 h-6 rounded-full transition-colors" style="background: rgba(255,255,255,0.08);"></div>
+            <div class="absolute left-1 top-1 w-4 h-4 rounded-full transition-transform peer-checked:translate-x-5" style="background: var(--primary); box-shadow: 0 0 10px var(--primary-glow);"></div>
+          </label>
+        </div>
+
+        <div class="text-center pt-1">
+          <p class="text-xs" style="color: var(--text-muted);">VoxCPM v0.2.0 · Build 20250504</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== JAVASCRIPT ===================== -->
+  <script>
+    const state = { isPlaying: false, isGenerating: false, volume: 80, isMuted: false };
+
+    const els = {
+      sidebarLeft: document.getElementById('sidebar-left'),
+      sidebarRight: document.getElementById('sidebar-right'),
+      overlayLeft: document.getElementById('overlay-left'),
+      overlayRight: document.getElementById('overlay-right'),
+      btnDrawerLeft: document.getElementById('btn-drawer-left'),
+      btnDrawerRight: document.getElementById('btn-drawer-right'),
+      btnCloseRight: document.getElementById('btn-close-right'),
+      btnSettings: document.getElementById('btn-settings'),
+      modalSettings: document.getElementById('modal-settings'),
+      btnCloseSettings: document.getElementById('btn-close-settings'),
+      btnGenerate: document.getElementById('btn-generate'),
+      btnPlay: document.getElementById('btn-play'),
+      iconPlay: document.getElementById('icon-play'),
+      btnCenterPlay: document.getElementById('btn-center-play'),
+      iconCenterPlay: document.getElementById('icon-center-play'),
+      statusText: document.getElementById('status-text'),
+      btnMute: document.getElementById('btn-mute'),
+      iconVolume: document.getElementById('icon-volume'),
+      sliderVolume: document.getElementById('slider-volume'),
+      progressFill: document.getElementById('progress-fill'),
+      progressThumb: document.getElementById('progress-thumb'),
+      canvas: document.getElementById('waveform-canvas'),
+      toggleHistory: document.getElementById('toggle-history'),
+      historyContent: document.getElementById('history-content'),
+      historyChevron: document.getElementById('history-chevron'),
+      toggleAdvanced: document.getElementById('toggle-advanced'),
+      advancedContent: document.getElementById('advanced-content'),
+      advancedChevron: document.getElementById('advanced-chevron'),
+    };
+
+    // Drawers
+    function openLeft() { els.sidebarLeft.classList.remove('-translate-x-full'); els.overlayLeft.classList.add('open'); }
+    function closeLeft() { els.sidebarLeft.classList.add('-translate-x-full'); els.overlayLeft.classList.remove('open'); }
+    function openRight() { els.sidebarRight.classList.remove('translate-x-full'); els.overlayRight.classList.add('open'); }
+    function closeRight() { els.sidebarRight.classList.add('translate-x-full'); els.overlayRight.classList.remove('open'); }
+    els.btnDrawerLeft?.addEventListener('click', openLeft);
+    els.btnDrawerRight?.addEventListener('click', openRight);
+    els.btnCloseRight?.addEventListener('click', closeRight);
+    els.overlayLeft?.addEventListener('click', closeLeft);
+    els.overlayRight?.addEventListener('click', closeRight);
+
+    // Settings modal
+    els.btnSettings?.addEventListener('click', () => els.modalSettings.classList.add('open'));
+    els.btnCloseSettings?.addEventListener('click', () => els.modalSettings.classList.remove('open'));
+    els.modalSettings?.addEventListener('click', e => { if (e.target === els.modalSettings) els.modalSettings.classList.remove('open'); });
+
+    // Collapsible
+    els.toggleHistory?.addEventListener('click', () => {
+      els.historyContent.classList.toggle('hidden');
+      els.historyChevron.style.transform = els.historyContent.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+    });
+    els.toggleAdvanced?.addEventListener('click', () => {
+      els.advancedContent.classList.toggle('hidden');
+      els.advancedChevron.style.transform = els.advancedContent.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+    });
+
+    // Play toggle
+    function togglePlay() {
+      state.isPlaying = !state.isPlaying;
+      const icon = state.isPlaying ? 'pause' : 'play_arrow';
+      els.iconPlay.textContent = icon;
+      els.iconCenterPlay.textContent = icon;
+      els.statusText.textContent = state.isPlaying ? '正在播放' : '已暂停';
+    }
+    els.btnPlay?.addEventListener('click', togglePlay);
+    els.btnCenterPlay?.addEventListener('click', togglePlay);
+
+    // Mute
+    els.btnMute?.addEventListener('click', () => {
+      state.isMuted = !state.isMuted;
+      els.iconVolume.textContent = state.isMuted ? 'volume_off' : 'volume_up';
+    });
+
+    // Volume
+    els.sliderVolume?.addEventListener('input', e => {
+      state.volume = e.target.value;
+      els.iconVolume.textContent = state.volume == 0 ? 'volume_off' : state.isMuted ? 'volume_off' : 'volume_up';
+      if (state.volume > 0) state.isMuted = false;
+    });
+
+    // Parameter sliders
+    const paramMap = {
+      'slider-speed': { el: document.getElementById('val-speed'), suffix: 'x', fixed: 1 },
+      'slider-pitch': { el: document.getElementById('val-pitch'), suffix: '', fixed: 0 },
+      'slider-temp': { el: document.getElementById('val-temp'), suffix: '', fixed: 2 },
+      'slider-topk': { el: document.getElementById('val-topk'), suffix: '', fixed: 0 },
+    };
+    Object.entries(paramMap).forEach(([id, cfg]) => {
+      const s = document.getElementById(id);
+      s?.addEventListener('input', e => { cfg.el.textContent = parseFloat(e.target.value).toFixed(cfg.fixed) + cfg.suffix; });
+    });
+
+    // Mode pills
+    document.querySelectorAll('.mode-pill').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    // Chips
+    document.querySelectorAll('.chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const parent = chip.parentElement;
+        if (!parent) return;
+        parent.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+      });
+    });
+
+    // Voice items
+    document.querySelectorAll('.voice-item[data-voice]').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.voice-item[data-voice]').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+      });
+    });
+
+    // Generate simulation
+    els.btnGenerate?.addEventListener('click', () => {
+      if (state.isGenerating) return;
+      state.isGenerating = true;
+      els.btnGenerate.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px; animation: spin 1s linear infinite;">refresh</span>合成中...`;
+      els.statusText.textContent = '正在生成音频...';
+      let progress = 0;
+      const iv = setInterval(() => {
+        progress += Math.random() * 12;
+        if (progress >= 100) {
+          progress = 100; clearInterval(iv);
+          state.isGenerating = false;
+          els.btnGenerate.innerHTML = `<span class="material-symbols-outlined" style="font-size:18px;">auto_fix_high</span>开始合成`;
+          els.statusText.textContent = '合成完成';
+          state.isPlaying = true;
+          els.iconPlay.textContent = 'pause'; els.iconCenterPlay.textContent = 'pause';
+          simulatePlayback();
+        }
+        els.progressFill.style.width = progress + '%';
+        els.progressThumb.style.left = progress + '%';
+      }, 250);
+    });
+
+    function simulatePlayback() {
+      let progress = 0;
+      const dur = 5000;
+      const start = performance.now();
+      function frame() {
+        if (!state.isPlaying) return;
+        const elapsed = performance.now() - start;
+        progress = Math.min((elapsed / dur) * 100, 100);
+        els.progressFill.style.width = progress + '%';
+        els.progressThumb.style.left = progress + '%';
+        document.getElementById('time-current').textContent = fmt(elapsed / 1000);
+        document.getElementById('time-total').textContent = fmt(dur / 1000);
+        if (progress < 100) requestAnimationFrame(frame);
+        else { state.isPlaying = false; els.iconPlay.textContent = 'play_arrow'; els.iconCenterPlay.textContent = 'play_arrow'; }
+      }
+      requestAnimationFrame(frame);
+    }
+    function fmt(s) { const m = Math.floor(s / 60); const sec = Math.floor(s % 60); return `${m}:${sec.toString().padStart(2, '0')}`; }
+
+    // Waveform
+    const ctx = els.canvas.getContext('2d');
+    const bars = 72;
+    const barData = new Array(bars).fill(0).map(() => Math.random());
+    let phase = 0;
+    function resizeCanvas() {
+      const rect = els.canvas.getBoundingClientRect();
+      els.canvas.width = rect.width * window.devicePixelRatio;
+      els.canvas.height = 200 * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    function drawWaveform() {
+      const w = els.canvas.width / window.devicePixelRatio;
+      const h = els.canvas.height / window.devicePixelRatio;
+      ctx.clearRect(0, 0, w, h);
+      const cx = w / 2, cy = h / 2;
+      const barW = (w / bars) * 0.55;
+      const gap = (w / bars) * 0.45;
+      for (let i = 0; i < bars; i++) {
+        const x = (w / bars) * i + gap / 2;
+        const dist = Math.abs(i - bars / 2) / (bars / 2);
+        const envelope = Math.cos(dist * Math.PI / 2);
+        const noise = Math.sin(phase * 2.5 + i * 0.35) * 0.3 + 0.5;
+        const target = barData[i] * envelope * noise;
+        const barH = target * h * 0.75;
+        const alpha = state.isPlaying ? (1 - dist * 0.6) * 0.8 : (1 - dist * 0.6) * 0.25;
+        ctx.fillStyle = `rgba(72, 202, 228, ${alpha})`;
+        const r = barW / 2;
+        ctx.beginPath();
+        ctx.roundRect(x, cy - barH / 2, barW, barH, [r, r, r, r]);
+        ctx.fill();
+      }
+      phase += state.isPlaying ? 0.1 : 0.025;
+      requestAnimationFrame(drawWaveform);
+    }
+    drawWaveform();
+
+    // Keyboard
+    document.addEventListener('keydown', e => {
+      if (e.code === 'Space' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') { e.preventDefault(); togglePlay(); }
+      if (e.key === 'Escape') { els.modalSettings.classList.remove('open'); closeLeft(); closeRight(); }
+    });
+
+    // Responsive cleanup
+    window.addEventListener('resize', () => { if (window.innerWidth >= 768) { closeLeft(); closeRight(); } });
+
+    // Spin keyframe
+    const style = document.createElement('style');
+    style.textContent = '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+    document.head.appendChild(style);
+  </script>
+</body>
+</html>

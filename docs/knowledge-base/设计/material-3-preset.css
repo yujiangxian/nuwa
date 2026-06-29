@@ -1,0 +1,7 @@
+:root:not([dark]) {
+    color-scheme: light;
+}
+
+:root[dark] {
+    color-scheme: dark;
+}
