@@ -67,6 +67,12 @@ pub fn resolve_asr_model(model_id: &str) -> Result<(&'static str, PathBuf), Stri
 
 pub fn resolve_tts_model(model_id: &str) -> Result<(&'static str, PathBuf), String> {
     match model_id {
+        // CosyVoice2-0.5B：zero-shot 声音克隆效果第一梯队，复用同一推理脚本
+        // （脚本按目录下 cosyvoice2.yaml 自动选用 CosyVoice2 类、采样率 24000、GPU fp16）。
+        "tts/cosyvoice2" => Ok((
+            "scripts/inference_tts_cosyvoice.py",
+            project_root().join("models/tts/cosyvoice2/iic/CosyVoice2-0.5B"),
+        )),
         "tts/cosyvoice3" => Ok((
             "scripts/inference_tts_cosyvoice.py",
             project_root().join("models/tts/cosyvoice3/iic/CosyVoice-300M"),
