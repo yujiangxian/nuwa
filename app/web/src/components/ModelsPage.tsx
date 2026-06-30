@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useUIStore } from '@/store/uiStore';
 import { useToastStore } from '@/store/toastStore';
 import { apiClient } from '@/api/client';
+import { errorMessage } from '@/lib/errorDetail';
 import { useConfig, useSetModel } from '@/hooks/useApi';
 import {
   sortInstalled,
@@ -300,8 +301,8 @@ export default function ModelsPage() {
       refetchConfig();
       // Refresh disk info after delete
       fetchDiskInfo();
-    } catch (err: any) {
-      addToast({ message: `删除失败: ${err?.response?.data?.error || err.message}`, type: 'error' });
+    } catch (err: unknown) {
+      addToast({ message: `删除失败: ${errorMessage(err, "未知错误")}`, type: 'error' });
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirm(false);
@@ -358,8 +359,8 @@ export default function ModelsPage() {
       setRepoFiles(data);
       // 默认全选
       setSelectedFiles(new Set(data.map((f) => f.path)));
-    } catch (err: any) {
-      addToast({ message: `获取文件列表失败: ${err?.response?.data?.error || err.message}`, type: 'error' });
+    } catch (err: unknown) {
+      addToast({ message: `获取文件列表失败: ${errorMessage(err, "未知错误")}`, type: 'error' });
       setShowFileModal(false);
     } finally {
       setLoadingFiles(false);
@@ -396,8 +397,8 @@ export default function ModelsPage() {
       addToast({ message: `开始批量下载 ${modalPreset.name} (${selectedFiles.size} 个文件)`, type: 'success' });
       setShowFileModal(false);
       setActiveTab('downloads');
-    } catch (err: any) {
-      addToast({ message: `启动下载失败: ${err?.response?.data?.error || err.message}`, type: 'error' });
+    } catch (err: unknown) {
+      addToast({ message: `启动下载失败: ${errorMessage(err, "未知错误")}`, type: 'error' });
     }
   };
 
@@ -444,8 +445,8 @@ export default function ModelsPage() {
         addToast({ message: '已重新启动下载', type: 'success' });
       }
       fetchDownloads();
-    } catch (err: any) {
-      addToast({ message: `重试下载失败: ${err?.response?.data?.error || err.message}`, type: 'error' });
+    } catch (err: unknown) {
+      addToast({ message: `重试下载失败: ${errorMessage(err, "未知错误")}`, type: 'error' });
     }
   };
 

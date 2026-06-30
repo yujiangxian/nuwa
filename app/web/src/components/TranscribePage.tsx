@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useUIStore } from '@/store/uiStore';
 import { useToastStore } from '@/store/toastStore';
+import { errorMessage } from '@/lib/errorDetail';
 import { useTranscribe } from '@/hooks/useApi';
 import type { AsrUploadResponse } from '@/hooks/useApi';
 import { ArrowLeft, Mic, Square, Upload, Copy, Check, Loader2, FileAudio, AlertCircle } from 'lucide-react';
@@ -50,9 +51,9 @@ export default function TranscribePage() {
           // 后端 success:false：展示 error，不展示文本（需求 1.6 / 6.1）。
           setErrorText(data.error || '识别失败');
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         // 网络错误 / 非 2xx：展示错误并退出加载态（需求 6.3）。
-        const msg = err?.response?.data?.error || err?.message || '识别请求失败';
+        const msg = errorMessage(err, '识别请求失败');
         setErrorText(msg);
         addToast({ message: msg, type: 'error' });
       }
