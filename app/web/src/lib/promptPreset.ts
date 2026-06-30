@@ -5,7 +5,7 @@
  * exercised directly by property-based tests and reused by both the UI layer
  * and the state layer (uiStore).
  */
-import type { PromptPreset } from '@/store/uiStore';
+import type { PromptPreset } from '@/store/types';
 
 /** Prompt_Preset 的 `title` 允许的最大字符数（UI 层以 input maxLength 强制）。 */
 export const TITLE_MAX_LENGTH = 30;

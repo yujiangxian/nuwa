@@ -8,7 +8,7 @@
  * 字符处理一律以 **Unicode 码点**（`Array.from`）为单位，保证 emoji / 代理对
  * 等多字节字符安全，使 `HighlightRange` 的 `{start,length}` 语义稳定。
  */
-import type { ChatSession, ChatMessage } from '@/store/uiStore';
+import type { ChatSession, ChatMessage } from '@/store/types';
 
 /** Match_Snippet 的最大码点数。 */
 export const SNIPPET_MAX_LENGTH = 100;

@@ -15,13 +15,14 @@ use crate::handlers::chat::{
     build_ollama_body, clamp_params, ollama_model_name, params_to_options, resolve_model,
     ChatRequest,
 };
+use crate::constants::OLLAMA_CHAT_URL;
 use crate::state::AppState;
 
 // 保持公开 API 稳定：纯函数 build_ollama_messages 现归属 chat.rs，
 // 经此重导出，既有库路径 `chat_stream::build_ollama_messages` 仍可用（集成测试依赖）。
 pub use crate::handlers::chat::build_ollama_messages;
 
-const OLLAMA_URL: &str = "http://localhost:11434/api/chat";
+const OLLAMA_URL: &str = OLLAMA_CHAT_URL;
 
 /// Ollama 对话端点。默认 `OLLAMA_URL`，可由环境变量 `OLLAMA_CHAT_URL` 覆盖
 /// （仅用于测试将其指向死端口以确定性地触发连接失败路径；生产默认行为不变）。

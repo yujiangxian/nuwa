@@ -4,7 +4,7 @@
  * `pickLatestSession` is store/DOM independent so it can be exercised by
  * property-based tests; `formatRelativeTime` is a display helper used by the UI.
  */
-import type { ChatSession } from '@/store/uiStore';
+import type { ChatSession } from '@/store/types';
 
 /**
  * Select the session with the most recent `updatedAt`.

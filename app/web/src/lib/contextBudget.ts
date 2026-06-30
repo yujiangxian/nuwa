@@ -5,7 +5,7 @@
  * Used_Tokens / Remaining_Tokens / Usage_Ratio / Usage_State。纯函数、确定性。
  */
 
-import type { ChatMessage } from '@/store/uiStore';
+import type { ChatMessage } from '@/store/types';
 import type { ChatGenParams } from '@/lib/generationParams';
 import { estimateText, estimateMessages } from '@/lib/tokenEstimate';
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { validatePreset, generatePresetId, buildInsertedText } from '@/lib/promptPreset';
-import type { PromptPreset } from '@/store/uiStore';
+import type { PromptPreset } from '@/store/types';
 
 /**
  * Property-based tests for the pure prompt-preset logic in `lib/promptPreset.ts`.

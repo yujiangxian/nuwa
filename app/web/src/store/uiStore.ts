@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { createChatDb, type ChatDb, type PersistedMessage } from '@/lib/chatDb';
+// 类型定义已提取至 types.ts，此处重导出保持向后兼容
+import type { AppPage, VoiceItem, Character, CharacterInput, ChatSession, ChatMessage, PromptPreset, GenerationParams } from './types';
+export type { AppPage, VoiceItem, Character, CharacterInput, ChatSession, ChatMessage, PromptPreset, GenerationParams };
 import { createCharacterDb, type CharacterDb } from '@/lib/characterDb';
 import { createPresetDb, type PresetDb } from '@/lib/promptPresetDb';
 import { DEFAULT_TITLE, deriveTitle } from '@/lib/chatTitle';
@@ -34,70 +37,6 @@ import {
   saveChatGenParams,
   DEFAULT_CHAT_GEN_PARAMS,
 } from '@/lib/generationParams';
-
-export type AppPage = 'home' | 'chat' | 'voice' | 'transcribe' | 'models' | 'characters' | 'presets' | 'workflow';
-
-export interface VoiceItem {
-  id: string;
-  name: string;
-  tags: string;
-  icon: string;
-  iconColor: string;
-  gradient: string;
-}
-
-export interface Character {
-  id: string;
-  name: string;
-  avatar: string; // gradient css
-  systemPrompt: string;
-  voiceId: string;
-  description: string;
-}
-
-/** 用户在 Character_Manager 中可编辑的角色字段集合。 */
-export interface CharacterInput {
-  name: string;
-  systemPrompt: string;
-  description: string;
-  avatar: string; // 选中的 Gradient_Preset
-  voiceId: string; // 允许为空字符串（Req 7.4）
-}
-
-export interface ChatSession {
-  id: string;
-  title: string;
-  characterId: string;
-  voiceId: string;
-  /** ISO 8601 timestamp (sortable). Display layer formats it to relative time. */
-  updatedAt: string;
-  /** Pinned_Flag：是否置顶。新建默认 false；旧数据缺失时读取后归一为 false。 */
-  pinned: boolean;
-}
-
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  audioUrl?: string;
-  voiceName?: string;
-  duration?: string;
-}
-
-/** 提示词预设条目：集合内唯一 `id`、预设标题 `title`、待插入对话输入框的提示词正文 `content`。 */
-export interface PromptPreset {
-  id: string;
-  title: string;
-  content: string;
-}
-
-export interface GenerationParams {
-  speed: number;
-  pitch: number;
-  temperature: number;
-  topK: number;
-  emotion: string;
-}
 
 interface AppSettings {
   backendUrl: string;
