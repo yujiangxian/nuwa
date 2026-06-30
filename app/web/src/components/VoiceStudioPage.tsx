@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useUIStore } from '@/store/uiStore';
 import { useToastStore } from '@/store/toastStore';
 import { apiClient } from '@/api/client';
+import { errorMessage } from '@/lib/errorDetail';
 import { useVoices, useSynthesize, useConfig, useUploadVoice, useDeleteVoice, voiceAudioUrl } from '@/hooks/useApi';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
 import { useRecorder } from '@/hooks/useRecorder';
@@ -91,8 +92,8 @@ export default function VoiceStudioPage() {
     try {
       await deleteVoice.mutateAsync(voiceId);
       addToast({ message: '已删除音色', type: 'success' });
-    } catch (err: any) {
-      const msg = err.response?.data?.error || err.message || '删除失败';
+    } catch (err: unknown) {
+      const msg = errorMessage(err, '删除失败');
       addToast({ message: msg, type: 'error' });
     } finally {
       setConfirmDeleteId(null);
@@ -170,9 +171,9 @@ export default function VoiceStudioPage() {
       setCloneAudioLabel('');
       setCloneName('');
       setCloneTranscript('');
-    } catch (err: any) {
+    } catch (err: unknown) {
       // 展示后端 error 文本，不向列表插入新条目（需求 6.5）。
-      const msg = err.response?.data?.error || err.message || '上传失败';
+      const msg = errorMessage(err, '上传失败');
       addToast({ message: msg, type: 'error' });
     }
   };
@@ -201,8 +202,8 @@ export default function VoiceStudioPage() {
         setSynthError(msg);
         addToast({ message: msg, type: 'error' });
       }
-    } catch (err: any) {
-      const msg = err.response?.data?.error || err.message || '合成请求失败';
+    } catch (err: unknown) {
+      const msg = errorMessage(err, '合成请求失败');
       setSynthError(msg);
       addToast({ message: msg, type: 'error' });
     }
@@ -450,8 +451,8 @@ export default function VoiceStudioPage() {
                             } else {
                               addToast({ message: data.error || '转写失败', type: 'error' });
                             }
-                          } catch (err: any) {
-                            addToast({ message: err.response?.data?.error || '转写请求失败', type: 'error' });
+                          } catch (err: unknown) {
+                            addToast({ message: errorMessage(err, '转写请求失败'), type: 'error' });
                           } finally {
                             setIsTranscribing(false);
                           }
