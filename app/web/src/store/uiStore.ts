@@ -1,20 +1,17 @@
 import { create } from 'zustand';
+import { useSettingsStore } from './settingsStore';
+import { useCharacterStore, defaultCharacters, setCharacterDbForTesting } from './characterStore';
+export { defaultCharacters, setCharacterDbForTesting };
 import { createChatDb, type ChatDb, type PersistedMessage } from '@/lib/chatDb';
 // 类型定义已提取至 types.ts，此处重导出保持向后兼容
 import type { AppPage, VoiceItem, Character, CharacterInput, ChatSession, ChatMessage, PromptPreset, GenerationParams } from './types';
 export type { AppPage, VoiceItem, Character, CharacterInput, ChatSession, ChatMessage, PromptPreset, GenerationParams };
-import { createCharacterDb, type CharacterDb } from '@/lib/characterDb';
 import { createPresetDb, type PresetDb } from '@/lib/promptPresetDb';
 import { DEFAULT_TITLE, deriveTitle } from '@/lib/chatTitle';
 import { pickLatestSession } from '@/lib/chatSession';
 import { normalizePinned, togglePinnedIn, setPinnedIn } from '@/lib/sessionOrganize';
 import { parseImportBundle, type ImportError, type ExportedSession } from '@/lib/conversationExport';
-import {
-  validateName,
-  generateCharacterId,
-  needsSeeding,
-  pickNextCurrentId,
-} from '@/lib/character';
+
 import {
   validatePreset,
   generatePresetId,
@@ -220,38 +217,6 @@ interface UIState {
   setLastTrimmedCount: (n: number) => void;
 }
 
-// 旧版本的后端地址默认值，仅用于一次性迁移识别
-const LEGACY_DEFAULT_BACKEND_URL = 'http://localhost:9880';
-
-function loadSettings(): AppSettings {
-  try {
-    const raw = localStorage.getItem('nuwa_settings');
-    if (raw) {
-      const merged = { ...defaultSettings, ...JSON.parse(raw) };
-      // 一次性迁移：仅当读取到旧默认值时覆盖为新默认值，自定义地址保持不变
-      if (merged.backendUrl === LEGACY_DEFAULT_BACKEND_URL) {
-        merged.backendUrl = defaultSettings.backendUrl;
-        saveSettings(merged);
-      }
-      return merged;
-    }
-  } catch { /* ignore */ }
-  return defaultSettings;
-}
-
-function saveSettings(s: AppSettings) {
-  try {
-    localStorage.setItem('nuwa_settings', JSON.stringify(s));
-  } catch { /* ignore */ }
-}
-
-const defaultSettings: AppSettings = {
-  backendUrl: 'http://localhost:8080',
-  modelsDir: './models',
-  theme: 'dark',
-  autoPlay: true,
-  language: '简体中文',
-};
 
 const defaultVoices: VoiceItem[] = [
   { id: 'jyy', name: '佳怡音色', tags: '清晰 · 温暖 · 女声', icon: 'face', iconColor: '#48CAE4', gradient: 'linear-gradient(135deg, rgba(72,202,228,0.15), rgba(0,150,199,0.1))' },
@@ -259,12 +224,6 @@ const defaultVoices: VoiceItem[] = [
   { id: 'narrator', name: '旁白君', tags: '沉稳 · 磁性 · 男声', icon: 'mic', iconColor: '#52B788', gradient: 'linear-gradient(135deg, rgba(82,183,136,0.1), rgba(82,183,136,0.05))' },
   { id: 'anime', name: '二次元少女', tags: '活泼 · 元气 · 角色', icon: 'bot', iconColor: '#7B82E1', gradient: 'linear-gradient(135deg, rgba(123,130,225,0.1), rgba(123,130,225,0.05))' },
   { id: 'english', name: '英文主播', tags: '标准 · 专业 · 英音', icon: 'globe', iconColor: '#D4AF37', gradient: 'linear-gradient(135deg, rgba(212,175,55,0.1), rgba(212,175,55,0.05))' },
-];
-
-const defaultCharacters: Character[] = [
-  { id: 'assistant', name: '小助手', avatar: 'linear-gradient(135deg, #48CAE4, #0096C7)', systemPrompt: '你是一个有用的AI助手。', voiceId: 'jyy', description: '通用问答' },
-  { id: 'socrates', name: '苏格拉底', avatar: 'linear-gradient(135deg, #FF6B9D, #D44D7A)', systemPrompt: '你是苏格拉底，用提问的方式引导用户思考。', voiceId: 'narrator', description: '苏格拉底式提问' },
-  { id: 'counselor', name: '心理咨询师', avatar: 'linear-gradient(135deg, #52B788, #40916C)', systemPrompt: '你是一个温暖的心理咨询师，善于倾听和共情。', voiceId: 'stefanie', description: '温暖倾听' },
 ];
 
 // Chat_DB 实例。createChatDb() 不在构造时抛错（失败延迟到 init()），
@@ -277,18 +236,6 @@ let chatDb: ChatDb = createChatDb();
  */
 export function setChatDbForTesting(db: ChatDb): void {
   chatDb = db;
-}
-
-// Character_DB 实例。createCharacterDb() 不在构造时抛错（失败延迟到 init()），
-// 因此模块加载在任何环境（含未注入 IndexedDB 的 jsdom）下都安全。
-let characterDb: CharacterDb = createCharacterDb();
-
-/**
- * 测试注入点：替换 Character_DB 实例（例如注入 fake-indexeddb 包装或会 reject 的 stub）。
- * 仅供单元/属性测试使用。
- */
-export function setCharacterDbForTesting(db: CharacterDb): void {
-  characterDb = db;
 }
 
 // Preset_DB 实例。createPresetDb() 不在构造时抛错（失败延迟到 init()），
@@ -347,155 +294,32 @@ export const useUIStore = create<UIState>((set, get) => ({
   currentPage: 'home',
   setPage: (page) => set({ currentPage: page }),
 
-  settings: loadSettings(),
+  settings: useSettingsStore.getState().settings,
   updateSetting: (key, value) => {
-    const next = { ...get().settings, [key]: value };
-    saveSettings(next);
-    set({ settings: next });
+    useSettingsStore.getState().updateSetting(key, value);
+    set({ settings: useSettingsStore.getState().settings });
   },
 
-  characters: [],
-  currentCharacterId: 'assistant',
-  charactersLoading: true,
-  charactersPersistent: true,
-  setCurrentCharacter: (id) => set({ currentCharacterId: id }),
-
-  loadCharacters: async () => {
-    set({ charactersLoading: true });
-    // 1) 初始化持久层；失败则进入 Memory_Fallback_Mode（以 Default_Characters 内存维护）。
-    try {
-      await characterDb.init();
-    } catch {
-      set({
-        characters: defaultCharacters,
-        charactersPersistent: false,
-        currentCharacterId: pickNextCurrentId(defaultCharacters, '', get().currentCharacterId)
-          ?? defaultCharacters[0].id,
-        charactersLoading: false,
-      });
-      useToastStore.getState().addToast({ message: '角色无法保存', type: 'warning' });
-      return;
-    }
-
-    // 2) 读取已持久化的角色；读取失败按以 Default_Characters 内存继续。
-    let stored: Character[] = [];
-    let readFailed = false;
-    try {
-      stored = await characterDb.getAllCharacters();
-    } catch {
-      readFailed = true;
-    }
-
-    if (readFailed) {
-      // 读取失败：以 Default_Characters 在内存继续运行（不落库，保持 persistent=true）。
-      set({
-        characters: defaultCharacters,
-        currentCharacterId: pickNextCurrentId(defaultCharacters, '', get().currentCharacterId)
-          ?? defaultCharacters[0].id,
-        charactersLoading: false,
-      });
-      return;
-    }
-
-    if (needsSeeding(stored)) {
-      // 持久层为空：以 Default_Characters 初始化并逐条落库（种子初始化）。
-      set({ characters: defaultCharacters });
-      for (const c of defaultCharacters) {
-        try {
-          await characterDb.saveCharacter(c);
-        } catch {
-          toastSaveFailed();
-        }
-      }
-    } else {
-      // 持久层非空：用持久层恢复，且不注入 Default_Characters。
-      set({ characters: stored });
-    }
-
-    // 3) 校正 currentCharacterId 指向存在的角色。
-    const chars = get().characters;
-    const corrected = pickNextCurrentId(chars, '', get().currentCharacterId) ?? chars[0]?.id ?? 'assistant';
-    set({ currentCharacterId: corrected, charactersLoading: false });
-  },
-
-  createCharacter: async (input) => {
-    const validation = validateName(input.name);
-    if (!validation.ok) return; // 空名称不创建（Property 4）
-
-    const newCharacter: Character = {
-      id: generateCharacterId(get().characters),
-      name: validation.value,
-      systemPrompt: input.systemPrompt,
-      description: input.description,
-      avatar: input.avatar,
-      voiceId: input.voiceId,
-    };
-    // 先更新内存，后持久化。
-    set((s) => ({ characters: [...s.characters, newCharacter] }));
-    if (get().charactersPersistent) {
-      try {
-        await characterDb.saveCharacter(newCharacter);
-      } catch {
-        toastSaveFailed();
-      }
-    }
-  },
-
-  updateCharacter: async (id, input) => {
-    const validation = validateName(input.name);
-    if (!validation.ok) return; // 空名称不更新（Property 4）
-
-    let updated: Character | undefined;
-    set((s) => ({
-      characters: s.characters.map((c) => {
-        if (c.id === id) {
-          updated = {
-            ...c,
-            name: validation.value,
-            systemPrompt: input.systemPrompt,
-            description: input.description,
-            avatar: input.avatar,
-            voiceId: input.voiceId,
-          };
-          return updated;
-        }
-        return c;
-      }),
-    }));
-    if (updated && get().charactersPersistent) {
-      try {
-        await characterDb.saveCharacter(updated);
-      } catch {
-        toastSaveFailed();
-      }
-    }
-  },
-
-  deleteCharacter: async (id) => {
-    const { characters, currentCharacterId, charactersPersistent } = get();
-    // 「至少保留一个角色」：仅剩一条时拒绝删除，不调 DB。
-    if (characters.length <= 1) {
-      useToastStore.getState().addToast({ message: '至少需保留一个角色', type: 'warning' });
-      return;
-    }
-
-    const remaining = characters.filter((c) => c.id !== id);
-    // 被删者为当前角色时重选 currentCharacterId（删除前集合计算）。
-    const nextCurrentId =
-      currentCharacterId === id
-        ? pickNextCurrentId(characters, id, currentCharacterId) ?? remaining[0].id
-        : currentCharacterId;
-
-    // 先更新内存，后持久化。
-    set({ characters: remaining, currentCharacterId: nextCurrentId });
-    if (charactersPersistent) {
-      try {
-        await characterDb.deleteCharacter(id);
-      } catch {
-        toastSaveFailed();
-      }
-    }
-  },
+  // Character domain delegates to characterStore
+  characters: useCharacterStore.getState().characters,
+  currentCharacterId: useCharacterStore.getState().currentCharacterId,
+  charactersLoading: useCharacterStore.getState().charactersLoading,
+  charactersPersistent: useCharacterStore.getState().charactersPersistent,
+  setCurrentCharacter: (id) => { useCharacterStore.getState().setCurrentCharacter(id); set({ currentCharacterId: id }); },
+  loadCharacters: () => useCharacterStore.getState().loadCharacters().then(() => {
+    const cs = useCharacterStore.getState();
+    set({ characters: cs.characters, currentCharacterId: cs.currentCharacterId, charactersLoading: cs.charactersLoading, charactersPersistent: cs.charactersPersistent });
+  }),
+  createCharacter: (input) => useCharacterStore.getState().createCharacter(input).then(() => {
+    set({ characters: useCharacterStore.getState().characters });
+  }),
+  updateCharacter: (id, input) => useCharacterStore.getState().updateCharacter(id, input).then(() => {
+    set({ characters: useCharacterStore.getState().characters });
+  }),
+  deleteCharacter: (id) => useCharacterStore.getState().deleteCharacter(id).then(() => {
+    const cs = useCharacterStore.getState();
+    set({ characters: cs.characters, currentCharacterId: cs.currentCharacterId });
+  }),
 
   presets: [],
   presetsLoading: true,
@@ -1059,4 +883,4 @@ export const useUIStore = create<UIState>((set, get) => ({
 
 export type { AppSettings };
 
-export { defaultVoices, defaultCharacters };
+export { defaultVoices };
