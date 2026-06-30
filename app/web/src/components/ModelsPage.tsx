@@ -16,6 +16,10 @@ import { formatLastUsed } from '@/lib/modelMeta';
 import { totalInstalledSizeMb } from '@/lib/systemResource';
 import { formatSize, formatBytes } from '@/lib/modelFormat';
 import { canDeleteModel } from '@/lib/installedModel';
+import { typeConfig, statusConfig } from '@/lib/modelTypeConfig';
+import DiskBar from './models/DiskBar';
+import GpuBar from './models/GpuBar';
+import StatsBar from './models/StatsBar';
 import type {
   InstalledModel,
   PresetModel,
@@ -26,11 +30,10 @@ import type {
   ModelTypeFilter,
 } from '@/lib/modelTypes';
 import {
-  ArrowLeft, RefreshCw, Cpu, Mic, MessageSquare, Box, Check,
+  ArrowLeft, RefreshCw, Cpu, Box, Check,
   HardDrive, FileArchive, Download, Globe, X, Trash2, RotateCcw,
   Database, FolderOpen, AlertTriangle, File, Info,
-  AudioLines, Music, Volume2, Wand2, Activity, Users, Fingerprint,
-  Heart, Brain, Languages,
+  MessageSquare,
   Search, SlidersHorizontal, ChevronDown, Zap, Layers,
   Clock, Gauge, Sparkles,
 } from 'lucide-react';
@@ -52,31 +55,7 @@ interface ModelFileInfo {
   is_dir: boolean;
 }
 
-const typeConfig: Record<string, { label: string; icon: typeof Cpu; color: string; bg: string; glow: string }> = {
-  asr: { label: '语音识别', icon: Mic, color: '#52B788', bg: 'rgba(82,183,136,0.08)', glow: 'rgba(82,183,136,0.25)' },
-  tts: { label: '语音合成', icon: MessageSquare, color: '#FF6B9D', bg: 'rgba(255,107,157,0.08)', glow: 'rgba(255,107,157,0.25)' },
-  llm: { label: '大语言模型', icon: Cpu, color: '#48CAE4', bg: 'rgba(72,202,228,0.08)', glow: 'rgba(72,202,228,0.25)' },
-  svs: { label: '歌声合成', icon: AudioLines, color: '#A78BFA', bg: 'rgba(167,139,250,0.08)', glow: 'rgba(167,139,250,0.25)' },
-  music: { label: '音乐生成', icon: Music, color: '#F59E0B', bg: 'rgba(245,158,11,0.08)', glow: 'rgba(245,158,11,0.25)' },
-  sound: { label: '音效生成', icon: Volume2, color: '#D4AF37', bg: 'rgba(212,175,55,0.08)', glow: 'rgba(212,175,55,0.25)' },
-  enhance: { label: '语音增强', icon: Wand2, color: '#22D3EE', bg: 'rgba(34,211,238,0.08)', glow: 'rgba(34,211,238,0.25)' },
-  vad: { label: '语音检测', icon: Activity, color: '#FB923C', bg: 'rgba(251,146,60,0.08)', glow: 'rgba(251,146,60,0.25)' },
-  diarization: { label: '说话人分离', icon: Users, color: '#818CF8', bg: 'rgba(129,140,248,0.08)', glow: 'rgba(129,140,248,0.25)' },
-  speaker: { label: '声纹识别', icon: Fingerprint, color: '#C084FC', bg: 'rgba(192,132,252,0.08)', glow: 'rgba(192,132,252,0.25)' },
-  emotion: { label: '情感识别', icon: Heart, color: '#F472B6', bg: 'rgba(244,114,182,0.08)', glow: 'rgba(244,114,182,0.25)' },
-  audio_lm: { label: '音频大模型', icon: Brain, color: '#38BDF8', bg: 'rgba(56,189,248,0.08)', glow: 'rgba(56,189,248,0.25)' },
-  translation: { label: '语音翻译', icon: Languages, color: '#34D399', bg: 'rgba(52,211,153,0.08)', glow: 'rgba(52,211,153,0.25)' },
-  other: { label: '其他', icon: Box, color: '#9CA3AF', bg: 'rgba(156,163,175,0.08)', glow: 'rgba(156,163,175,0.25)' },
-};
-
-const statusConfig: Record<string, { label: string; color: string; bg: string; icon: typeof Clock }> = {
-  pending: { label: '等待中', color: '#6A9EAD', bg: 'rgba(106,158,173,0.10)', icon: Clock },
-  running: { label: '下载中', color: '#48CAE4', bg: 'rgba(72,202,228,0.10)', icon: Gauge },
-  completed: { label: '已完成', color: '#52B788', bg: 'rgba(82,183,136,0.10)', icon: Check },
-  partial_failed: { label: '部分失败', color: '#FB923C', bg: 'rgba(251,146,60,0.10)', icon: AlertTriangle },
-  failed: { label: '失败', color: '#FF6B6B', bg: 'rgba(255,107,107,0.10)', icon: AlertTriangle },
-  cancelled: { label: '已取消', color: '#D4AF37', bg: 'rgba(212,175,55,0.10)', icon: X },
-};
+// typeConfig / statusConfig 已提取至 @/lib/modelTypeConfig
 
 // ===== Helpers =====
 // formatSize / formatBytes 现由 @/lib/modelFormat 提供（行为逐位一致）。
@@ -631,105 +610,7 @@ function DownloadTaskCard({
 }
 
 // ===== Disk Bar Component =====
-function DiskBar({ diskInfo, modelsTotalSize }: { diskInfo: DiskInfo | null; modelsTotalSize: number }) {
-  if (!diskInfo) return null;
-  const usageColor = diskInfo.used_percent > 90 ? '#FF6B6B' : diskInfo.used_percent > 75 ? '#FB923C' : '#52B788';
-  const totalGb = diskInfo.total_bytes / (1024 * 1024 * 1024);
-  const usedGb = diskInfo.used_bytes / (1024 * 1024 * 1024);
-  const freeGb = diskInfo.free_bytes / (1024 * 1024 * 1024);
-  return (
-    <div className="mb-5 p-3.5 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <HardDrive size={14} style={{ color: 'var(--text-muted)' }} />
-          <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>磁盘空间</span>
-        </div>
-        <span className="text-[11px] font-mono" style={{ color: 'var(--text-muted)' }}>
-          模型占用 {formatSize(modelsTotalSize)} / 可用 {formatSize(freeGb * 1024)}
-        </span>
-      </div>
-      <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${Math.min(diskInfo.used_percent, 100)}%`, background: usageColor, opacity: 0.7 }}
-        />
-      </div>
-      <div className="flex items-center justify-between mt-1.5">
-        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-          已用 {usedGb.toFixed(1)} GB / 总量 {totalGb.toFixed(1)} GB
-        </span>
-        <span className="text-[10px] font-medium" style={{ color: usageColor }}>{diskInfo.used_percent.toFixed(1)}%</span>
-      </div>
-    </div>
-  );
-}
-
-// ===== GPU Bar Component =====
-function GpuBar({ gpuInfo }: { gpuInfo: GpuInfo | null }) {
-  if (!gpuInfo) return null;
-  const usageColor = gpuInfo.usage_percent > 90 ? '#FF6B6B' : gpuInfo.usage_percent > 75 ? '#FB923C' : '#52B788';
-  return (
-    <div className="mb-5 p-3.5 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <Cpu size={14} style={{ color: 'var(--text-muted)' }} />
-          <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>GPU 显存</span>
-          <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{gpuInfo.name}</span>
-        </div>
-        <span className="text-[11px] font-mono" style={{ color: 'var(--text-muted)' }}>
-          已用 {formatSize(gpuInfo.used_vram_mb)} / 总量 {formatSize(gpuInfo.total_vram_mb)}
-        </span>
-      </div>
-      <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${Math.min(gpuInfo.usage_percent, 100)}%`, background: usageColor, opacity: 0.7 }}
-        />
-      </div>
-      <div className="flex items-center justify-between mt-1.5">
-        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-          可用 {formatSize(gpuInfo.free_vram_mb)}
-        </span>
-        <span className="text-[10px] font-medium" style={{ color: usageColor }}>{gpuInfo.usage_percent.toFixed(1)}%</span>
-      </div>
-    </div>
-  );
-}
-
-// ===== Stats Bar Component =====
-function StatsBar({ models }: { models: ModelItem[] }) {
-  const totalSize = totalInstalledSizeMb(models);
-  const typeCounts = models.reduce((acc, m) => {
-    acc[m.model_type] = (acc[m.model_type] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  const typeCount = Object.keys(typeCounts).length;
-
-  return (
-    <div className="flex items-center gap-4 mb-5 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
-      <div className="flex items-center gap-2">
-        <Box size={14} style={{ color: 'var(--text-muted)' }} />
-        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-          <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{models.length}</span> 个模型
-        </span>
-      </div>
-      <div className="w-px h-4" style={{ background: 'var(--border)' }} />
-      <div className="flex items-center gap-2">
-        <Database size={14} style={{ color: 'var(--text-muted)' }} />
-        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-          <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{formatSize(totalSize)}</span>
-        </span>
-      </div>
-      <div className="w-px h-4" style={{ background: 'var(--border)' }} />
-      <div className="flex items-center gap-2">
-        <Layers size={14} style={{ color: 'var(--text-muted)' }} />
-        <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-          <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{typeCount}</span> 个分类
-        </span>
-      </div>
-    </div>
-  );
-}
+// DiskBar / GpuBar / StatsBar 已提取至 components/models/
 
 // 当前模型选择字段经 @/lib/activeModel.parseActiveModelMap 从 useConfig 返回值解析。
 // ModelConfigView 类型由 @/lib/modelTypes 提供。
