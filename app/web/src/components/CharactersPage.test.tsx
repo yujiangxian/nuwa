@@ -5,6 +5,7 @@ import {
   setCharacterDbForTesting,
   type Character,
 } from '@/store/uiStore';
+import { useCharacterStore } from '@/store/characterStore';
 import type { CharacterDb } from '@/lib/characterDb';
 
 /**
@@ -61,6 +62,12 @@ beforeEach(() => {
   mocks.voices = { data: sampleVoices, isLoading: false, isError: false };
   setCharacterDbForTesting(makeFakeDb());
   useUIStore.setState({
+    characters: baseCharacters.map((c) => ({ ...c })),
+    currentCharacterId: 'assistant',
+    charactersLoading: false,
+    charactersPersistent: true,
+  });
+  useCharacterStore.setState({
     characters: baseCharacters.map((c) => ({ ...c })),
     currentCharacterId: 'assistant',
     charactersLoading: false,

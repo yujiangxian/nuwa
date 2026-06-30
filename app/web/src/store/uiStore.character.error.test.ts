@@ -5,6 +5,7 @@ import {
   setCharacterDbForTesting,
   type Character,
 } from '@/store/uiStore';
+import { useCharacterStore } from '@/store/characterStore';
 import type { CharacterDb } from '@/lib/characterDb';
 
 /**
@@ -46,7 +47,14 @@ const sampleStored: Character[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Reset both stores for test isolation
   useUIStore.setState({
+    characters: [],
+    currentCharacterId: 'assistant',
+    charactersLoading: true,
+    charactersPersistent: true,
+  });
+  useCharacterStore.setState({
     characters: [],
     currentCharacterId: 'assistant',
     charactersLoading: true,
