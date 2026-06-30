@@ -11,16 +11,18 @@ import {
 } from '@/lib/modelSort';
 import { filterInstalledByType, filterPresets } from '@/lib/modelFilter';
 import { parseActiveModelMap } from '@/lib/activeModel';
-import { countActiveTasks, clampProgress } from '@/lib/downloadTask';
+import { countActiveTasks } from '@/lib/downloadTask';
 import { totalInstalledSizeMb } from '@/lib/systemResource';
 import { formatBytes } from '@/lib/modelFormat';
-import { typeConfig, statusConfig } from '@/lib/modelTypeConfig';
+import { typeConfig } from '@/lib/modelTypeConfig';
 import DiskBar from './models/DiskBar';
 import GpuBar from './models/GpuBar';
 import StatsBar from './models/StatsBar';
 import PresetCard from './models/PresetCard';
 import ActiveModelBanner from './models/ActiveModelBanner';
 import ModelCard from './models/ModelCard';
+import ModelNotesEditor from './models/ModelNotesEditor';
+import DownloadTaskCard from './models/DownloadTaskCard';
 import type {
   InstalledModel,
   PresetModel,
@@ -32,9 +34,9 @@ import type {
 } from '@/lib/modelTypes';
 import {
   ArrowLeft, RefreshCw, Box, Check,
-  HardDrive, Download, Globe, X, Trash2, RotateCcw,
-  FolderOpen, AlertTriangle, File, MessageSquare,
-  Search, SlidersHorizontal, ChevronDown, Layers, Gauge,
+  HardDrive, Download, Globe, X,
+  FolderOpen, AlertTriangle, File,
+  Search, SlidersHorizontal, ChevronDown, Layers,
 } from 'lucide-react';
 
 /** ModelsPage 内沿用的别名（等价于领域类型 InstalledModel）。 */
@@ -60,233 +62,7 @@ interface ModelFileInfo {
 // formatSize / formatBytes 现由 @/lib/modelFormat 提供（行为逐位一致）。
 
 // PresetCard extracted to components/models/PresetCard.tsx
-// ===== Model Notes Editor =====
-function ModelNotesEditor({
-  modelId,
-  initialNotes,
-  onSave,
-}: {
-  modelId: string;
-  initialNotes: string;
-  onSave: (id: string, notes: string) => void;
-}) {
-  const [notes, setNotes] = useState(initialNotes);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    setNotes(initialNotes);
-  }, [initialNotes, modelId]);
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await onSave(modelId, notes);
-      setIsEditing(false);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <div className="mb-4 p-3 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] font-medium flex items-center gap-1.5" style={{ color: 'var(--text-secondary)' }}>
-          <MessageSquare size={12} /> 备注
-        </span>
-        {!isEditing ? (
-          <button
-            onClick={() => setIsEditing(true)}
-            className="text-[10px] px-2 py-0.5 rounded-md cursor-pointer transition-all"
-            style={{ color: 'var(--primary)', background: 'rgba(72,202,228,0.08)', border: '1px solid rgba(72,202,228,0.15)' }}
-          >
-            {initialNotes ? '编辑' : '添加'}
-          </button>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => { setIsEditing(false); setNotes(initialNotes); }}
-              className="text-[10px] px-2 py-0.5 rounded-md cursor-pointer transition-all"
-              style={{ color: 'var(--text-muted)', background: 'transparent', border: '1px solid var(--border)' }}
-            >
-              取消
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="text-[10px] px-2 py-0.5 rounded-md cursor-pointer transition-all font-medium"
-              style={{ color: 'var(--bg)', background: isSaving ? 'var(--text-muted)' : 'var(--primary)', border: 'none', opacity: isSaving ? 0.5 : 1 }}
-            >
-              {isSaving ? '保存中...' : '保存'}
-            </button>
-          </div>
-        )}
-      </div>
-      {isEditing ? (
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="添加模型备注..."
-          rows={3}
-          className="w-full text-xs rounded-lg px-3 py-2 outline-none resize-none transition-all"
-          style={{
-            background: 'rgba(255,255,255,0.04)',
-            border: '1px solid var(--border)',
-            color: 'var(--text-primary)',
-          }}
-          onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--primary)'; }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
-        />
-      ) : initialNotes ? (
-        <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{initialNotes}</p>
-      ) : (
-        <p className="text-xs italic" style={{ color: 'var(--text-muted)' }}>暂无备注</p>
-      )}
-    </div>
-  );
-}
-
-// ===== Download Task Card =====
-function DownloadTaskCard({
-  task,
-  onCancel,
-  onDelete,
-  onRetry,
-}: {
-  task: DownloadTask;
-  onCancel: (id: string) => void;
-  onDelete: (id: string) => void;
-  onRetry: (task: DownloadTask) => void;
-}) {
-  const st = statusConfig[task.status] || statusConfig.pending;
-  const StatusIcon = st.icon;
-  const isBatch = task.mode === 'batch';
-  const displayName = isBatch
-    ? task.repo_id || task.dest_dir || '批量下载'
-    : task.dest || task.url;
-
-  const progressColor = task.status === 'failed' ? '#FF6B6B' : task.status === 'completed' ? '#52B788' : 'var(--primary)';
-  const isActive = task.status === 'running' || task.status === 'pending';
-  const isDone = task.status === 'completed' || task.status === 'failed' || task.status === 'partial_failed' || task.status === 'cancelled';
-
-  // Estimate remaining time
-  let etaText = '';
-  if (task.status === 'running' && task.speed_mbps > 0 && task.progress < 100) {
-    // Show speed instead of ETA (we don't have total byte size)
-    etaText = `${task.speed_mbps.toFixed(1)} MB/s`;
-  }
-
-  return (
-    <div
-      className="glass rounded-2xl p-4 glow-edge transition-all"
-      style={{ border: '1px solid var(--border)', animation: 'slideInUp 0.3s ease' }}
-    >
-      {/* Top row */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: st.bg }}
-          >
-            <StatusIcon size={16} style={{ color: st.color }} />
-          </div>
-          <div className="min-w-0">
-            <span className="text-sm font-medium truncate block" style={{ color: 'var(--text-primary)' }}>{displayName}</span>
-            {isBatch && (
-              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                {task.completed_files}/{task.total_files} 文件
-                {task.current_file && ` · ${task.current_file}`}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <span className="text-[10px] px-2 py-1 rounded-md font-medium" style={{ background: st.bg, color: st.color }}>{st.label}</span>
-          {task.status === 'failed' && (
-            <button
-              onClick={() => onRetry(task)}
-              title="重试"
-              className="flex items-center justify-center rounded-lg transition-all hover:bg-white/5"
-              style={{ width: 28, height: 28, color: 'var(--primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
-            >
-              <RotateCcw size={14} />
-            </button>
-          )}
-          {isActive && (
-            <button
-              onClick={() => onCancel(task.id)}
-              title="取消"
-              className="flex items-center justify-center rounded-lg transition-all hover:bg-white/5"
-              style={{ width: 28, height: 28, color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer' }}
-            >
-              <X size={14} />
-            </button>
-          )}
-          {isDone && (
-            <button
-              onClick={() => onDelete(task.id)}
-              title="删除"
-              className="flex items-center justify-center rounded-lg transition-all hover:bg-white/5"
-              style={{ width: 28, height: 28, color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer' }}
-            >
-              <Trash2 size={14} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Progress */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)' }}>
-          <div
-            className="h-full rounded-full transition-all"
-            style={{
-              width: `${clampProgress(task.progress)}%`,
-              background: progressColor,
-              boxShadow: isActive ? `0 0 8px ${progressColor}40` : 'none',
-              transition: 'width 0.5s ease',
-            }}
-          />
-        </div>
-        <span className="text-[11px] font-mono shrink-0" style={{ color: 'var(--text-muted)', minWidth: 42, textAlign: 'right' }}>
-          {task.progress.toFixed(1)}%
-        </span>
-      </div>
-
-      {/* Bottom meta */}
-      <div className="flex items-center justify-between mt-2">
-        <div className="flex items-center gap-3">
-          {etaText && (
-            <span className="text-[11px] flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
-              <Gauge size={11} /> {etaText}
-            </span>
-          )}
-          {task.status === 'completed' && (
-            <span className="text-[11px] flex items-center gap-1" style={{ color: '#52B788' }}>
-              <Check size={11} /> 下载完成
-            </span>
-          )}
-        </div>
-        {isBatch && task.total_files > 0 && (
-          <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-            文件 {task.completed_files}/{task.total_files}
-          </span>
-        )}
-      </div>
-
-      {/* Error */}
-      {task.error && (
-        <div className="mt-2 p-2.5 rounded-xl flex items-start gap-2" style={{ background: 'rgba(255,107,107,0.05)', border: '1px solid rgba(255,107,107,0.12)' }}>
-          <AlertTriangle size={12} style={{ color: '#FF6B6B', flexShrink: 0, marginTop: 1 }} />
-          <p className="text-[11px] leading-relaxed" style={{ color: '#FF6B6B' }}>{task.error}</p>
-        </div>
-      )}
-
-    </div>
-  );
-}
-
-// ===== Disk Bar Component =====
+// ModelNotesEditor / DownloadTaskCard 已提取至 components/models/
 // DiskBar / GpuBar / StatsBar 已提取至 components/models/
 
 // 当前模型选择字段经 @/lib/activeModel.parseActiveModelMap 从 useConfig 返回值解析。
