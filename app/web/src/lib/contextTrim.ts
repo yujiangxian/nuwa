@@ -7,7 +7,7 @@
  * 返回应发送的消息列表（输入的保序子序列）与被裁剪条数。纯函数、确定性。
  */
 
-import type { ChatMessage } from '@/store/uiStore';
+import type { ChatMessage } from '@/store/types';
 import { estimateMessages } from '@/lib/tokenEstimate';
 
 export interface TrimResult {

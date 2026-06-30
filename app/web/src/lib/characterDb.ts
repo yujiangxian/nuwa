@@ -1,4 +1,4 @@
-import type { Character } from '@/store/uiStore';
+import type { Character } from '@/store/types';
 
 /** Character_DB public interface. All methods are async and reject on failure. */
 export interface CharacterDb {

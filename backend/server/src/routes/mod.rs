@@ -40,6 +40,7 @@ pub fn create_router() -> Router<Arc<RwLock<AppState>>> {
         .route("/api/inference/asr", post(handlers::inference::transcribe))
         .route("/api/inference/asr/upload", post(handlers::inference::transcribe_upload))
         .route("/api/inference/tts", post(handlers::inference::synthesize))
+        .route("/api/inference/tts/script", post(handlers::inference::synthesize_script))
         // 音频文件服务
         .route("/api/audio/{id}", get(handlers::audio::serve_audio))
         // 下载管理

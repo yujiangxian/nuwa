@@ -9,7 +9,7 @@
  * glob does not treat it as a suite).
  */
 import type { ChatDb, PersistedMessage } from '@/lib/chatDb';
-import type { ChatSession, ChatMessage } from '@/store/uiStore';
+import type { ChatSession, ChatMessage } from '@/store/types';
 
 export interface FakeChatDb extends ChatDb {
   /** Direct access to the persisted sessions (by id) for assertions. */

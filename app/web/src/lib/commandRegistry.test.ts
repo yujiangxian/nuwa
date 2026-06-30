@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { buildCommandRegistry, type CommandRegistryContext } from './commandRegistry';
 import { SUPPORTED_LOCALES, LOCALE_LABELS } from '@/lib/i18n';
 import { parseKeyCombo, formatKeyCombo } from '@/lib/keyCombo';
-import type { AppPage } from '@/store/uiStore';
+import type { AppPage } from '@/store/types';
 
 function makeCtx(overrides: Partial<CommandRegistryContext> = {}): {
   ctx: CommandRegistryContext;
