@@ -394,6 +394,8 @@ fn describe_model(name: &str, model_type: &str) -> String {
     }
 }
 
+use crate::constants::OLLAMA_TAGS_URL;
+
 // ========== Ollama 模型发现 ==========
 
 use serde_json::Value;
@@ -411,7 +413,7 @@ pub async fn scan_ollama_models() -> Vec<crate::state::ModelInfo> {
     };
 
     let res = match client
-        .get("http://localhost:11434/api/tags")
+        .get(OLLAMA_TAGS_URL)
         .send()
         .await
     {

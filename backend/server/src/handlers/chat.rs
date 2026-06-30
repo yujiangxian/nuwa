@@ -3,9 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::constants::OLLAMA_CHAT_URL;
 use crate::state::AppState;
 
-const OLLAMA_URL: &str = "http://localhost:11434/api/chat";
+const OLLAMA_URL: &str = OLLAMA_CHAT_URL;
 
 #[derive(Debug, Deserialize)]
 pub struct ChatRequest {

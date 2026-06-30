@@ -6,7 +6,7 @@ import fc from 'fast-check';
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { createChatDb, type PersistedMessage } from './chatDb';
-import type { ChatSession } from '@/store/uiStore';
+import type { ChatSession } from '@/store/types';
 
 // ---------------------------------------------------------------------------
 // Helpers & arbitraries

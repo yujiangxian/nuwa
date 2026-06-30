@@ -6,7 +6,7 @@
  *
  * 本模块不导入 React，不读写 store/DOM；副作用只在命令 run 被调用时经注入的 actions 发生。
  */
-import type { AppPage } from '@/store/uiStore';
+import type { AppPage } from '@/store/types';
 import { SUPPORTED_LOCALES, LOCALE_LABELS } from '@/lib/i18n';
 import type { CommandItem } from '@/lib/commandPalette';
 import { type Platform, parseKeyCombo, formatKeyCombo } from '@/lib/keyCombo';

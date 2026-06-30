@@ -5,7 +5,7 @@
  * exercised directly by property-based tests and reused by both the UI layer
  * and the state layer (uiStore).
  */
-import type { Character } from '@/store/uiStore';
+import type { Character } from '@/store/types';
 
 /** Character `name` 允许的最大字符数（UI 层以 input maxLength 强制上限）。 */
 export const NAME_MAX_LENGTH = 20;

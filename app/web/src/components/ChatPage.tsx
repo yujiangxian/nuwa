@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useUIStore, type ChatMessage } from '@/store/uiStore';
 import { useToastStore } from '@/store/toastStore';
 import { apiClient } from '@/api/client';
+import { errorMessage, type ErrorDetail } from '@/lib/errorDetail';
 import { useTranscribe, useSynthesize, useConfig, useVoices } from '@/hooks/useApi';
 import { useRecorder } from '@/hooks/useRecorder';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
@@ -240,8 +241,8 @@ export default function ChatPage() {
       } else {
         addToast({ message: res.error || 'TTS 合成失败', type: 'error' });
       }
-    } catch (err: any) {
-      addToast({ message: err?.response?.data?.error || err?.message || 'TTS 请求失败', type: 'error' });
+    } catch (err: unknown) {
+      addToast({ message: errorMessage(err, 'TTS 请求失败'), type: 'error' });
     } finally {
       setTtsLoadingId(null);
     }
@@ -314,9 +315,9 @@ export default function ChatPage() {
           } else {
             body = res.body;
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           // 建连阶段被 Stop_Action 中断视为正常停止，不降级；其余视为连接失败。
-          connectFailed = !(ctrl.signal.aborted || err?.name === 'AbortError');
+          connectFailed = !(ctrl.signal.aborted || (err as ErrorDetail)?.name === 'AbortError');
         }
 
         if (body) {
@@ -335,11 +336,12 @@ export default function ChatPage() {
               { signal: ctrl.signal, timeout: 120000 },
             );
             accRef.current = data.content ?? '';
-          } catch (err: any) {
-            if (err?.name === 'AbortError' || err?.code === 'ERR_CANCELED') {
+          } catch (err: unknown) {
+            const ed = err as ErrorDetail;
+            if (ed?.name === 'AbortError' || ed?.code === 'ERR_CANCELED') {
               // 降级阶段被停止：无内容，静默退出。
-            } else if (err?.response?.data?.error) {
-              addToast({ message: err.response.data.error, type: 'error', duration: 5000 });
+            } else if (ed?.response?.data?.error) {
+              addToast({ message: ed.response.data.error, type: 'error', duration: 5000 });
             } else {
               addToast({ message: '对话请求失败，请检查网络', type: 'error' });
             }
@@ -516,8 +518,8 @@ export default function ChatPage() {
         } else {
           addToast({ message: data.error || '语音识别失败', type: 'error' });
         }
-      } catch (err: any) {
-        addToast({ message: err?.response?.data?.error || err?.message || '语音识别失败', type: 'error' });
+      } catch (err: unknown) {
+        addToast({ message: errorMessage(err, '语音识别失败'), type: 'error' });
       } finally {
         setAsrLoading(false);
       }

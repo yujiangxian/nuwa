@@ -9,7 +9,7 @@ import {
 } from '@/lib/contextBudget';
 import { estimateText, estimateMessages } from '@/lib/tokenEstimate';
 import { PARAM_SPECS, type ChatGenParams } from '@/lib/generationParams';
-import type { ChatMessage } from '@/store/uiStore';
+import type { ChatMessage } from '@/store/types';
 
 const NUM_RUNS = 200;
 

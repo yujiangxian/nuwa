@@ -6,7 +6,7 @@
  * (Requirement 8.3). All functions are pure: time/randomness are injected by
  * the caller (e.g. `exportedAt`), never read internally.
  */
-import type { ChatSession, ChatMessage } from '@/store/uiStore';
+import type { ChatSession, ChatMessage } from '@/store/types';
 
 /** Current export format version (Format_Version). Fixed to "1" for this feature. */
 export const FORMAT_VERSION = '1';

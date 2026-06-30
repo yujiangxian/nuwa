@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import type { Character } from '@/store/uiStore';
+import type { Character } from '@/store/types';
 import {
   needsSeeding,
   validateName,

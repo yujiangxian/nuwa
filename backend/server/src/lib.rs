@@ -4,6 +4,8 @@
 //! 二进制入口 `main.rs` 复用本库，避免模块被重复编译为两份。
 
 pub mod config_persist;
+pub mod constants;
+pub mod error;
 pub mod handlers;
 pub mod middleware;
 pub mod routes;
