@@ -6,7 +6,7 @@ import fc from 'fast-check';
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { createCharacterDb } from './characterDb';
-import type { Character } from '@/store/uiStore';
+import type { Character } from '@/store/types';
 
 // ---------------------------------------------------------------------------
 // Helpers & arbitraries

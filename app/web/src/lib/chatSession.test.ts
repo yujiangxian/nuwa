@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import { pickLatestSession } from '@/lib/chatSession';
-import type { ChatSession } from '@/store/uiStore';
+import type { ChatSession } from '@/store/types';
 
 /**
  * Property-based tests for pickLatestSession.

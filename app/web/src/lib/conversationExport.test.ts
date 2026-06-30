@@ -8,7 +8,7 @@ import {
   type ExportedSession,
   type ParseResult,
 } from '@/lib/conversationExport';
-import type { ChatSession, ChatMessage } from '@/store/uiStore';
+import type { ChatSession, ChatMessage } from '@/store/types';
 
 /**
  * Export_Module property-based tests (Properties 1–8) plus boundary unit tests.

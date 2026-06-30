@@ -1010,7 +1010,13 @@ pub async fn start_batch_download(
             let dl_registry = Arc::clone(&downloaders);
 
             let handle = tokio::spawn(async move {
-                let _permit = sem.acquire().await.unwrap();
+                let _permit = match sem.acquire().await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::error!("信号量已关闭，放弃下载任务: {}", e);
+                        return Err((file_path, e.to_string()));
+                    }
+                };
 
                 // 确保父目录存在
                 if let Some(parent) = file_dest.parent() {

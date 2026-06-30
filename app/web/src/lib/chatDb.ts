@@ -1,4 +1,4 @@
-import type { ChatSession, ChatMessage } from '@/store/uiStore';
+import type { ChatSession, ChatMessage } from '@/store/types';
 
 /**
  * Persisted message record: adds ownership (sessionId) and ordering (seq)

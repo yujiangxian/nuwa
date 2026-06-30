@@ -77,9 +77,14 @@ pub fn resolve_tts_model(model_id: &str) -> Result<(&'static str, PathBuf), Stri
             "scripts/inference_tts_cosyvoice.py",
             project_root().join("models/tts/cosyvoice3/iic/CosyVoice-300M"),
         )),
+        "tts/glm-tts-full" => Ok((
+            "scripts/inference_tts_glm.py",
+            project_root().join("models/tts/glm-tts-full"),
+        )),
+        // 向后兼容旧 ID
         "tts/glm-tts" => Ok((
             "scripts/inference_tts_glm.py",
-            project_root().join("models/tts/glm-tts"),
+            project_root().join("models/tts/glm-tts-full"),
         )),
         "tts/qwen3-tts-base" => Ok((
             "scripts/inference_tts_qwen3.py",
@@ -233,6 +238,85 @@ pub async fn synthesize(
     } else {
         let error = result.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误");
         Err(format!("TTS 推理错误: {}", error))
+    }
+}
+
+/// TTS 多段合成（脚本模式，支持情绪标签）
+pub async fn synthesize_script(
+    segments_json: &str,
+    model_id: &str,
+    ref_audio: &Path,
+    ref_text: &str,
+    output_path: &Path,
+) -> Result<(), String> {
+    let ref_audio = resolve_path(ref_audio);
+    let output_path = resolve_path(output_path);
+    let (_script, model_path) = resolve_tts_model(model_id)?;
+    let script_path = project_root().join("scripts/inference_tts_glm_script.py");
+    let output_json = std::env::temp_dir().join(format!("nuwa_tts_script_{}.json", uuid::Uuid::new_v4()));
+
+    if let Some(parent) = output_path.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+
+    tracing::info!(
+        "TTS 多段合成: model={} ref={} output={}",
+        model_id,
+        ref_audio.display(),
+        output_path.display()
+    );
+
+    let output = tokio::process::Command::new(python_exe())
+        .arg(&script_path)
+        .arg("--model-path")
+        .arg(&model_path)
+        .arg("--segments")
+        .arg(segments_json)
+        .arg("--ref-audio")
+        .arg(&ref_audio)
+        .arg("--ref-text")
+        .arg(ref_text)
+        .arg("--output")
+        .arg(&output_path)
+        .arg("--output-json")
+        .arg(&output_json)
+        .current_dir(project_root())
+        .output()
+        .await
+        .map_err(|e| format!("启动 TTS 多段合成子进程失败: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    tracing::info!("TTS script stdout: {}", stdout);
+    tracing::info!("TTS script stderr: {}", stderr);
+
+    if !output.status.success() {
+        return Err(format!("TTS 多段合成失败: {}", stderr.truncate(500)));
+    }
+
+    let result_text = tokio::fs::read_to_string(&output_json)
+        .await
+        .map_err(|e| format!("读取 TTS 多段合成结果失败: {}", e))?;
+
+    let _ = tokio::fs::remove_file(&output_json).await;
+
+    let result: serde_json::Value = serde_json::from_str(&result_text)
+        .map_err(|e| format!("解析 TTS 多段合成结果失败: {}", e))?;
+
+    if result.get("success").and_then(|v| v.as_bool()) == Some(true) {
+        if !output_path.exists() {
+            return Err(format!(
+                "TTS 多段合成报告成功，但输出文件不存在: {}",
+                output_path.display()
+            ));
+        }
+        let time_sec = result.get("inference_time_sec").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let dur = result.get("duration_sec").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        tracing::info!("TTS 多段合成完成: {} ({}s, 推理 {}s)", output_path.display(), dur, time_sec);
+        Ok(())
+    } else {
+        let error = result.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误");
+        Err(format!("TTS 多段合成错误: {}", error))
     }
 }
 

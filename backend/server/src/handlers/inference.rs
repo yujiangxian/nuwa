@@ -4,12 +4,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config_persist;
+use crate::constants::{DEFAULT_REF_AUDIO, DEFAULT_REF_TEXT};
 use crate::services::inference;
 use crate::state::AppState;
-
-/// 默认参考音频路径（基于项目根目录的相对路径）
-const DEFAULT_REF_AUDIO: &str = "assets/datasets/cliced_v2/data1_vocals_000.wav";
-const DEFAULT_REF_TEXT: &str = "大家好，欢迎使用人工智能语音助手。";
 
 // ========== ASR ==========
 
@@ -232,6 +229,109 @@ pub async fn synthesize(
             Json(TtsResponse {
                 success: false,
                 output_path: None,
+                error: Some(e),
+            })
+        }
+    };
+
+    result
+}
+
+// ========== TTS 多段合成（脚本模式）==========
+
+#[derive(serde::Deserialize)]
+pub struct TtsScriptRequest {
+    pub segments: serde_json::Value,
+    pub model_id: Option<String>,
+    pub ref_audio: Option<String>,
+    pub ref_text: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub struct TtsScriptResponse {
+    pub success: bool,
+    pub output_path: Option<String>,
+    pub duration_sec: Option<f64>,
+    pub error: Option<String>,
+}
+
+pub async fn synthesize_script(
+    State(state): State<Arc<RwLock<AppState>>>,
+    Json(req): Json<TtsScriptRequest>,
+) -> Json<TtsScriptResponse> {
+    let model_id = match req.model_id {
+        Some(id) => id,
+        None => {
+            let state = state.read().await;
+            state.config.current_tts_model.clone()
+                .or_else(|| state.config.current_model_id.clone())
+                .unwrap_or_else(|| {
+                    state.models.iter()
+                        .find(|m| m.model_type == "tts" && inference::resolve_tts_model(&m.id).is_ok())
+                        .map(|m| m.id.clone())
+                        .unwrap_or_default()
+                })
+        }
+    };
+
+    if model_id.is_empty() {
+        return Json(TtsScriptResponse {
+            success: false, output_path: None, duration_sec: None,
+            error: Some("未选择 TTS 模型".to_string()),
+        });
+    }
+
+    if !inference::is_model_supported(&model_id) {
+        return Json(TtsScriptResponse {
+            success: false, output_path: None, duration_sec: None,
+            error: Some(format!("模型 {} 不支持 TTS 推理", model_id)),
+        });
+    }
+
+    let ref_audio = req.ref_audio.as_deref()
+        .unwrap_or(DEFAULT_REF_AUDIO);
+    let ref_text = req.ref_text.as_deref()
+        .unwrap_or(DEFAULT_REF_TEXT);
+
+    let segments_json = serde_json::to_string(&req.segments)
+        .unwrap_or_else(|_| "[]".to_string());
+
+    let output_filename = format!("tts_script_{}.wav", uuid::Uuid::new_v4());
+    let output_path = std::path::PathBuf::from("output").join(&output_filename);
+
+    {
+        let mut state = state.write().await;
+        state.active_inference_models.insert(model_id.clone());
+    }
+
+    let result = match inference::synthesize_script(
+        &segments_json, &model_id,
+        &std::path::PathBuf::from(ref_audio), ref_text,
+        &output_path,
+    ).await {
+        Ok(()) => {
+            let _now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            {
+                let mut state = state.write().await;
+                state.active_inference_models.remove(&model_id);
+            }
+            Json(TtsScriptResponse {
+                success: true,
+                output_path: Some(output_filename),
+                duration_sec: None,
+                error: None,
+            })
+        }
+        Err(e) => {
+            {
+                let mut state = state.write().await;
+                state.active_inference_models.remove(&model_id);
+            }
+            Json(TtsScriptResponse {
+                success: false, output_path: None, duration_sec: None,
                 error: Some(e),
             })
         }

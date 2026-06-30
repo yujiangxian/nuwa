@@ -3,7 +3,7 @@ import fc from 'fast-check';
 
 import { trimMessages } from '@/lib/contextTrim';
 import { estimateMessages } from '@/lib/tokenEstimate';
-import type { ChatMessage } from '@/store/uiStore';
+import type { ChatMessage } from '@/store/types';
 
 const NUM_RUNS = 200;
 
