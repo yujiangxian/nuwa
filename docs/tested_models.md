@@ -203,17 +203,20 @@ models/asr/
 
 ---
 
-#### 2. GLM-TTS
+#### 2. GLM-TTS ⭐ 默认 TTS
 
 | 属性 | 值 |
 |------|-----|
-| **状态** | ⚠️ 文件完整，库未安装 |
+| **状态** | ✅ 可用 |
 | **厂商** | 智谱 AI |
-| **本地路径** | `models/tts/glm-tts/` (3.7GB) / `glm-tts-full/` (8.5GB) |
+| **本地路径** | `models/tts/glm-tts-full/` (8.5GB) |
 | **格式** | Safetensors + PyTorch |
 | **采样率** | 24000 Hz |
-| **问题** | GitHub 克隆超时；`generate_long()` 长文本音色漂移 |
-| **修复路径** | ① 解决网络后克隆仓库安装 ② 禁用 rolling cache + cross-fade 拼接 |
+| **加载时间** | ~12s (CPU) / ~20s (GPU) |
+| **推理时间** | ~23s/短句 (GPU) / ~60s/短句 (CPU) |
+| **特点** | Zero-shot 声音克隆 + 多段情绪合成 (happy/calm/excited/sad/surprised)，LLM 骨架支持自然语调和情感表达 |
+| **脚本** | `scripts/inference_tts_glm.py` (单句) / `scripts/inference_tts_glm_script.py` (多段情绪) |
+| **限制** | 当前仅 CPU 推理可用 (ROCm 7.1 环境 `torch.cuda.is_available()` 为 false)；Windows 下需绕过 pynini/FFmpeg torchcodec 依赖 |
 
 ---
 
