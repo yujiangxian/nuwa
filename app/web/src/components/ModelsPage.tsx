@@ -14,7 +14,6 @@ import { filterInstalledByType, filterPresets } from '@/lib/modelFilter';
 import { parseActiveModelMap } from '@/lib/activeModel';
 import { countActiveTasks } from '@/lib/downloadTask';
 import { totalInstalledSizeMb } from '@/lib/systemResource';
-import { formatBytes } from '@/lib/modelFormat';
 import { typeConfig } from '@/lib/modelTypeConfig';
 import DiskBar from './models/DiskBar';
 import GpuBar from './models/GpuBar';
@@ -22,8 +21,10 @@ import StatsBar from './models/StatsBar';
 import PresetCard from './models/PresetCard';
 import ActiveModelBanner from './models/ActiveModelBanner';
 import ModelCard from './models/ModelCard';
-import ModelNotesEditor from './models/ModelNotesEditor';
 import DownloadTaskCard from './models/DownloadTaskCard';
+import FileSelectionModal from './models/FileSelectionModal';
+import DeleteConfirmModal from './models/DeleteConfirmModal';
+import ModelDetailModal from './models/ModelDetailModal';
 import type {
   InstalledModel,
   PresetModel,
@@ -35,8 +36,8 @@ import type {
 } from '@/lib/modelTypes';
 import {
   ArrowLeft, RefreshCw, Box, Check,
-  HardDrive, Download, Globe, X,
-  FolderOpen, AlertTriangle, File,
+  HardDrive, Download, Globe,
+  FolderOpen,
   Search, SlidersHorizontal, ChevronDown, Layers,
 } from 'lucide-react';
 
@@ -401,10 +402,6 @@ export default function ModelsPage() {
       addToast({ message: `启动下载失败: ${errorMessage(err, "未知错误")}`, type: 'error' });
     }
   };
-
-  const selectedTotalSize = repoFiles
-    .filter((f) => selectedFiles.has(f.path))
-    .reduce((sum, f) => sum + f.size, 0);
 
   // ========== Download task handlers ==========
 
@@ -880,205 +877,17 @@ export default function ModelsPage() {
       </div>
 
       {/* ========== File Selection Modal ========== */}
-      {showFileModal && modalPreset && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
-          <div className="glass rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col" style={{ border: '1px solid var(--border)', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
-              <div>
-                <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{modalPreset.name}</h3>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>选择要下载的文件</p>
-              </div>
-              <button onClick={() => setShowFileModal(false)}
-                className="flex items-center justify-center" style={{ width: 28, height: 28, borderRadius: 8, color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto px-5 py-3">
-              {loadingFiles ? (
-                <div className="text-center py-8">
-                  <div className="w-6 h-6 rounded-full border-2 border-t-transparent mx-auto mb-3" style={{ borderColor: 'var(--primary)', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
-                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>获取文件列表...</p>
-                </div>
-              ) : repoFiles.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>仓库中没有可下载的文件</p>
-                </div>
-              ) : (
-                <>
-                  {/* Select all */}
-                  <div className="flex items-center gap-2 mb-3 p-2 rounded-lg cursor-pointer"
-                    style={{ background: 'rgba(255,255,255,0.03)' }}
-                    onClick={toggleAll}>
-                    <div className="w-4 h-4 rounded flex items-center justify-center"
-                      style={{
-                        border: `1.5px solid ${selectedFiles.size === repoFiles.length ? 'var(--primary)' : 'var(--text-muted)'}`,
-                        background: selectedFiles.size === repoFiles.length ? 'var(--primary)' : 'transparent',
-                      }}>
-                      {selectedFiles.size === repoFiles.length && <Check size={10} style={{ color: 'var(--bg)' }} />}
-                    </div>
-                    <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                      全选 ({selectedFiles.size}/{repoFiles.length})
-                    </span>
-                  </div>
-
-                  {/* File list */}
-                  <div className="space-y-1">
-                    {repoFiles.map((file) => {
-                      const isSelected = selectedFiles.has(file.path);
-                      return (
-                        <div key={file.path}
-                          className="flex items-center gap-2.5 p-2 rounded-lg cursor-pointer transition-all"
-                          style={{ background: isSelected ? 'rgba(72,202,228,0.06)' : 'transparent' }}
-                          onClick={() => toggleFile(file.path)}>
-                          <div className="w-4 h-4 rounded flex items-center justify-center shrink-0"
-                            style={{
-                              border: `1.5px solid ${isSelected ? 'var(--primary)' : 'var(--text-muted)'}`,
-                              background: isSelected ? 'var(--primary)' : 'transparent',
-                            }}>
-                            {isSelected && <Check size={10} style={{ color: 'var(--bg)' }} />}
-                          </div>
-                          <File size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                          <span className="text-xs flex-1 truncate" style={{ color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{file.path}</span>
-                          <span className="text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>{file.size_text}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
-              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                已选: {selectedFiles.size} 个文件 · {formatBytes(selectedTotalSize)}
-              </span>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setShowFileModal(false)}
-                  className="text-xs px-3 py-1.5 rounded-lg cursor-pointer transition-all"
-                  style={{ color: 'var(--text-secondary)', background: 'transparent', border: '1px solid var(--border)' }}>
-                  取消
-                </button>
-                <button onClick={handleConfirmBatchDownload}
-                  disabled={selectedFiles.size === 0 || loadingFiles}
-                  className="text-xs px-4 py-1.5 rounded-lg cursor-pointer transition-all font-medium"
-                  style={{
-                    color: 'var(--bg)',
-                    background: selectedFiles.size === 0 ? 'var(--text-muted)' : 'var(--primary)',
-                    border: 'none',
-                    opacity: selectedFiles.size === 0 ? 0.5 : 1,
-                  }}>
-                  确认下载
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <FileSelectionModal show={showFileModal} preset={modalPreset} repoFiles={repoFiles} selectedFiles={selectedFiles} loadingFiles={loadingFiles}
+        onClose={() => setShowFileModal(false)} onToggleAll={toggleAll} onToggleFile={toggleFile} onConfirm={handleConfirmBatchDownload} />
 
       {/* ========== Delete Confirmation Modal ========== */}
-      {showDeleteConfirm && deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
-          <div className="glass rounded-2xl w-full max-w-sm flex flex-col" style={{ border: '1px solid var(--border)', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
-            <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: '1px solid var(--border)' }}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(255,107,107,0.08)' }}>
-                <AlertTriangle size={18} style={{ color: '#FF6B6B' }} />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>确认删除</h3>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>此操作不可撤销</p>
-              </div>
-            </div>
-            <div className="px-5 py-4">
-              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                确定要删除模型 <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>「{deleteTarget.name}」</span> 吗？
-              </p>
-              <p className="text-[11px] mt-2 font-mono" style={{ color: 'var(--text-muted)' }}>{deleteTarget.path}</p>
-            </div>
-            <div className="flex items-center justify-end gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--border)' }}>
-              <button onClick={() => { setShowDeleteConfirm(false); setDeleteTarget(null); }}
-                className="text-xs px-3 py-1.5 rounded-lg cursor-pointer transition-all"
-                style={{ color: 'var(--text-secondary)', background: 'transparent', border: '1px solid var(--border)' }}>
-                取消
-              </button>
-              <button onClick={confirmDelete} disabled={isDeleting}
-                className="text-xs px-4 py-1.5 rounded-lg cursor-pointer transition-all font-medium"
-                style={{ color: 'var(--bg)', background: isDeleting ? 'var(--text-muted)' : '#FF6B6B', border: 'none', opacity: isDeleting ? 0.5 : 1 }}>
-                {isDeleting ? '删除中...' : '确认删除'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmModal show={showDeleteConfirm} model={deleteTarget} isDeleting={isDeleting}
+        onConfirm={confirmDelete} onCancel={() => { setShowDeleteConfirm(false); setDeleteTarget(null); }} />
 
       {/* ========== Model Detail Modal ========== */}
-      {showDetailModal && detailModel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }}>
-          <div className="glass rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col" style={{ border: '1px solid var(--border)', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
-              <div>
-                <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{detailModel.name}</h3>
-                <p className="text-[11px] mt-0.5 font-mono" style={{ color: 'var(--text-muted)' }}>{detailModel.id}</p>
-              </div>
-              <button onClick={() => setShowDetailModal(false)}
-                className="flex items-center justify-center" style={{ width: 28, height: 28, borderRadius: 8, color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                <X size={16} />
-              </button>
-            </div>
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto px-5 py-3">
-              {/* Notes editor */}
-              <ModelNotesEditor
-                modelId={detailModel.id}
-                initialNotes={modelMeta[detailModel.id]?.notes || ''}
-                onSave={handleSaveNotes}
-              />
-
-              {loadingDetail ? (
-                <div className="text-center py-8">
-                  <div className="w-6 h-6 rounded-full border-2 border-t-transparent mx-auto mb-3" style={{ borderColor: 'var(--primary)', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
-                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>加载文件列表...</p>
-                </div>
-              ) : modelFiles.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>暂无文件信息</p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {modelFiles.map((f: ModelFileInfo, idx: number) => (
-                    <div key={idx} className="flex items-center gap-2.5 p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                      {f.is_dir ? (
-                        <FolderOpen size={14} style={{ color: '#D4AF37', flexShrink: 0 }} />
-                      ) : (
-                        <File size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                      )}
-                      <span className="text-xs flex-1 truncate font-mono" style={{ color: 'var(--text-secondary)' }}>{f.path}</span>
-                      {!f.is_dir && (
-                        <span className="text-[10px] shrink-0" style={{ color: 'var(--text-muted)' }}>{formatBytes(f.size)}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            {/* Footer */}
-            <div className="flex items-center justify-between px-5 py-3 shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
-              <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                {modelFiles.filter((f: ModelFileInfo) => !f.is_dir).length} 个文件 · 共 {formatBytes(modelFiles.filter((f: ModelFileInfo) => !f.is_dir).reduce((s: number, f: ModelFileInfo) => s + f.size, 0))}
-              </span>
-              <button onClick={() => setShowDetailModal(false)}
-                className="text-xs px-3 py-1.5 rounded-lg cursor-pointer transition-all"
-                style={{ color: 'var(--text-secondary)', background: 'transparent', border: '1px solid var(--border)' }}>
-                关闭
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModelDetailModal show={showDetailModal} model={detailModel} files={modelFiles} loading={loadingDetail}
+        notes={detailModel ? (modelMeta[detailModel.id]?.notes || '') : ''}
+        onSaveNotes={handleSaveNotes} onClose={() => setShowDetailModal(false)} />
     </div>
   );
 }
