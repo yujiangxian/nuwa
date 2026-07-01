@@ -80,3 +80,8 @@ __pycache__/
 # ---------- 操作系统 ----------
 .DS_Store
 Thumbs.db
+
+# 密钥文件
+secert/
+*.pem
+*.key
