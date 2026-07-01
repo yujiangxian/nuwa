@@ -1,65 +1,65 @@
-# 女娲 (Nuwa) 技术路线图
+# 女娲 Nuwa — Roadmap 2026
 
----
+> 开源社区项目 — 本地多模型 AI 助手平台。核心差异化：全本地运行 + 声音克隆 + IM 聊天机器人。
 
-## Phase 1：基础链路打通（当前阶段）✅
+## 当前版本状态 (v0.2)
 
-| 功能 | 状态 | 备注 |
+| 模块 | 状态 | 技术 |
 |------|------|------|
-| LLM 对话（文本） | ✅ | Ollama 转发 |
-| ASR 语音识别 | ✅ | Paraformer / Whisper / GLM-ASR / Qwen3-ASR |
-| TTS 语音合成 | ✅ | CosyVoice zero-shot |
-| 模型扫描与管理 | ✅ | 本地 + Ollama 统一发现 |
-| 模型下载 | ✅ | HuggingFace / ModelScope 并行下载 |
-| 配置持久化 | ✅ | config.json |
-| 音频文件服务 | ✅ | /api/audio/{filename} |
+| LLM 对话 | ✅ | Ollama Gemma 4 E4B + 流式 SSE |
+| ASR 识别 | ✅ | Paraformer-Large (默认) |
+| TTS 合成 | ✅ | GLM-TTS + 多段情绪 + 季莹莹音色 |
+| 模型管理 | ✅ | HuggingFace/ModelScope 下载 + 扫描 |
+| 音色库 | ✅ | 上传/试听/删除 |
+| 角色系统 | ✅ | 3 个角色 + CRUD |
+| 代码质量 | ✅ | 970 测试 + TS strict + CI |
 
----
+## Phase 1: 文档更新 + 代码收尾 (完成)
 
-## Phase 2：语音交互闭环（近期，1-2 周）
+- [x] README 状态表更新
+- [x] `docs/tested_models.md` GLM-TTS 状态更新
+- [x] `docs/roadmap.md` 替换
+- [ ] `docs/architecture.md` 新建
+- [ ] `presetStore` / `sessionStore` 接入
 
-| 功能 | 优先级 | 工作量 |
-|------|--------|--------|
-| ChatPage 麦克风语音输入 | P0 | 1d |
-| TTS 模型常驻服务化 | P0 | 2d |
-| 分离 ASR/TTS 独立配置 | P0 | 0.5d |
-| 角色/音色配置持久化 | P1 | 0.5d |
-| Ollama 模型友好名称映射 | P1 | 0.5d |
-| 下载 Qwen3-ASR-1.7B | P1 | 0.5d |
-| 下载 Whisper Small | P2 | 0.5d |
+## Phase 2: IM 接入 — 微信/企业微信机器人 (2-3 周)
 
----
+- [ ] 消息路由层 (`handlers/im.rs` + `services/message_router.rs`)
+- [ ] 企业微信自建应用 webhook 接入
+- [ ] 语音消息：用户语音 → ASR → LLM → TTS → 语音回复
+- [ ] 多用户会话管理 (与 ChatPage 复用 ChatSession 逻辑)
 
-## Phase 3：体验优化（中期，2-4 周）
+## Phase 3: 实时语音对话 (2-3 周)
 
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| 流式对话输出 | P1 | Ollama stream + SSE |
-| 会话历史持久化 | P1 | IndexedDB |
-| 音色库管理 | P1 | 上传/保存/切换参考音频 |
-| TTS 参数真正生效 | P1 | 接入 GLM-TTS / Qwen3-TTS 参数控制 |
-| 消息级语音播放 | P2 | 每条 assistant 消息可独立播放 |
-| 自动播放开关 | P2 | 设置中控制 |
+- [ ] ChatPage 麦克风语音输入 → ASR 自动填入
+- [ ] LLM 回复后自动 TTS 合成 + 播放
+- [ ] 语音打断 (AudioWorklet + Silero VAD)
 
----
+## Phase 4: Agent 层 & 工具调用 (3-4 周)
 
-## Phase 4：多模态升级（远期，1-3 月）
+- [ ] MCP Server 化 (ASR / TTS / LLM / Manager)
+- [ ] Rust Agent 调度器
+- [ ] WorkflowPage 可视化工作流编辑器
 
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| 接入 Qwen3-Omni | P1 | 端到端语音多模态，替代 ASR+LLM+TTS 级联 |
-| 图像理解 | P2 | 上传图片，多模态 LLM 分析 |
-| 实时语音对话 | P2 | WebSocket 流式 ASR + 流式 TTS |
-| 本地 RAG 知识库 | P3 | 向量数据库 + 文档检索 |
-| 角色记忆 | P3 | 长期对话记忆 |
+## Phase 5: 体验打磨 (持续)
 
----
+- [ ] React.memo 性能优化
+- [ ] 流式 TTS (WebSocket 推送音频分片)
+- [ ] 移动端响应式完善
+- [ ] 英文 UI 国际化
+- [ ] PWA 打包
 
-## Phase 5：工程化与部署（持续）
+## Phase 6: GPU 加速 & 模型扩展 (长期)
 
-| 功能 | 优先级 | 说明 |
-|------|--------|------|
-| Tauri 桌面打包 | P2 | 从 Web 应用打包为独立 exe |
-| 自动更新 | P3 | 模型/应用自动更新 |
-| 超算训练流水线 | P2 | SLURM + DCU 训练 GPT-SoVITS |
-| 模型量化优化 | P2 | GGUF / ONNX 转换，降低显存占用 |
+- [ ] 修复 AMD ROCm GPU 调用 (HIP 兼容)
+- [ ] Qwen3-Omni 端到端语音对话
+- [ ] GLM-TTS INT8 量化
+
+## 不做
+
+| 项 | 原因 |
+|---|---|
+| 超算训练 | 暂时搁置，本地推理够用 |
+| 图像/视频理解 | Ollama ROCm 后端不支持 Gemma 4 vision |
+| Tauri 桌面打包 | Web UI 优先 |
+| RAG 知识库 | 等 Agent 层稳定 |
