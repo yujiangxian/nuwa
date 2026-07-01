@@ -278,9 +278,7 @@ async function assembleSearchCorpus(): Promise<SearchCorpus> {
           messages: await chatDb.getMessages(session.id),
         })),
       );
-    } catch {
-      // 读取失败：降级到内存语料（Req 9.2），不中断。
-    }
+    } catch { console.warn("nuwa:store: error"); }
   }
   // Memory_Fallback_Mode 或读取失败：用内存中可用的会话标题 +
   // 当前会话已加载的消息（其余会话消息不在内存中，标题仍可被检索）。
@@ -778,9 +776,7 @@ export const useUIStore = create<UIState>((set, get) => ({
             messages: await chatDb.getMessages(session.id),
           })),
         );
-      } catch {
-        // 读取失败：降级到内存语料，不抛出。
-      }
+      } catch { console.warn("nuwa:store: error"); }
     }
     // Memory_Fallback_Mode 或读取失败：内存会话，仅当前会话有已加载消息。
     return sessions.map((session) => ({
