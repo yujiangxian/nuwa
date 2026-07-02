@@ -52,6 +52,12 @@ export default function VoiceStudioPage() {
 
   // Synth tab states
   const [synthText, setSynthText] = useState('');
+  const [synthMode, setSynthMode] = useState<'single' | 'script'>('single');
+  const [synthScript, setSynthScript] = useState(() => JSON.stringify([
+    {text:"你好呀！我是季莹莹，很高兴认识你！",emotion:"happy"},
+    {text:"今天天气真不错呢，阳光暖洋洋的。",emotion:"calm"},
+  ], null, 2));
+  const [scriptGenerating, setScriptGenerating] = useState(false);
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [generatedPath, setGeneratedPath] = useState<string | null>(null);
   const [synthError, setSynthError] = useState<string | null>(null);
@@ -203,6 +209,40 @@ export default function VoiceStudioPage() {
         addToast({ message: msg, type: 'error' });
       }
     } catch (err: unknown) {
+      const msg = errorMessage(err, '合成请求失败');
+      setSynthError(msg);
+      addToast({ message: msg, type: 'error' });
+    }
+  };
+
+  const handleSynthesizeScript = async () => {
+    if (scriptGenerating) return;
+    setSynthError(null);
+    setGeneratedPath(null);
+    player.stop();
+    try {
+      let segments;
+      try { segments = JSON.parse(synthScript); } catch { setSynthError('JSON 格式错误，请检查脚本'); return; }
+      if (!Array.isArray(segments)) { setSynthError('脚本必须是 JSON 数组'); return; }
+      setScriptGenerating(true);
+      const { data } = await apiClient.post('/api/inference/tts/script', {
+        segments,
+        model_id: currentTtsModel,
+        ref_audio: selectedVoice?.path ?? '',
+        ref_text: selectedVoice?.transcript ?? '',
+      });
+      setScriptGenerating(false);
+      if (data.success && data.output_path) {
+        setGeneratedPath(data.output_path);
+        addToast({ message: '多段合成完成', type: 'success' });
+        if (autoPlay) void player.play(SYNTH_KEY, `/api/audio/${data.output_path}`);
+      } else {
+        const msg = data.error || '合成失败';
+        setSynthError(msg);
+        addToast({ message: msg, type: 'error' });
+      }
+    } catch (err: unknown) {
+      setScriptGenerating(false);
       const msg = errorMessage(err, '合成请求失败');
       setSynthError(msg);
       addToast({ message: msg, type: 'error' });
@@ -536,38 +576,50 @@ export default function VoiceStudioPage() {
             </div>
 
             <div className="glass glow-edge rounded-2xl p-5 mb-4">
-              <textarea
-                className="w-full outline-none resize-none bg-transparent text-sm leading-relaxed"
-                style={{ color: 'var(--text-primary)', caretColor: 'var(--primary)', minHeight: 100 }}
-                placeholder="输入要合成的文本..."
-                value={synthText}
-                onChange={(e) => setSynthText(e.target.value)}
-                maxLength={500}
-              />
+              {/* Mode toggle */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>合成模式</span>
+                <div className="flex rounded-lg p-0.5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                  {(['single','script'] as const).map(m => (
+                    <button key={m} onClick={() => { setSynthMode(m); setGeneratedPath(null); setSynthError(null); }}
+                      className="px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer"
+                      style={{ background: synthMode === m ? 'var(--primary)' : 'transparent', color: synthMode === m ? 'var(--bg)' : 'var(--text-secondary)' }}>
+                      {m === 'single' ? '单句' : '多段脚本'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {synthMode === 'single' ? (
+                <textarea className="w-full outline-none resize-none bg-transparent text-sm leading-relaxed"
+                  style={{ color: 'var(--text-primary)', caretColor: 'var(--primary)', minHeight: 100 }}
+                  placeholder="输入要合成的文本..." value={synthText}
+                  onChange={e => setSynthText(e.target.value)} maxLength={500} />
+              ) : (
+                <textarea className="w-full outline-none resize-none bg-transparent text-sm leading-relaxed"
+                  style={{ color: 'var(--text-primary)', caretColor: 'var(--primary)', minHeight: 160, fontFamily: 'JetBrains Mono, monospace' }}
+                  placeholder={`[{"text":"你好！","emotion":"happy"},\n{"text":"今天天气不错。","emotion":"calm"}]`}
+                  value={synthScript} onChange={e => setSynthScript(e.target.value)} rows={8} />
+              )}
               <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
-                <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{synthText.length} / 500 字</span>
+                <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                  {synthMode === 'single' ? `${synthText.length} / 500 字` : `${synthScript.split('\n').length} 行 JSON`}
+                </span>
                 <button
                   className="flex items-center gap-2"
                   style={{
-                    background: isGenerating ? 'rgba(72,202,228,0.06)' : 'linear-gradient(135deg, var(--primary), var(--primary-dim))',
-                    color: 'var(--bg)',
-                    borderRadius: 12,
-                    padding: '10px 24px',
-                    fontWeight: 600,
-                    fontSize: 14,
-                    border: 'none',
-                    cursor: isGenerating ? 'not-allowed' : 'pointer',
-                    boxShadow: isGenerating ? 'none' : '0 0 24px var(--primary-glow)',
-                    transition: 'all 0.2s ease',
-                    opacity: isGenerating ? 0.6 : 1,
+                    background: (isGenerating || scriptGenerating) ? 'rgba(72,202,228,0.06)' : 'linear-gradient(135deg, var(--primary), var(--primary-dim))',
+                    color: 'var(--bg)', borderRadius: 12, padding: '10px 24px', fontWeight: 600, fontSize: 14,
+                    border: 'none', cursor: (isGenerating || scriptGenerating) ? 'not-allowed' : 'pointer',
+                    boxShadow: (isGenerating || scriptGenerating) ? 'none' : '0 0 24px var(--primary-glow)',
+                    transition: 'all 0.2s ease', opacity: (isGenerating || scriptGenerating) ? 0.6 : 1,
                   }}
-                  onClick={handleSynthesize}
-                  disabled={isGenerating}
-                  onMouseEnter={(e) => { if (!isGenerating) { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 40px var(--primary-glow-strong)'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)'; } }}
-                  onMouseLeave={(e) => { if (!isGenerating) { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 24px var(--primary-glow)'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)'; } }}
+                  onClick={synthMode === 'single' ? handleSynthesize : handleSynthesizeScript}
+                  disabled={isGenerating || scriptGenerating}
+                  onMouseEnter={(e) => { if (!isGenerating && !scriptGenerating) { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 40px var(--primary-glow-strong)'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)'; } }}
+                  onMouseLeave={(e) => { if (!isGenerating && !scriptGenerating) { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 0 24px var(--primary-glow)'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)'; } }}
                 >
-                  {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} fill="currentColor" />}
-                  {isGenerating ? '合成中...' : '开始合成'}
+                  {(isGenerating || scriptGenerating) ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} fill="currentColor" />}
+                  {(isGenerating || scriptGenerating) ? '合成中...' : '开始合成'}
                 </button>
               </div>
 
