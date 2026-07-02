@@ -33,4 +33,8 @@ pub enum AppError {
     NotFound(String),
 }
 
+impl From<String> for AppError {
+    fn from(s: String) -> Self { AppError::Inference(s) }
+}
+
 pub type AppResult<T> = Result<T, AppError>;
