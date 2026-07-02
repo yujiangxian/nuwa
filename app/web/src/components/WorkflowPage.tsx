@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
-import { ArrowLeft, Play, StepForward, RotateCcw, CircleCheck, CircleDot, Circle, CircleX, Ban } from 'lucide-react';
+import { useMemo, useState, useCallback } from 'react';
+import { ArrowLeft, Play, StepForward, RotateCcw, CircleCheck, CircleDot, Circle, CircleX, Ban, Zap, Loader2, Mic, MessageSquare, Volume2, FileAudio } from 'lucide-react';
 import { useUIStore } from '@/store/uiStore';
+import { apiClient } from '@/api/client';
 import type { JsonValue, NodeType, Port, PortType, WorkflowGraph, WorkflowNode } from '@/lib/workflow/types';
 import {
   initialState,
@@ -173,7 +174,10 @@ type RunStatusKey = ExecutionState['runStatus'];
 
 export default function WorkflowPage() {
   const setPage = useUIStore((s) => s.setPage);
-  const [demoKey, setDemoKey] = useState<string>(DEMOS[0].key);
+  const [modeTab, setModeTab] = useState<'demo' | 'agent'>('agent');
+
+  // Demo graph state
+  const [demoKey, _setDemoKey] = useState<string>(DEMOS[0].key);
   const demo = useMemo(() => DEMOS.find((d) => d.key === demoKey) ?? DEMOS[0], [demoKey]);
   const env = useMemo(() => makeEnv(), []);
 
@@ -191,6 +195,87 @@ export default function WorkflowPage() {
     setSteps(0);
     setError(fresh.ok ? null : '图初始化失败');
   }
+
+  // ---- Real Agent Execution state ----
+  const [agentPipeline, setAgentPipeline] = useState<string>('voice_reply');
+  const [agentInput, setAgentInput] = useState<string>('{"text":"介绍一下语音合成技术"}');
+  const [_agentTaskId, setAgentTaskId] = useState<string | null>(null);
+  const [agentStatus, setAgentStatus] = useState<string>('idle');
+  const [agentSteps, setAgentSteps] = useState<Array<{label:string;status:string;message?:string}>>([]);
+  const [agentResult, setAgentResult] = useState<string>('');
+  const [agentError, setAgentError] = useState<string>('');
+
+  const AGENT_PIPELINES = [
+    { id: 'voice_reply', name: '语音回复', icon: Mic, desc: 'ASR→LLM→TTS 全链路' },
+    { id: 'text_chat', name: '文本对话', icon: MessageSquare, desc: 'LLM→TTS' },
+    { id: 'transcribe', name: '语音转文字', icon: FileAudio, desc: '仅 ASR' },
+    { id: 'synthesize', name: '文字转语音', icon: Volume2, desc: '仅 TTS' },
+  ];
+
+  const runAgent = useCallback(async () => {
+    setAgentStatus('running');
+    setAgentError('');
+    setAgentResult('');
+    setAgentSteps([]);
+    try {
+      let input: Record<string,unknown> = {};
+      try { input = JSON.parse(agentInput); } catch { /* use raw text */ }
+      if (typeof input === 'string') input = { text: input };
+
+      const { data } = await apiClient.post('/api/agents/run', { pipeline: agentPipeline, input });
+      if (!data.success) { setAgentError(data.error || '启动失败'); setAgentStatus('failed'); return; }
+      setAgentTaskId(data.task_id); const _agentTid = data.task_id;
+
+      // Start SSE listener
+      const eventSource = new EventSource(`/api/agents/tasks/${_agentTid}/events`);
+      eventSource.onmessage = (e) => {
+        const ev = JSON.parse(e.data);
+        if (ev.status === 'completed') {
+          setAgentStatus('completed');
+          eventSource.close();
+          // Fetch task result
+          apiClient.get(`/api/agents/tasks/${_agentTid}`).then(r => {
+            setAgentResult(r.data.result || '');
+          });
+        } else if (ev.status === 'failed') {
+          setAgentStatus('failed');
+          setAgentError(ev.message || '流水线执行失败');
+          eventSource.close();
+        } else {
+          // Running step update
+          setAgentSteps(prev => [...prev.filter(s => s.label !== ev.step), { label: ev.step || '', status: 'done', message: ev.message || '' }]);
+          if (ev.step) {
+            setAgentSteps(prev => {
+              const filtered = prev.filter(s => s.label !== ev.step);
+              return [...filtered, { label: ev.step, status: ev.status === 'failed' ? 'error' : ev.message?.includes('完成') ? 'done' : 'running', message: ev.message || '' }];
+            });
+          }
+        }
+      };
+      eventSource.onerror = () => {
+        if (agentStatus === 'running') {
+          // Reconnect on SSE error
+          setTimeout(() => {
+            apiClient.get(`/api/agents/tasks/${_agentTid}`).then(r => {
+              if (r.data.status === 'completed') { setAgentStatus('completed'); setAgentResult(r.data.result || ''); }
+              else if (r.data.status === 'failed') { setAgentStatus('failed'); setAgentError(r.data.error || ''); }
+            }).catch(() => {});
+          }, 2000);
+        }
+      };
+    } catch (err: unknown) {
+      setAgentError('Agent 执行失败');
+      setAgentStatus('failed');
+    }
+  }, [agentPipeline, agentInput]);
+
+  const resetAgent = () => {
+    setAgentTaskId(null);
+    setAgentStatus('idle');
+    setAgentSteps([]);
+    setAgentResult('');
+    setAgentError('');
+  };
 
   const terminal = state !== null && (state.runStatus === 'Completed' || state.runStatus === 'Failed');
 
@@ -239,40 +324,136 @@ export default function WorkflowPage() {
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setPage('home')}
+          <button onClick={() => setPage('home')}
             className="flex items-center justify-center"
             style={{ width: 36, height: 36, borderRadius: 10, color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
-            title="返回首页"
-          >
-            <ArrowLeft size={20} />
-          </button>
+            title="返回首页"><ArrowLeft size={20} /></button>
           <div>
             <h1 className="text-lg font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>工作流编排</h1>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>纯函数执行引擎 · 单步可视化（无需后端）</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Agent 调度引擎 · 真实模型能力编排</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {DEMOS.map((d) => (
-            <button
-              key={d.key}
-              onClick={() => setDemoKey(d.key)}
+          {(['agent', 'demo'] as const).map(t => (
+            <button key={t} onClick={() => setModeTab(t)}
               className="px-3 py-1.5 rounded-lg text-sm transition-all"
-              style={{
-                background: d.key === demoKey ? 'var(--primary)' : 'var(--surface-hover)',
-                color: d.key === demoKey ? 'var(--bg)' : 'var(--text-secondary)',
-                border: '1px solid var(--border)',
-                cursor: 'pointer',
-              }}
-            >
-              {d.name}
+              style={{ background: modeTab === t ? 'var(--primary)' : 'var(--surface-hover)', color: modeTab === t ? 'var(--bg)' : 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+              {t === 'agent' ? 'Agent 编排' : 'Demo 引擎'}
             </button>
           ))}
         </div>
       </header>
 
+      {modeTab === 'agent' && (
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left: Pipeline select & controls */}
+          <div className="flex flex-col gap-4 p-6 overflow-y-auto" style={{ width: 440, borderRight: '1px solid var(--border)' }}>
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>选择流水线</span>
+              {AGENT_PIPELINES.map(p => {
+                const Icon = p.icon;
+                const active = agentPipeline === p.id;
+                return (
+                  <button key={p.id} onClick={() => setAgentPipeline(p.id)}
+                    className="flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all"
+                    style={{ background: active ? 'rgba(72,202,228,0.08)' : 'var(--surface)', border: `1px solid ${active ? 'rgba(72,202,228,0.25)' : 'var(--border)'}`, cursor: 'pointer' }}>
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(72,202,228,0.15), rgba(0,150,199,0.1))' }}>
+                      <Icon size={18} style={{ color: 'var(--primary)' }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{p.name}</div>
+                      <div className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{p.desc}</div>
+                    </div>
+                    {active && <CircleCheck size={16} style={{ color: 'var(--primary)' }} />}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>输入参数 (JSON)</span>
+              <textarea value={agentInput} onChange={e => setAgentInput(e.target.value)}
+                className="w-full text-xs rounded-xl px-3 py-2 outline-none resize-none mono"
+                rows={6}
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontFamily: 'JetBrains Mono, monospace' }} />
+              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                {agentPipeline === 'voice_reply' ? '试试: {"text":"你好"}' :
+                 agentPipeline === 'transcribe' ? '试试: {"audio_path":"assets/datasets/voices/jyy_000.wav"}' :
+                 '试试: {"text":"介绍一下语音合成技术"}'}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button onClick={runAgent} disabled={agentStatus === 'running'}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                style={{ background: agentStatus === 'running' ? 'var(--surface-hover)' : 'var(--primary)', color: agentStatus === 'running' ? 'var(--text-muted)' : 'var(--bg)', border: 'none', cursor: agentStatus === 'running' ? 'not-allowed' : 'pointer', opacity: agentStatus === 'running' ? 0.7 : 1 }}>
+                {agentStatus === 'running' ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+                {agentStatus === 'running' ? '执行中...' : agentStatus === 'idle' ? '执行' : '重新执行'}
+              </button>
+              {agentStatus !== 'idle' && (
+                <button onClick={resetAgent} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm" style={{ background: 'var(--surface-hover)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+                  <RotateCcw size={16} /> 重置
+                </button>
+              )}
+            </div>
+
+            {agentStatus !== 'idle' && (
+              <div className="flex items-center gap-2 text-sm">
+                <span style={{ color: 'var(--text-secondary)' }}>状态：</span>
+                <span style={{ fontWeight: 600, color: agentStatus === 'completed' ? '#52B788' : agentStatus === 'failed' ? '#EF476F' : '#48CAE4' }}>
+                  {agentStatus === 'running' ? '执行中' : agentStatus === 'completed' ? '已完成' : agentStatus === 'failed' ? '失败' : agentStatus}
+                </span>
+              </div>
+            )}
+
+            {agentSteps.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>步骤进度</span>
+                {agentSteps.map((s, i) => (
+                  <div key={i} className="flex items-center gap-3 rounded-xl px-4 py-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                    {s.status === 'done' ? <CircleCheck size={16} style={{ color: '#52B788' }} /> :
+                     s.status === 'running' ? <Loader2 size={16} className="animate-spin" style={{ color: '#48CAE4' }} /> :
+                     s.status === 'error' ? <CircleX size={16} style={{ color: '#EF476F' }} /> :
+                     <Circle size={16} style={{ color: 'var(--text-muted)' }} />}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm" style={{ color: 'var(--text-primary)' }}>{s.label}</div>
+                      {s.message && <div className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{s.message}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {agentError && (
+              <div className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,71,111,0.12)', color: '#EF476F', border: '1px solid rgba(239,71,111,0.2)' }}>{agentError}</div>
+            )}
+          </div>
+
+          {/* Right: result */}
+          <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+            <h2 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>执行结果</h2>
+            {agentResult ? (
+              <pre className="text-sm whitespace-pre-wrap break-all rounded-xl p-4"
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontFamily: 'JetBrains Mono, monospace' }}>
+                {agentResult.length > 2000 ? `${agentResult.slice(0, 2000)}...` : agentResult}
+              </pre>
+            ) : (
+              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>选择流水线并点击执行，结果将显示在这里。</div>
+            )}
+            {agentStatus === 'completed' && agentResult && (
+              <div className="mt-4 flex items-center gap-2">
+                <button onClick={() => navigator.clipboard.writeText(agentResult)}
+                  className="text-xs px-3 py-1.5 rounded-lg cursor-pointer" style={{ color: 'var(--primary)', background: 'rgba(72,202,228,0.08)', border: '1px solid rgba(72,202,228,0.15)' }}>
+                  复制结果
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {modeTab === 'demo' && (
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: controls + nodes */}
         <div className="flex flex-col gap-4 p-6 overflow-y-auto" style={{ width: 460, borderRight: '1px solid var(--border)' }}>
           <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{demo.description}</p>
 
@@ -350,6 +531,7 @@ export default function WorkflowPage() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
