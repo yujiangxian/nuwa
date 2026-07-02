@@ -54,6 +54,11 @@ pub fn create_router() -> Router<Arc<RwLock<AppState>>> {
         .route("/api/downloads/{id}/cancel", post(handlers::download::cancel_download))
         .route("/api/downloads/{id}/retry", post(handlers::download::retry_download))
         .route("/api/downloads/{id}", axum::routing::delete(handlers::download::delete_download))
+        // Agent 调度器
+        .route("/api/agents", get(handlers::agents::list_agents))
+        .route("/api/agents/run", post(handlers::agents::run_pipeline))
+        .route("/api/agents/tasks/{id}", get(handlers::agents::get_task))
+        .route("/api/agents/tasks/{id}/events", get(handlers::agents::task_events))
         // SSE 进度推送
         .route("/api/sse/progress", get(handlers::sse::progress_stream))
 }
