@@ -28,20 +28,12 @@
 
 **目标**: 把 ASR/LLM/TTS 的能力组合成可调度的任务流水线，前端一键触发。
 
-### 2.1 Rust Agent 调度器
-后端新增 `services/agent_scheduler.rs`:
-- 注册能力：每个模型 (ASR/TTS/LLM) 作为一个 `Agent`，定义输入/输出接口
-- 编排流水线：`text_chat: [LLM]` → `voice_reply: [ASR, LLM, TTS]` → `transcribe: [ASR]`
-- 并发控制：同一模型同型号只运行一个推理实例 (Semaphore)
-- 状态机：每个流水线有 `pending/running/done/failed` 生命周期
-
-### 2.2 能力注册 API
-```
-GET  /api/agents              — 列出所有可用能力
-POST /api/agents/run          — 执行一个任务流水线
-       { pipeline: "voice_reply", input: { audio: "..." } }
-GET  /api/agents/tasks/{id}   — 查询任务状态/结果
-```
+### 2.1 Rust Agent 调度器 ✅
+- [x] `services/agent_scheduler.rs` — Agent 注册表 + 流水线定义 + Semaphore 并发控制
+- [x] `handlers/agents.rs` — 4 个 API 端点 + SSE 进度推送
+- [x] 4 条流水线: `voice_reply` / `text_chat` / `transcribe` / `synthesize`
+- [ ] 前端 WorkflowPage 对接真实 API（进行中）
+- [ ] 语义化错误恢复：某步骤失败不丢失中间结果
 
 ### 2.3 WorkflowPage 前端
 目前 `WorkflowPage.tsx` 是空壳，已有 `lib/workflow/engine/` 底层引擎。实现一个可视化工作流编辑器，拖拽节点编排 ASR→LLM→TTS 流水线。

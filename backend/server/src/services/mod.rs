@@ -3,6 +3,7 @@
 //! - `model_scanner`: 扫描 models/ 目录
 //! - `downloader`: 模型下载封装
 
+pub mod agent_scheduler;
 pub mod downloader;
 pub mod inference;
 pub mod model_scanner;
