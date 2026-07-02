@@ -234,11 +234,22 @@ impl AgentScheduler {
         let root = project_root.clone();
         let tid = task_id.clone();
 
+        // 立即标记为 Running
+        {
+            let mut tasks = self.tasks.write().await;
+            if let Some(t) = tasks.get_mut(&tid) {
+                t.status = TaskStatus::Running;
+            }
+        }
+
         tokio::spawn(async move {
             let scheduler = scheduler();
-            let _ = scheduler
+            if let Err(e) = scheduler
                 .run_pipeline(&tid, &steps, &input, &root, &tx)
-                .await;
+                .await
+            {
+                tracing::error!("Agent pipeline {} failed: {:?}", tid, e);
+            }
         });
 
         Ok(task_id)
