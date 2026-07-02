@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod audio;
 pub mod chat;
 pub mod chat_stream;
