@@ -70,9 +70,9 @@ interface UIState {
   /** 启动时调用：init -> 读取恢复 presets；失败进入 Memory_Fallback_Mode（presets=[]）。 */
   loadPresets: () => Promise<void>;
   /** 新建预设：validatePreset 通过才创建，分配集内唯一 id，记录 trim 后字段并持久化。 */
-  createPreset: (rawTitle: string, rawContent: string) => Promise<void>;
+  createPreset: (rawTitle: string, rawContent: string, tags?: string[]) => Promise<void>;
   /** 编辑预设：validatePreset 通过才更新 title/content（id 不变）并持久化。 */
-  updatePreset: (id: string, rawTitle: string, rawContent: string) => Promise<void>;
+  updatePreset: (id: string, rawTitle: string, rawContent: string, tags?: string[]) => Promise<void>;
   /** 删除预设：从 presets 移除并经 Preset_DB 删除其记录（确认在 UI 层完成）。 */
   deletePreset: (id: string) => Promise<void>;
   /**
@@ -100,6 +100,10 @@ interface UIState {
   appendMessage: (msg: ChatMessage) => Promise<void>;
   /** 删除单条消息（Req 5.1, 6.3）。从 messages 移除并经 Chat_DB 删除其记录。 */
   deleteMessage: (messageId: string) => Promise<void>;
+  /** 更新消息的 audioUrl/duration（TTS 合成成功后持久化音频引用）。 */
+  updateMessageAudio: (id: string, audioUrl: string, duration?: string) => void;
+  /** 更新消息的反馈（thumbs up/down）。 */
+  updateMessageFeedback: (id: string, feedback: 'up' | 'down') => void;
   /**
    * 重新生成最后一条 assistant 回复（Req 2.1, 6.3）。
    * 移除 Last_Assistant_Message 并删除其持久化记录，返回移除后的对话历史
@@ -345,7 +349,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ presets: stored, presetsLoading: false });
   },
 
-  createPreset: async (rawTitle, rawContent) => {
+  createPreset: async (rawTitle, rawContent, tags?: string[]) => {
     const validation = validatePreset(rawTitle, rawContent);
     if (!validation.ok) return; // 任一字段 trim 后为空则整体 no-op（Property 3）
 
@@ -353,6 +357,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       id: generatePresetId(get().presets),
       title: validation.title,
       content: validation.content,
+      tags: tags && tags.length > 0 ? tags : undefined,
     };
     // 先更新内存（追加到末尾，稳定顺序），后持久化。
     set((s) => ({ presets: [...s.presets, newPreset] }));
@@ -365,7 +370,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     }
   },
 
-  updatePreset: async (id, rawTitle, rawContent) => {
+  updatePreset: async (id, rawTitle, rawContent, tags?: string[]) => {
     const validation = validatePreset(rawTitle, rawContent);
     if (!validation.ok) return; // 任一字段 trim 后为空则整体 no-op（Property 3）
 
@@ -373,7 +378,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     set((s) => ({
       presets: s.presets.map((p) => {
         if (p.id === id) {
-          updated = { ...p, title: validation.title, content: validation.content };
+          updated = { ...p, title: validation.title, content: validation.content, tags: tags && tags.length > 0 ? tags : undefined };
           return updated;
         }
         return p;
@@ -585,6 +590,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   appendMessage: async (msg) => {
     const { messages, sessions, currentSessionId, isPersistent } = get();
     const seq = messages.length;
+    const msgWithSeq = { ...msg, _seq: seq };
     const hadUserMessage = messages.some((m) => m.role === 'user');
     const now = new Date().toISOString();
 
@@ -600,7 +606,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     }
 
     set((s) => ({
-      messages: [...s.messages, msg],
+      messages: [...s.messages, msgWithSeq],
       sessions: updatedSession
         ? s.sessions.map((sess) => (sess.id === updatedSession!.id ? updatedSession! : sess))
         : s.sessions,
@@ -633,6 +639,42 @@ export const useUIStore = create<UIState>((set, get) => ({
       }
     }
     // 注意：Delete_Action 不改 title、不改 updatedAt（Req 6.7）。
+  },
+
+  updateMessageAudio: (id, audioUrl, duration) => {
+    const { messages, currentSessionId, isPersistent } = get();
+    const idx = messages.findIndex((m) => m.id === id);
+    if (idx < 0) return;
+    const updated = { ...messages[idx], audioUrl, duration };
+    const newMessages = [...messages];
+    newMessages[idx] = updated;
+    set({ messages: newMessages });
+
+    const seq = messages[idx]._seq ?? idx;
+    if (isPersistent && currentSessionId) {
+      const persisted: PersistedMessage = { ...updated, sessionId: currentSessionId, seq };
+      chatDb.saveMessage(persisted).catch((err: unknown) => {
+        console.warn('Failed to persist message audio update', err);
+      });
+    }
+  },
+
+  updateMessageFeedback: (id, feedback) => {
+    const { messages, currentSessionId, isPersistent } = get();
+    const idx = messages.findIndex((m) => m.id === id);
+    if (idx < 0) return;
+    const updated = { ...messages[idx], feedback };
+    const newMessages = [...messages];
+    newMessages[idx] = updated;
+    set({ messages: newMessages });
+
+    const seq = messages[idx]._seq ?? idx;
+    if (isPersistent && currentSessionId) {
+      const persisted: PersistedMessage = { ...updated, sessionId: currentSessionId, seq };
+      chatDb.saveMessage(persisted).catch((err: unknown) => {
+        console.warn('Failed to persist message feedback update', err);
+      });
+    }
   },
 
   regenerateLast: async () => {

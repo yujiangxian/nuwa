@@ -2,64 +2,57 @@
 
 use std::path::{Path, PathBuf};
 
-/// 项目根目录
-fn project_root() -> PathBuf {
-    // 基于 exe 路径推断项目根目录
-    // exe: backend/server/target/debug/voxcpm-server.exe
-    // → target/debug → target → server → backend → project root
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| {
-            exe.parent()      // target/debug
-                .and_then(|p| p.parent())  // target
-                .and_then(|p| p.parent())  // server
-                .and_then(|p| p.parent())  // backend
-                .and_then(|p| p.parent())  // project root
-                .map(|p| p.to_path_buf())
-        })
-        .unwrap_or_else(|| {
-            std::env::current_dir()
-                .ok()
-                .and_then(|cd| cd.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()))
-                .unwrap_or_else(|| PathBuf::from("."))
-        })
+use crate::util;
+
+/// Maximum wall-clock time for a single inference subprocess (seconds).
+/// Beyond this the subprocess is killed and an error returned to the caller.
+const INFERENCE_TIMEOUT_SECS: u64 = 600; // 10 minutes
+
+/// Read WAV header and return duration in seconds.
+/// WAV format: bytes 24-27 = sample rate, bytes 28-31 = byte rate,
+/// data chunk size follows "data" tag.
+pub fn wav_duration_secs(path: &Path) -> Option<f64> {
+    let data = std::fs::read(path).ok()?;
+    if data.len() < 44 || &data[0..4] != b"RIFF" || &data[8..12] != b"WAVE" {
+        return None;
+    }
+    let byte_rate = u32::from_le_bytes([data[28], data[29], data[30], data[31]]) as f64;
+    if byte_rate <= 0.0 {
+        return None;
+    }
+    // Find "data" chunk
+    let mut pos = 12;
+    while pos + 8 <= data.len() {
+        let tag = &data[pos..pos + 4];
+        let size = u32::from_le_bytes([data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]]) as usize;
+        if tag == b"data" {
+            return Some(size as f64 / byte_rate);
+        }
+        pos += 8 + size;
+    }
+    None
 }
 
-/// 获取 Python 可执行文件路径
-/// 优先使用虚拟环境，fallback 到系统 python
-fn python_exe() -> PathBuf {
-    let candidates = [
-        project_root().join("envs/ai/Scripts/python.exe"),
-        project_root().join("ai_env/Scripts/python.exe"),
-        PathBuf::from("python"),
-        PathBuf::from("python3"),
-    ];
-    for c in &candidates {
-        if c.exists() || c.to_string_lossy() == "python" || c.to_string_lossy() == "python3" {
-            return c.clone();
-        }
-    }
-    PathBuf::from("python")
-}
+/// 清理所有 `util::project_root()` / `util::python_exe()` / `util::resolve_path()` 调用，统一走 `util` 模块。
 
 /// 解析模型 ID 到实际路径和脚本
 pub fn resolve_asr_model(model_id: &str) -> Result<(&'static str, PathBuf), String> {
     match model_id {
         "asr/paraformer-large" => Ok((
             "scripts/inference_asr_paraformer.py",
-            project_root().join("models/asr/paraformer-large/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"),
+            util::project_root().join("models/asr/paraformer-large/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"),
         )),
         "asr/whisper-tiny" => Ok((
             "scripts/inference_asr_whisper.py",
-            project_root().join("models/asr/whisper-tiny"),
+            util::project_root().join("models/asr/whisper-tiny"),
         )),
         "asr/glm-asr-nano" => Ok((
             "scripts/inference_asr_glm.py",
-            project_root().join("models/asr/glm-asr-nano"),
+            util::project_root().join("models/asr/glm-asr-nano"),
         )),
         "asr/qwen3-asr-0.6b" => Ok((
             "scripts/inference_asr_qwen3.py",
-            project_root().join("models/asr/qwen3-asr-0.6b/Qwen/Qwen3-ASR-0___6B"),
+            util::project_root().join("models/asr/qwen3-asr-0.6b/Qwen/Qwen3-ASR-0___6B"),
         )),
         _ => Err(format!("不支持的 ASR 模型: {}", model_id)),
     }
@@ -71,47 +64,39 @@ pub fn resolve_tts_model(model_id: &str) -> Result<(&'static str, PathBuf), Stri
         // （脚本按目录下 cosyvoice2.yaml 自动选用 CosyVoice2 类、采样率 24000、GPU fp16）。
         "tts/cosyvoice2" => Ok((
             "scripts/inference_tts_cosyvoice.py",
-            project_root().join("models/tts/cosyvoice2/iic/CosyVoice2-0.5B"),
+            util::project_root().join("models/tts/cosyvoice2/iic/CosyVoice2-0.5B"),
         )),
         "tts/cosyvoice3" => Ok((
             "scripts/inference_tts_cosyvoice.py",
-            project_root().join("models/tts/cosyvoice3/iic/CosyVoice-300M"),
+            util::project_root().join("models/tts/cosyvoice3/iic/CosyVoice-300M"),
         )),
         "tts/glm-tts-full" => Ok((
             "scripts/inference_tts_glm.py",
-            project_root().join("models/tts/glm-tts-full"),
+            util::project_root().join("models/tts/glm-tts-full"),
         )),
         // 向后兼容旧 ID
         "tts/glm-tts" => Ok((
             "scripts/inference_tts_glm.py",
-            project_root().join("models/tts/glm-tts-full"),
+            util::project_root().join("models/tts/glm-tts-full"),
         )),
         "tts/qwen3-tts-base" => Ok((
             "scripts/inference_tts_qwen3.py",
-            project_root().join("models/tts/qwen3-tts-base"),
+            util::project_root().join("models/tts/qwen3-tts-base"),
         )),
         "tts/openvoice" => Ok((
             "scripts/inference_tts_openvoice.py",
-            project_root().join("models/tts/openvoice"),
+            util::project_root().join("models/tts/openvoice"),
         )),
         _ => Err(format!("不支持的 TTS 模型: {}", model_id)),
     }
 }
 
-/// 将路径解析为绝对路径（基于项目根目录）
-fn resolve_path(path: &Path) -> PathBuf {
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        project_root().join(path)
-    }
-}
-
 /// ASR 语音识别
 pub async fn transcribe(audio_path: &Path, model_id: &str) -> Result<String, String> {
-    let audio_path = resolve_path(audio_path);
+    let started = std::time::Instant::now();
+    let audio_path = util::resolve_path(audio_path);
     let (script, model_path) = resolve_asr_model(model_id)?;
-    let script_path = project_root().join(script);
+    let script_path = util::project_root().join(script);
     let output_json = std::env::temp_dir().join(format!("nuwa_asr_{}.json", uuid::Uuid::new_v4()));
 
     tracing::info!(
@@ -121,21 +106,26 @@ pub async fn transcribe(audio_path: &Path, model_id: &str) -> Result<String, Str
         script_path.display()
     );
 
-    let output = tokio::process::Command::new(python_exe())
-        .arg(&script_path)
-        .arg("--model-path")
-        .arg(&model_path)
-        .arg("--audio")
-        .arg(audio_path)
-        .arg("--output-json")
-        .arg(&output_json)
-        .current_dir(project_root())
-        .output()
-        .await
-        .map_err(|e| format!("启动 ASR 子进程失败: {}", e))?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(INFERENCE_TIMEOUT_SECS),
+        tokio::process::Command::new(util::python_exe())
+            .arg(&script_path)
+            .arg("--model-path")
+            .arg(&model_path)
+            .arg("--audio")
+            .arg(audio_path)
+            .arg("--output-json")
+            .arg(&output_json)
+            .current_dir(util::project_root())
+            .output(),
+    )
+    .await
+    .map_err(|_| format!("ASR 推理超时 (>{INFERENCE_TIMEOUT_SECS}s)"))?
+    .map_err(|e| format!("启动 ASR 子进程失败: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::error!(stderr = %stderr, "ASR subprocess failed");
         return Err(format!("ASR 推理失败: {}", stderr.truncate(500)));
     }
 
@@ -168,10 +158,11 @@ pub async fn synthesize(
     ref_text: &str,
     output_path: &Path,
 ) -> Result<(), String> {
-    let ref_audio = resolve_path(ref_audio);
-    let output_path = resolve_path(output_path);
+    let started = std::time::Instant::now();
+    let ref_audio = util::resolve_path(ref_audio);
+    let output_path = util::resolve_path(output_path);
     let (script, model_path) = resolve_tts_model(model_id)?;
-    let script_path = project_root().join(script);
+    let script_path = util::project_root().join(script);
     let output_json = std::env::temp_dir().join(format!("nuwa_tts_{}.json", uuid::Uuid::new_v4()));
 
     // 确保输出目录存在
@@ -187,24 +178,28 @@ pub async fn synthesize(
         output_path.display()
     );
 
-    let output = tokio::process::Command::new(python_exe())
-        .arg(&script_path)
-        .arg("--model-path")
-        .arg(&model_path)
-        .arg("--text")
-        .arg(text)
-        .arg("--ref-audio")
-        .arg(ref_audio)
-        .arg("--ref-text")
-        .arg(ref_text)
-        .arg("--output")
-        .arg(&output_path)
-        .arg("--output-json")
-        .arg(&output_json)
-        .current_dir(project_root())
-        .output()
-        .await
-        .map_err(|e| format!("启动 TTS 子进程失败: {}", e))?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(INFERENCE_TIMEOUT_SECS),
+        tokio::process::Command::new(util::python_exe())
+            .arg(&script_path)
+            .arg("--model-path")
+            .arg(&model_path)
+            .arg("--text")
+            .arg(text)
+            .arg("--ref-audio")
+            .arg(ref_audio)
+            .arg("--ref-text")
+            .arg(ref_text)
+            .arg("--output")
+            .arg(&output_path)
+            .arg("--output-json")
+            .arg(&output_json)
+            .current_dir(util::project_root())
+            .output(),
+    )
+    .await
+    .map_err(|_| format!("TTS 推理超时 (>{INFERENCE_TIMEOUT_SECS}s)"))?
+    .map_err(|e| format!("启动 TTS 子进程失败: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -212,8 +207,12 @@ pub async fn synthesize(
     tracing::info!("TTS Python stderr: {}", stderr);
 
     if !output.status.success() {
+        tracing::error!(stderr = %stderr, "TTS subprocess failed");
         return Err(format!("TTS 推理失败: {}", stderr.truncate(500)));
     }
+
+    let elapsed = started.elapsed();
+    tracing::info!(duration_ms = elapsed.as_millis(), model = %model_id, "TTS complete");
 
     let result_text = tokio::fs::read_to_string(&output_json)
         .await
@@ -249,10 +248,11 @@ pub async fn synthesize_script(
     ref_text: &str,
     output_path: &Path,
 ) -> Result<(), String> {
-    let ref_audio = resolve_path(ref_audio);
-    let output_path = resolve_path(output_path);
+    let started = std::time::Instant::now();
+    let ref_audio = util::resolve_path(ref_audio);
+    let output_path = util::resolve_path(output_path);
     let (_script, model_path) = resolve_tts_model(model_id)?;
-    let script_path = project_root().join("scripts/inference_tts_glm_script.py");
+    let script_path = util::project_root().join("scripts/inference_tts_glm_script.py");
     let output_json = std::env::temp_dir().join(format!("nuwa_tts_script_{}.json", uuid::Uuid::new_v4()));
 
     if let Some(parent) = output_path.parent() {
@@ -266,24 +266,28 @@ pub async fn synthesize_script(
         output_path.display()
     );
 
-    let output = tokio::process::Command::new(python_exe())
-        .arg(&script_path)
-        .arg("--model-path")
-        .arg(&model_path)
-        .arg("--segments")
-        .arg(segments_json)
-        .arg("--ref-audio")
-        .arg(&ref_audio)
-        .arg("--ref-text")
-        .arg(ref_text)
-        .arg("--output")
-        .arg(&output_path)
-        .arg("--output-json")
-        .arg(&output_json)
-        .current_dir(project_root())
-        .output()
-        .await
-        .map_err(|e| format!("启动 TTS 多段合成子进程失败: {}", e))?;
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(INFERENCE_TIMEOUT_SECS),
+        tokio::process::Command::new(util::python_exe())
+            .arg(&script_path)
+            .arg("--model-path")
+            .arg(&model_path)
+            .arg("--segments")
+            .arg(segments_json)
+            .arg("--ref-audio")
+            .arg(&ref_audio)
+            .arg("--ref-text")
+            .arg(ref_text)
+            .arg("--output")
+            .arg(&output_path)
+            .arg("--output-json")
+            .arg(&output_json)
+            .current_dir(util::project_root())
+            .output(),
+    )
+    .await
+    .map_err(|_| format!("TTS 多段合成超时 (>{INFERENCE_TIMEOUT_SECS}s)"))?
+    .map_err(|e| format!("启动 TTS 多段合成子进程失败: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -291,8 +295,12 @@ pub async fn synthesize_script(
     tracing::info!("TTS script stderr: {}", stderr);
 
     if !output.status.success() {
+        tracing::error!(stderr = %stderr, "TTS script subprocess failed");
         return Err(format!("TTS 多段合成失败: {}", stderr.truncate(500)));
     }
+
+    let elapsed = started.elapsed();
+    tracing::info!(duration_ms = elapsed.as_millis(), model = %model_id, "TTS script complete");
 
     let result_text = tokio::fs::read_to_string(&output_json)
         .await
@@ -331,8 +339,9 @@ trait StringTruncate {
 
 impl StringTruncate for str {
     fn truncate(&self, max_len: usize) -> String {
-        if self.len() > max_len {
-            format!("{}...", &self[..max_len])
+        let char_count = self.chars().count();
+        if char_count > max_len {
+            format!("{}...", self.chars().take(max_len).collect::<String>())
         } else {
             self.to_string()
         }

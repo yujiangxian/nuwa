@@ -3,51 +3,37 @@ import { useUIStore, type ChatMessage } from '@/store/uiStore';
 import { useToastStore } from '@/store/toastStore';
 import { apiClient } from '@/api/client';
 import { errorMessage, type ErrorDetail } from '@/lib/errorDetail';
-import { useTranscribe, useSynthesize, useConfig, useVoices } from '@/hooks/useApi';
+import { useTranscribe, useSynthesize, useConfig, useVoices, useModels } from '@/hooks/useApi';
 import { useRecorder } from '@/hooks/useRecorder';
-import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import { useAudioQueue } from '@/hooks/useAudioQueue';
 import { resolveVoiceRef } from '@/lib/voice';
 import { formatRelativeTime } from '@/lib/chatSession';
 import { organizeSessions, isPinned } from '@/lib/sessionOrganize';
-import { consumeChatStream, accumulateDelta, shouldPersistFinal, type StreamChunk } from '@/lib/streamChat';
+import { accumulateDelta, shouldPersistFinal, type StreamChunk } from '@/lib/streamChat';
 import { buildRequestFragment } from '@/lib/generationParams';
 import { resolveContextLength } from '@/lib/contextWindow';
-import { computeBudget, resolveReservedTokens } from '@/lib/contextBudget';
+import { resolveReservedTokens } from '@/lib/contextBudget';
 import { trimMessages } from '@/lib/contextTrim';
 import { estimateText } from '@/lib/tokenEstimate';
 import { actionAvailabilityFor } from '@/lib/messageActions';
 import { normalizeQuery, DEBOUNCE_INTERVAL, type SearchResult, type HighlightRange } from '@/lib/chatSearch';
-import { buildExportBundle, toMarkdown } from '@/lib/conversationExport';
-import { INPUT_MAX_LENGTH } from '@/lib/promptPreset';
+import { INPUT_MAX_LENGTH, processTemplateVariables } from '@/lib/promptPreset';
 import {
-  isSlashActive,
-  parseSlashQuery,
-  buildCommandCatalog,
-  filterCommands,
-  clampHighlightIndex,
-  buildInsertedPresetText,
-  type CommandItem,
+  isSlashActive, parseSlashQuery, buildCommandCatalog, filterCommands,
+  clampHighlightIndex, buildInsertedPresetText, type CommandItem,
 } from '@/lib/slashCommand';
 import SlashCommandMenu from '@/components/SlashCommandMenu';
 import MarkdownMessage from '@/components/MarkdownMessage';
-import ParamPanel from '@/components/ParamPanel';
-import UsageIndicator from '@/components/UsageIndicator';
-import { ArrowLeft, Settings, Plus, Play, Paperclip, Mic, Send, MessageSquare, User, Square, Monitor, Loader2, Trash2, Check, X, Copy, RotateCcw, Pencil, Search, Download, Upload, FileText, Pin, PinOff } from 'lucide-react';
+import { computeBudget } from '@/lib/contextBudget';
+import { extractNewSentences } from '@/lib/sentenceSplit';
+import { ArrowLeft, Settings, Plus, Play, Mic, Send, MessageSquare, User, Square, Monitor, Loader2, Trash2, Check, X, Copy, RotateCcw, Pencil, Search, Pin, PinOff, Code, ThumbsUp, ThumbsDown, ChevronDown, Brain } from 'lucide-react';
 
-/**
- * 将文本内容触发为浏览器文件下载（File_Download）。
- * Blob + 锚点 + 即时 revokeObjectURL，不依赖任何后端。
- */
-function downloadText(filename: string, text: string, mime: string): void {
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+const DRAFT_KEY = 'nuwa_chat_draft';
+
+function formatDuration(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 /**
@@ -87,12 +73,10 @@ export default function ChatPage() {
   const currentSessionId = useUIStore((s) => s.currentSessionId);
   const messages = useUIStore((s) => s.messages);
   const sessionsLoading = useUIStore((s) => s.sessionsLoading);
-  const isPersistent = useUIStore((s) => s.isPersistent);
   const inputText = useUIStore((s) => s.inputText);
   const setInputText = useUIStore((s) => s.setInputText);
-  // Prompt_Preset：插入入口所需的预设列表与一键插入 action（presets 只读）。
+  // Prompt_Preset：预设列表（只读，供斜杠命令目录构建）。
   const presets = useUIStore((s) => s.presets);
-  const insertPresetIntoInput = useUIStore((s) => s.insertPresetIntoInput);
   const createSession = useUIStore((s) => s.createSession);
   const switchSession = useUIStore((s) => s.switchSession);
   const deleteSession = useUIStore((s) => s.deleteSession);
@@ -102,15 +86,12 @@ export default function ChatPage() {
   const deleteMessage = useUIStore((s) => s.deleteMessage);
   const regenerateLast = useUIStore((s) => s.regenerateLast);
   const editAndResend = useUIStore((s) => s.editAndResend);
-  const importSessions = useUIStore((s) => s.importSessions);
-  const collectExportSessions = useUIStore((s) => s.collectExportSessions);
   const autoPlay = useUIStore((s) => s.settings.autoPlay);
   const addToast = useToastStore((s) => s.addToast);
 
-  // Context_Window：生成参数（解析 Reserved_Response_Tokens）与本次外发裁剪展示态。
-  const chatGenParams = useUIStore((s) => s.chatGenParams);
-  const lastTrimmedCount = useUIStore((s) => s.lastTrimmedCount);
+  // Context_Window：本次外发裁剪计数。
   const setLastTrimmedCount = useUIStore((s) => s.setLastTrimmedCount);
+  const lastTrimmedCount = useUIStore((s) => s.lastTrimmedCount);
 
   // Chat_Search 订阅：查询文本、结果、检索中标志与三个 action。
   const searchQuery = useUIStore((s) => s.searchQuery);
@@ -127,21 +108,47 @@ export default function ChatPage() {
   const synthesize = useSynthesize();
   const { data: config } = useConfig();
   const { data: voices = [] } = useVoices();
+  const { data: models = [] } = useModels();
   const recorder = useRecorder();
-  const player = useAudioPlayer();
+  const player = useAudioQueue();
 
   // 当前 ASR/TTS 模型：优先 current_models[type]，回退兼容字段
   const currentAsrModel = config?.current_models?.asr ?? config?.current_asr_model ?? undefined;
   const currentTtsModel = config?.current_models?.tts ?? config?.current_tts_model ?? undefined;
+  const currentLlmModel = config?.current_models?.llm ?? config?.current_llm_model ?? 'gemma4:e4b';
 
   const [isTyping, setIsTyping] = useState(false);
+  // Character dropdown state
+  const [charMenuOpen, setCharMenuOpen] = useState(false);
+  // Regenerate temperature dropdown state
+  const [regenMenuOpen, setRegenMenuOpen] = useState(false);
   // 流式生成本地态（不入 uiStore）：占位/打字机内容与累积引用、中断控制器。
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [streamingThinking, setStreamingThinking] = useState('');
+  const [thinkOpen, setThinkOpen] = useState(true);
   const accRef = useRef('');
+  const thinkRef = useRef('');
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [ttsLoadingId, setTtsLoadingId] = useState<string | null>(null);
+  // Track which message currently has sentence-level TTS still running (not yet all done)
+  const [ttsPendingMsgId, setTtsPendingMsgId] = useState<string | null>(null);
   const [asrLoading, setAsrLoading] = useState(false);
+  // Streaming TTS: track sentence boundary and message ID
+  const sentBoundaryRef = useRef(0);
+  const streamingMsgIdRef = useRef<string | null>(null);
+  const streamLlmDoneRef = useRef(false);
+  const sendingRef = useRef(false);
+  const abortedTtsRef = useRef(false);
+  const sseCompletedRef = useRef(false);
+  const streamTotalDurRef = useRef(0);
+  const ttsStartedAtRef = useRef(0);
+  const MAX_STREAM_SENTENCES = 20;
+  // Collect all TTS audio file paths during streaming for persistence
+  const streamAudioPathsRef = useRef<string[]>([]);
+  // Pipeline status display
+  const [ttsSynthCount, setTtsSynthCount] = useState(0);
+  const [ttsSynthDone, setTtsSynthDone] = useState(0);
 
   // 会话生命周期 UI 的本地交互态：删除二次确认与内联重命名编辑。
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -152,13 +159,20 @@ export default function ChatPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
 
-  // Preset_Insert_Entry 弹层开关：在 Input_Field 旁列出 presets 供选择插入。
-  const [presetMenuOpen, setPresetMenuOpen] = useState(false);
-
   // Slash_Command 本地态：当前高亮项候选下标（渲染时经 clampHighlightIndex 规整），
   // 以及 Escape/选中后临时关闭菜单的标志（输入变化即重置以便重新弹出）。
   const [slashHighlight, setSlashHighlight] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState(false);
+
+  // System prompt visibility and temporary edit state
+  const [tempSystemPrompt, setTempSystemPrompt] = useState<string | null>(null);
+  const [sysPromptOpen, setSysPromptOpen] = useState(false);
+
+  // Audio playback speed
+  const [playbackRate, setPlaybackRate] = useState(1);
+
+  // Command palette access
+  const openPalette = useUIStore((s) => s.openPalette);
 
   const currentCharacter = characters.find((c) => c.id === currentCharacterId);
   // 当前音色名经 voices 解析 currentCharacter.voiceId（去写死映射）；未命中回退占位。
@@ -166,20 +180,11 @@ export default function ChatPage() {
 
   // Context_Window：当前 LLM 模型上下文长度候选值。InstalledModel 元数据暂无该字段，
   // 故为 undefined → Context_Resolver 回退默认值并标记为估算（forward-compatible）。
-  const activeModelContextLength: number | undefined = undefined;
-
-  // Context_Budget：由 messages / systemPrompt / 生成参数 / 模型上下文长度纯派生（不入 store）。
-  const budget = useMemo(() => {
-    const { contextLength, isEstimated } = resolveContextLength(activeModelContextLength);
-    const reservedTokens = resolveReservedTokens(chatGenParams);
-    return computeBudget({
-      contextLength,
-      isEstimated,
-      systemPrompt: currentCharacter?.systemPrompt ?? '',
-      messages,
-      reservedTokens,
-    });
-  }, [messages, currentCharacter, chatGenParams, activeModelContextLength]);
+  const activeModelContextLength: number | undefined = useMemo(() => {
+    if (!currentLlmModel) return undefined;
+    const model = models.find((m: any) => m.id === `llm/${currentLlmModel}` || m.id === currentLlmModel);
+    return model?.context_length ?? undefined;
+  }, [currentLlmModel, models]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // Input_Field（底部输入框 textarea）的 ref：插入预设成功后用于 .focus()。
@@ -225,6 +230,23 @@ export default function ChatPage() {
     }
   }, [recorder.error, addToast]);
 
+  // Draft persistence: restore draft for current session on mount or session switch
+  useEffect(() => {
+    if (currentSessionId) {
+      const draft = localStorage.getItem(`${DRAFT_KEY}:${currentSessionId}`);
+      setInputText(draft ?? '');
+    }
+    // Only run on mount (currentSessionId being set for the first time)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSessionId]);
+
+  // Auto-save draft to localStorage whenever inputText changes
+  useEffect(() => {
+    if (currentSessionId) {
+      localStorage.setItem(`${DRAFT_KEY}:${currentSessionId}`, inputText);
+    }
+  }, [inputText, currentSessionId]);
+
   // 合成并播放某条 assistant 消息的 TTS（自动朗读与手动朗读共用）
   const speakMessage = useCallback(async (msg: ChatMessage) => {
     setTtsLoadingId(msg.id);
@@ -237,7 +259,8 @@ export default function ChatPage() {
         refText: ref.ref_text,
       });
       if (res.success && res.output_path) {
-        await player.play(msg.id, `/api/audio/${res.output_path}`);
+        useUIStore.getState().updateMessageAudio(msg.id, res.output_path);
+        player.playNow(msg.id, `/api/audio/${res.output_path}`);
       } else {
         addToast({ message: res.error || 'TTS 合成失败', type: 'error' });
       }
@@ -261,10 +284,21 @@ export default function ChatPage() {
       setIsTyping(true);
       setIsStreaming(true);
       setStreamingContent('');
+      setStreamingThinking('');
+      setThinkOpen(true);
+      thinkRef.current = '';
+      setTtsSynthCount(0);
+      setTtsSynthDone(0);
+      streamAudioPathsRef.current = [];
+      streamTotalDurRef.current = 0;
+      ttsStartedAtRef.current = Date.now();
+      streamLlmDoneRef.current = false;
+      abortedTtsRef.current = false;
+      sseCompletedRef.current = false;
       accRef.current = '';
       const ctrl = new AbortController();
       setAbortController(ctrl);
-      const system = currentCharacter?.systemPrompt;
+      const system = tempSystemPrompt ?? currentCharacter?.systemPrompt;
 
       // chat-generation-parameters：合并当前 Active 生成参数（Default_State 为 {}，逐字段无回归）。
       const genFragment = buildRequestFragment(useUIStore.getState().chatGenParams);
@@ -289,12 +323,53 @@ export default function ChatPage() {
       const sendMessages = trimmed.map((m) => ({ role: m.role, content: m.content }));
 
       let streamErrorMsg: string | null = null;
+      let ttsSentenceCount = 0;
 
-      // 单块处理：delta 累积并刷新渲染（打字机）；error 记录；done 无需额外操作。
+      // Pre-assign a streaming message ID for TTS segments
+      const streamMsgId = (Date.now() + 1).toString();
+      streamingMsgIdRef.current = streamMsgId;
+      sentBoundaryRef.current = 0;
+
+      // Streaming TTS: detect complete sentences in each delta and enqueue TTS
       const onChunk = (chunk: StreamChunk) => {
         if (typeof chunk.delta === 'string') {
           accRef.current = accumulateDelta(accRef.current, chunk);
           setStreamingContent(accRef.current);
+
+          if (autoPlay && ttsSentenceCount < MAX_STREAM_SENTENCES) {
+            const { sentences, boundary } = extractNewSentences(accRef.current, sentBoundaryRef.current);
+            if (sentences.length > 0 && boundary > sentBoundaryRef.current) {
+              sentBoundaryRef.current = boundary;
+              const ref = resolveVoiceRef(currentCharacter?.voiceId, voices);
+              sentences.forEach((sentence) => {
+                if (ttsSentenceCount >= MAX_STREAM_SENTENCES) return;
+                if (ttsSentenceCount === 0) setTtsPendingMsgId(streamMsgId);
+                ttsSentenceCount++;
+                const sentenceNum = ttsSentenceCount; // capture before async — ttsSentenceCount changes synchronously
+                setTtsSynthCount((c) => c + 1);
+                synthesize.mutateAsync({
+                  text: sentence,
+                  modelId: currentTtsModel,
+                  refAudio: ref.ref_audio,
+                  refText: ref.ref_text,
+                }).then((res) => {
+                  if (res.success && res.output_path) {
+                    setTtsSynthDone((d) => d + 1);
+                    streamAudioPathsRef.current.push(res.output_path);
+                    if (res.duration_sec) streamTotalDurRef.current += res.duration_sec;
+                    if (streamAudioPathsRef.current.length >= ttsSentenceCount) setTtsPendingMsgId(null);
+                    const dur = streamTotalDurRef.current > 0 ? formatDuration(streamTotalDurRef.current) : undefined;
+                    useUIStore.getState().updateMessageAudio(streamMsgId, streamAudioPathsRef.current.join(','), dur);
+                    if (!abortedTtsRef.current) {
+                      player.enqueue(`${streamMsgId}-s${sentenceNum}`, `/api/audio/${res.output_path}`);
+                    }
+                  }
+                }).catch(() => {
+                  setTtsSynthDone((d) => d + 1);
+                });
+              });
+            }
+          }
         } else if (typeof chunk.error === 'string') {
           streamErrorMsg = chunk.error;
         }
@@ -302,33 +377,73 @@ export default function ChatPage() {
 
       try {
         let connectFailed = false;
-        let body: ReadableStream<Uint8Array> | null = null;
+        let agentFailed = false;
+
+        // Primary: Agent streaming pipeline
         try {
-          const res = await fetch('/api/chat/stream', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: sendMessages, system, ...genFragment }),
-            signal: ctrl.signal,
-          });
-          if (!res.ok || !res.body) {
-            connectFailed = true;
+          const agentInput: Record<string, unknown> = {
+            messages: sendMessages,
+          };
+          if (system) agentInput['system'] = system;
+          if (Object.keys(genFragment).length > 0) Object.assign(agentInput, genFragment);
+
+          const { data } = await apiClient.post<{ success: boolean; task_id: string; error?: string }>(
+            '/api/agents/run-stream',
+            { pipeline: 'text_chat_stream', input: agentInput },
+            { signal: ctrl.signal, timeout: 300000 },
+          );
+
+          if (data?.success && data?.task_id) {
+            const taskId = data.task_id;
+            let sseDone = false;
+            sseCompletedRef.current = false;
+
+            await new Promise<void>((resolve) => {
+              const cleanup = () => {
+                eventSource.close();
+                if (!sseDone) { sseDone = true; resolve(); }
+              };
+              ctrl.signal.addEventListener('abort', cleanup, { once: true });
+
+              const eventSource = new EventSource(`/api/agents/tasks/${taskId}/events`);
+              eventSource.onmessage = (e) => {
+                try {
+                  const ev = JSON.parse(e.data);
+                  if (ev.thinking) {
+                    thinkRef.current += ev.thinking;
+                    setStreamingThinking(thinkRef.current);
+                  }
+                  if (ev.delta) {
+                    onChunk({ delta: ev.delta });
+                  } else if (ev.status === 'failed') {
+                    streamErrorMsg = ev.message || 'Agent pipeline failed';
+                    cleanup();
+                  } else if (ev.status === 'completed') {
+                    sseCompletedRef.current = true;
+                    cleanup();
+                  }
+                } catch { /* malformed event, skip */ }
+              };
+              eventSource.onerror = () => {
+                // SSE closed unexpectedly
+                if (!accRef.current) agentFailed = true;
+                cleanup();
+              };
+            });
+
+            if (!accRef.current && agentFailed) {
+              connectFailed = true;
+            }
           } else {
-            body = res.body;
+            agentFailed = true;
+            connectFailed = true;
           }
         } catch (err: unknown) {
-          // 建连阶段被 Stop_Action 中断视为正常停止，不降级；其余视为连接失败。
           connectFailed = !(ctrl.signal.aborted || (err as ErrorDetail)?.name === 'AbortError');
         }
 
-        if (body) {
-          // 正常流式消费；AbortError 由 consumeChatStream 吞掉，视为停止。
-          await consumeChatStream(body, onChunk);
-          if (streamErrorMsg) {
-            // error chunk：透传后端友好文案（含 Ollama 未启动/模型未加载提示）。
-            addToast({ message: streamErrorMsg, type: 'error', duration: 5000 });
-          }
-        } else if (connectFailed && accRef.current === '') {
-          // Fallback_Strategy：尚无任何增量且无法建立流式连接 → 改调既有 /api/chat。
+        // Fallback: if agent/stream failed and no content, try direct /api/chat
+        if (connectFailed && accRef.current === '') {
           try {
             const { data } = await apiClient.post<{ content: string }>(
               '/api/chat',
@@ -339,51 +454,103 @@ export default function ChatPage() {
           } catch (err: unknown) {
             const ed = err as ErrorDetail;
             if (ed?.name === 'AbortError' || ed?.code === 'ERR_CANCELED') {
-              // 降级阶段被停止：无内容，静默退出。
+              // intentional stop, no content
             } else if (ed?.response?.data?.error) {
               addToast({ message: ed.response.data.error, type: 'error', duration: 5000 });
             } else {
-              addToast({ message: '对话请求失败，请检查网络', type: 'error' });
+              addToast({ message: streamErrorMsg || '对话请求失败，请检查网络', type: 'error' });
             }
           }
         }
       } finally {
         // 定型：累积非空才落库一次（Property 5）；为空则移除占位、不产生空消息。
         if (shouldPersistFinal(accRef.current)) {
+          const collectedPaths = streamAudioPathsRef.current;
           const finalMsg: ChatMessage = {
-            id: (Date.now() + 1).toString(),
+            id: streamMsgId,
             role: 'assistant',
             content: accRef.current,
             voiceName: currentVoice,
-            duration: '0:05',
+            duration: undefined,
+            audioUrl: collectedPaths.length > 0 ? collectedPaths[0] : undefined,
           };
           await appendMessage(finalMsg);
-          // autoPlay 开启时，对完整 Final_Message 文本触发一次 TTS（生成中不逐字朗读）。
-          if (autoPlay) {
-            void speakMessage(finalMsg);
+          // Streaming TTS persisting audio paths: each per-sentence .then() callback
+          // calls updateMessageAudio incrementally with accumulated duration.
+          // Only write here for the non-streaming (full-text) case.
+          if (collectedPaths.length > 0 && ttsSentenceCount === 0) {
+            useUIStore.getState().updateMessageAudio(finalMsg.id, collectedPaths.join(','));
+          }
+          // Fallback: short replies don't trigger sentence-level TTS (min 3 chars).
+          // Synthesize the full text once so audio is cached for instant replay.
+          // Set ttsLoadingId to prevent race: user clicking "play" before TTS completes.
+          if (ttsSentenceCount === 0 && accRef.current.trim().length > 0 && !ctrl.signal.aborted) {
+            setTtsLoadingId(finalMsg.id);
+            const ref = resolveVoiceRef(currentCharacter?.voiceId, voices);
+            synthesize.mutateAsync({
+              text: accRef.current,
+              modelId: currentTtsModel,
+              refAudio: ref.ref_audio,
+              refText: ref.ref_text,
+            }).then((res) => {
+              if (res.success && res.output_path) {
+                const dur = res.duration_sec ? formatDuration(res.duration_sec) : undefined;
+                useUIStore.getState().updateMessageAudio(finalMsg.id, res.output_path, dur);
+                if (autoPlay && !player.playing && !abortedTtsRef.current) {
+                  player.playNow(finalMsg.id, `/api/audio/${res.output_path}`);
+                }
+              }
+            }).catch(() => {}).finally(() => {
+              setTtsLoadingId(null);
+            });
           }
         }
         setIsTyping(false);
-        setIsStreaming(false);
-        setStreamingContent('');
+        sendingRef.current = false;
+        // Keep streaming bubble visible only while streaming TTS is still running.
+        // Fallback full-text TTS closes the bubble immediately — the persisted
+        // message shows "合成中..." via per-message ttsLoadingId / ttsPendingMsgId.
+        if (!ctrl.signal.aborted && ttsSynthCount > 0 && ttsSynthDone < ttsSynthCount) {
+          setStreamingContent(accRef.current);
+          streamLlmDoneRef.current = true;
+        } else {
+          setIsStreaming(false);
+          setStreamingContent('');
+        }
         accRef.current = '';
         setAbortController(null);
+        streamingMsgIdRef.current = null;
+        sentBoundaryRef.current = 0;
       }
     },
-    [currentCharacter, currentVoice, addToast, autoPlay, speakMessage, appendMessage, setLastTrimmedCount, activeModelContextLength],
+    [currentCharacter, currentVoice, addToast, autoPlay, synthesize, currentTtsModel, voices, appendMessage, setLastTrimmedCount, activeModelContextLength, tempSystemPrompt],
   );
 
+  useEffect(() => {
+    if (!isStreaming) return;
+    if (ttsSynthCount > 0 && ttsSynthDone >= ttsSynthCount) {
+      setIsStreaming(false);
+      setStreamingContent('');
+    }
+  }, [isStreaming, ttsSynthCount, ttsSynthDone]);
+
   const handleSend = useCallback(async () => {
-    if (!inputText.trim() || isTyping) return;
+    if (!inputText.trim() || isTyping || sendingRef.current) return;
+    sendingRef.current = true;
 
     // 1) 用户消息落库（appendMessage 负责 push、自动标题、更新 updatedAt 与持久化）。
     const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', content: inputText };
     await appendMessage(userMsg);
     setInputText('');
 
-    // Reset textarea height
+    // Save draft (cleared after send)
+    if (currentSessionId) {
+      localStorage.setItem(`${DRAFT_KEY}:${currentSessionId}`, '');
+    }
+
+    // Reset textarea height and re-focus
     const ta = document.querySelector('textarea');
-    if (ta) ta.style.height = 'auto';
+    if (ta) { ta.style.height = 'auto'; ta.focus(); }
 
     // 2) history 取发送前的 store messages 快照，再拼上本次用户消息（与既有 /api/chat 一致），
     //    交由可复用的 runAssistantStream 完成建连/流式/降级/定型/朗读。
@@ -392,26 +559,87 @@ export default function ChatPage() {
     await runAssistantStream(payloadMessages);
   }, [inputText, isTyping, messages, setInputText, appendMessage, runAssistantStream]);
 
-  // Stop_Action：中断 fetch/consume；已接收增量在 finalize 中保留并定型。
+  // Stop_Action：中断 fetch/consume + 清空音频队列；已接收增量在 finalize 中保留并定型。
   const handleStop = () => {
     abortController?.abort();
+    sendingRef.current = false;
+    abortedTtsRef.current = true;
+    player.clear();
   };
 
-  // Copy_Action：把消息文本写入系统剪贴板，成功/失败各给一次 toast（Req 4.1-4.3）。
+  // Keyboard shortcuts: Ctrl+K for palette, Ctrl+N for new session, Escape for stop/clear
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't intercept when typing in input/textarea (except Escape)
+      const tag = (e.target as HTMLElement)?.tagName;
+      const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (isInput && e.key !== 'Escape') return;
+
+      if (e.ctrlKey && e.key === 'k') {
+        e.preventDefault();
+        openPalette();
+        return;
+      }
+      if (e.ctrlKey && e.key === 'n') {
+        e.preventDefault();
+        createSession(currentCharacterId);
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (isTyping) {
+          e.preventDefault();
+          handleStop();
+        } else if (isInput) {
+          // clear input — handled by textarea's own Escape key for slash menu;
+          // for plain Escape (no slash menu active), clear inputText
+          const ta = e.target as HTMLTextAreaElement;
+          if (ta.value) {
+            setInputText('');
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isTyping, currentCharacterId, openPalette, createSession]);
+
+  // Copy_Action：Clipboard API → execCommand 两级回退，确保非安全上下文也可用。
   const handleCopy = useCallback(async (content: string) => {
     try {
-      await navigator.clipboard.writeText(content); // Req 4.1
-      addToast({ message: '已复制', type: 'success' }); // Req 4.2
+      await navigator.clipboard.writeText(content);
+      addToast({ message: '已复制', type: 'success' });
+      return;
+    } catch { /* Clipboard API unavailable — try fallback */ }
+    // Fallback: legacy execCommand (works in non-secure contexts, iframes, old browsers)
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = content;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) {
+        addToast({ message: '已复制', type: 'success' });
+      } else {
+        addToast({ message: '复制失败', type: 'error' });
+      }
     } catch {
-      addToast({ message: '复制失败', type: 'error' }); // Req 4.3
+      addToast({ message: '复制失败', type: 'error' });
     }
   }, [addToast]);
 
   // Regenerate_Action：Generating_State 时禁用（Req 1.4）；移除 Last_Assistant_Message
   // 后以截断历史复用 runAssistantStream 重新生成（Placeholder 由 isStreaming 渲染，Req 2.2）。
   // handleStop 对 runAssistantStream 创建的同一 abortController 生效，故生成中可停止（Req 2.6/2.7）。
-  const handleRegenerate = useCallback(async () => {
+  // 可选 temperature 参数：传入时临时设置 chatGenParams.temperature 再发起生成。
+  const handleRegenerate = useCallback(async (temperature?: number) => {
     if (isTyping) return; // Req 1.4：生成中禁止再次发起
+    if (temperature !== undefined) {
+      useUIStore.getState().setChatParam('temperature', temperature);
+    }
     const history = await regenerateLast();
     if (history === null) return; // 无 Last_Assistant_Message：不进入生成态（Req 2.1）
     await runAssistantStream(history);
@@ -486,17 +714,93 @@ export default function ChatPage() {
             <Pencil size={14} />
           </button>
         )}
-        {/* Regenerate 仅对 Last_Assistant_Message 且非生成态（Req 1.2, 1.4）。 */}
+        {/* Regenerate 仅对 Last_Assistant_Message 且非生成态（Req 1.2, 1.4）。
+            温度下拉菜单：默认 / 更创意(1.5) / 更精确(0.3)。 */}
         {avail.canRegenerate && (
-          <button aria-label="重新生成" style={iconBtn} onMouseEnter={hoverIn} onMouseLeave={hoverOut} onClick={() => void handleRegenerate()}>
-            <RotateCcw size={14} />
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              aria-label="重新生成"
+              style={iconBtn}
+              onMouseEnter={hoverIn}
+              onMouseLeave={hoverOut}
+              onClick={() => setRegenMenuOpen((v) => !v)}
+            >
+              <RotateCcw size={14} />
+              <ChevronDown size={10} style={{ marginLeft: 1 }} />
+            </button>
+            {regenMenuOpen && (
+              <>
+                <div
+                  data-testid="regen-backdrop"
+                  style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+                  onClick={() => setRegenMenuOpen(false)}
+                />
+                <div
+                  className="glass rounded-xl"
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 4px)',
+                    right: 0,
+                    zIndex: 50,
+                    width: 160,
+                    border: '1px solid var(--border)',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+                    padding: 6,
+                  }}
+                >
+                  {([
+                    { label: '默认重新生成', temp: undefined },
+                    { label: '更创意', temp: 1.5 },
+                    { label: '更精确', temp: 0.3 },
+                  ] as const).map((opt) => (
+                    <button
+                      key={opt.label}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-all"
+                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                      onClick={() => {
+                        setRegenMenuOpen(false);
+                        void handleRegenerate(opt.temp);
+                      }}
+                    >
+                      <RotateCcw size={14} style={{ color: 'var(--text-muted)' }} />
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         )}
         {/* Delete 非生成态可用（Req 1.4, 5.1, 5.2）。 */}
         {avail.canDelete && (
           <button aria-label="删除消息" style={iconBtn} onMouseEnter={hoverIn} onMouseLeave={hoverOut} onClick={() => void deleteMessage(msg.id)}>
             <Trash2 size={14} />
           </button>
+        )}
+        {/* Thumbs up/down feedback for assistant messages */}
+        {msg.role === 'assistant' && (
+          <>
+            <button
+              aria-label="赞"
+              style={{ ...iconBtn, color: msg.feedback === 'up' ? 'var(--primary)' : 'var(--text-muted)' }}
+              onMouseEnter={hoverIn}
+              onMouseLeave={hoverOut}
+              onClick={() => useUIStore.getState().updateMessageFeedback(msg.id, 'up')}
+            >
+              <ThumbsUp size={14} />
+            </button>
+            <button
+              aria-label="踩"
+              style={{ ...iconBtn, color: msg.feedback === 'down' ? '#FF6B6B' : 'var(--text-muted)' }}
+              onMouseEnter={hoverIn}
+              onMouseLeave={hoverOut}
+              onClick={() => useUIStore.getState().updateMessageFeedback(msg.id, 'down')}
+            >
+              <ThumbsDown size={14} />
+            </button>
+          </>
         )}
       </div>
     );
@@ -530,12 +834,26 @@ export default function ChatPage() {
   }, [recorder, transcribe, currentAsrModel, setInputText, addToast]);
 
   const handlePlayTTS = useCallback((msg: ChatMessage) => {
-    // 同一消息播放中再次点击则停止（useAudioPlayer 互斥）
     if (player.isPlaying(msg.id)) {
-      player.stop();
+      player.clear();
       return;
     }
-    if (ttsLoadingId) return; // 合成进行中，忽略重复触发
+    if (ttsLoadingId === msg.id) return;
+    if (ttsPendingMsgId === msg.id) return;
+    if (msg.audioUrl) {
+      // Handle streaming TTS segments (comma-separated paths) vs single full-text audio
+      const paths = msg.audioUrl.split(',');
+      if (paths.length > 1) {
+        // Streaming: play first segment immediately, enqueue the rest
+        player.playNow(`${msg.id}-s0`, `/api/audio/${paths[0]}`);
+        paths.slice(1).forEach((p, i) => {
+          player.enqueue(`${msg.id}-s${i + 1}`, `/api/audio/${p}`);
+        });
+      } else {
+        player.playNow(msg.id, `/api/audio/${paths[0]}`);
+      }
+      return;
+    }
     void speakMessage(msg);
   }, [player, ttsLoadingId, speakMessage]);
 
@@ -551,64 +869,6 @@ export default function ChatPage() {
     setRenamingId(null);
     setRenameDraft('');
   }, [renameSession, renameDraft]);
-
-  // 导入文件选择入口：隐藏 input[type=file][accept='.json'] 的 ref。
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // 角色名解析器：注入给 toMarkdown，characterId -> Character.name | undefined（Req 2.3）。
-  const characterNameOf = useCallback(
-    (id: string): string | undefined => characters.find((c) => c.id === id)?.name,
-    [characters],
-  );
-
-  // 导出：收集 scope 范围会话 → 序列化为 JSON / Markdown → File_Download（Req 1.5, 2.6, 7.1, 7.2）。
-  const handleExport = useCallback(
-    async (scope: 'current' | 'all', format: 'json' | 'md') => {
-      const data = await collectExportSessions(scope);
-      const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      if (format === 'json') {
-        const text = JSON.stringify(buildExportBundle(data, new Date().toISOString()), null, 2);
-        downloadText(`nuwa-chat-${scope}-${ts}.json`, text, 'application/json');
-      } else {
-        const text = toMarkdown(data, characterNameOf);
-        downloadText(`nuwa-chat-${scope}-${ts}.md`, text, 'text/markdown');
-      }
-    },
-    [collectExportSessions, characterNameOf],
-  );
-
-  // 导入入口：触发隐藏文件选择器（Req 7.3）。
-  const handleImportClick = useCallback(() => {
-    fileInputRef.current?.click();
-  }, []);
-
-  // 文件选择回调：读取文本后交给 importSessions（Req 7.4）；读取异常给通用提示且不调用导入。
-  // 读取后重置 input.value 以便重复选择同一文件。
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (!file) return;
-      let text: string;
-      try {
-        text = await file.text();
-      } catch {
-        addToast({ message: '文件读取失败', type: 'error' });
-        return;
-      }
-      await importSessions(text);
-    },
-    [importSessions, addToast],
-  );
-
-  // Preset_Insert_Entry：选择一条预设插入 Input_Field。insertPresetIntoInput 写回 inputText
-  // 并返回是否成功；成功（true）则对 Input_Field（textarea）调用 .focus()，失败（false，
-  // 如超长，store 已 toast）则不聚焦。任一情况都关闭弹层。presets 始终不变。
-  const handleInsertPreset = useCallback((id: string) => {
-    const ok = insertPresetIntoInput(id);
-    setPresetMenuOpen(false);
-    if (ok) inputRef.current?.focus();
-  }, [insertPresetIntoInput]);
 
   // ── Slash_Command 集成 ──────────────────────────────────────────────
   // 渲染期从 inputText 与 presets 即时派生（无新增 store 字段，无跨次可变状态）。
@@ -634,7 +894,8 @@ export default function ChatPage() {
     if (item.kind === 'preset') {
       const preset = presets.find((p) => p.id === item.presetId);
       if (preset) {
-        const text = buildInsertedPresetText(preset.content);
+        const processed = processTemplateVariables(preset.content);
+        const text = buildInsertedPresetText(processed);
         if (Array.from(text).length > INPUT_MAX_LENGTH) {
           // 超长：保持原文不变并提示（Req 5.3）。
           addToast({ message: '内容超出长度上限，无法插入', type: 'warning' });
@@ -660,10 +921,8 @@ export default function ChatPage() {
     closeSlashMenu(); // 任一选中后关闭菜单（Req 5.2）。
   }, [presets, addToast, setInputText, handleRegenerate, setPage, closeSlashMenu]);
 
-  const hasSessions = sessions.length > 0;
-
-  // Session_Organize：以渲染时刻的 now 计算分组（纯函数，省略空组，按 Group_Order 排列，Req 7.1）。
-  const sessionGroups = organizeSessions(sessions, new Date());
+  // Session_Organize：以 sessions 为依赖的 memo 分组，避免每次渲染重复计算
+  const sessionGroups = useMemo(() => organizeSessions(sessions, new Date()), [sessions]);
 
   return (
     <div className="flex flex-col h-full relative" style={{ zIndex: 10 }}>
@@ -684,17 +943,60 @@ export default function ChatPage() {
               <User size={16} style={{ color: 'var(--bg)' }} />
             </div>
             <span className="text-base font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>女娲</span>
+            <button
+              aria-label="系统提示词"
+              className="flex items-center justify-center"
+              style={{ width: 28, height: 28, borderRadius: 8, color: sysPromptOpen ? 'var(--primary)' : 'var(--text-muted)', background: sysPromptOpen ? 'rgba(72,202,228,0.12)' : 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}
+              onClick={() => setSysPromptOpen((v) => !v)}
+              onMouseEnter={(e) => { if (!sysPromptOpen) { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; } }}
+              onMouseLeave={(e) => { if (!sysPromptOpen) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)'; } }}
+            >
+              <Code size={14} />
+            </button>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full glass" style={{ border: '1px solid var(--border)' }}>
             <Monitor size={14} style={{ color: 'var(--text-secondary)' }} />
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Gemma 4</span>
+            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{currentLlmModel?.replace(/^llm\//, '')}</span>
           </div>
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full glass" style={{ border: '1px solid var(--border)' }}>
-            <div className="w-4 h-4 rounded-full" style={{ background: 'linear-gradient(135deg, #48CAE4, #0096C7)' }} />
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{currentVoice}</span>
+          {/* Character dropdown */}
+          <div className="relative">
+            <button
+              className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full glass"
+              style={{ border: '1px solid var(--border)', cursor: 'pointer', background: charMenuOpen ? 'rgba(72,202,228,0.08)' : undefined }}
+              onClick={() => setCharMenuOpen((v) => !v)}
+            >
+              <div className="w-4 h-4 rounded-full" style={{ background: 'linear-gradient(135deg, #48CAE4, #0096C7)' }} />
+              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{currentCharacter?.name}</span>
+              <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>▼</span>
+            </button>
+            {charMenuOpen && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setCharMenuOpen(false)} />
+                <div className="glass rounded-xl" style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 50, width: 220, maxHeight: 280, overflowY: 'auto', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.35)', padding: 6 }}>
+                  {characters.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => { setCurrentCharacter(c.id); setCharMenuOpen(false); }}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all"
+                      style={{ background: c.id === currentCharacterId ? 'rgba(72,202,228,0.08)' : 'transparent', border: 'none', cursor: 'pointer' }}
+                      onMouseEnter={(e) => { if (c.id !== currentCharacterId) (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)'; }}
+                      onMouseLeave={(e) => { if (c.id !== currentCharacterId) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                    >
+                      <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ background: c.avatar }}>
+                        <User size={10} style={{ color: 'white' }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm truncate" style={{ color: 'var(--text-primary)' }}>{c.name}</div>
+                        <div className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{c.description}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
           <button
             className="flex items-center justify-center"
@@ -707,6 +1009,29 @@ export default function ChatPage() {
           </button>
         </div>
       </header>
+
+      {/* System prompt collapsible editor */}
+      {sysPromptOpen && (
+        <div className="px-5 py-3" style={{ borderBottom: '1px solid var(--border)', background: 'rgba(72,202,228,0.03)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>系统提示词（临时编辑，仅本次会话生效）</span>
+            <button
+              aria-label="重置系统提示词"
+              className="text-xs px-2 py-1 rounded"
+              style={{ color: 'var(--text-muted)', background: 'transparent', border: '1px solid var(--border)', cursor: 'pointer' }}
+              onClick={() => setTempSystemPrompt(null)}
+            >
+              重置为默认
+            </button>
+          </div>
+          <textarea
+            className="w-full outline-none resize-none rounded-lg text-sm leading-relaxed"
+            style={{ padding: '8px 12px', minHeight: 80, color: 'var(--text-primary)', background: 'var(--surface-hover)', border: '1px solid var(--border)', caretColor: 'var(--primary)' }}
+            value={tempSystemPrompt ?? currentCharacter?.systemPrompt ?? ''}
+            onChange={(e) => setTempSystemPrompt(e.target.value || null)}
+          />
+        </div>
+      )}
 
       <div className="flex flex-1 min-h-0 relative">
         {/* Sidebar */}
@@ -721,126 +1046,6 @@ export default function ChatPage() {
               新建对话
             </button>
           </div>
-
-          {/* Export / Import controls（Session_Sidebar 导出与导入入口，Req 7.1–7.5）。 */}
-          <div className="px-4 pb-1">
-            {/* 隐藏文件选择器：限定 .json（Req 7.3）。 */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              aria-label="导入会话文件"
-              data-testid="import-file-input"
-              style={{ display: 'none' }}
-              onChange={(e) => void handleFileChange(e)}
-            />
-            {/* 导出当前会话（Req 7.1）：JSON / Markdown。无会话时禁用（Req 7.5）。 */}
-            <div className="flex items-center gap-1 mb-1.5">
-              <span className="flex items-center gap-1 text-[11px] shrink-0" style={{ color: 'var(--text-muted)', width: 64 }}>
-                <Download size={12} /> 当前
-              </span>
-              <button
-                aria-label="导出当前会话 JSON"
-                disabled={!hasSessions}
-                onClick={() => void handleExport('current', 'json')}
-                className="flex-1 text-xs py-1.5 rounded-lg transition-all"
-                style={{ background: 'var(--surface-hover)', color: hasSessions ? 'var(--text-secondary)' : 'var(--text-muted)', border: '1px solid var(--border)', cursor: hasSessions ? 'pointer' : 'not-allowed', opacity: hasSessions ? 1 : 0.5 }}
-              >
-                JSON
-              </button>
-              <button
-                aria-label="导出当前会话 Markdown"
-                disabled={!hasSessions}
-                onClick={() => void handleExport('current', 'md')}
-                className="flex-1 text-xs py-1.5 rounded-lg transition-all"
-                style={{ background: 'var(--surface-hover)', color: hasSessions ? 'var(--text-secondary)' : 'var(--text-muted)', border: '1px solid var(--border)', cursor: hasSessions ? 'pointer' : 'not-allowed', opacity: hasSessions ? 1 : 0.5 }}
-              >
-                Markdown
-              </button>
-            </div>
-            {/* 导出全部（Req 7.2）：JSON / Markdown。无会话时禁用（Req 7.5）。 */}
-            <div className="flex items-center gap-1 mb-1.5">
-              <span className="flex items-center gap-1 text-[11px] shrink-0" style={{ color: 'var(--text-muted)', width: 64 }}>
-                <Download size={12} /> 全部
-              </span>
-              <button
-                aria-label="导出全部 JSON"
-                disabled={!hasSessions}
-                onClick={() => void handleExport('all', 'json')}
-                className="flex-1 text-xs py-1.5 rounded-lg transition-all"
-                style={{ background: 'var(--surface-hover)', color: hasSessions ? 'var(--text-secondary)' : 'var(--text-muted)', border: '1px solid var(--border)', cursor: hasSessions ? 'pointer' : 'not-allowed', opacity: hasSessions ? 1 : 0.5 }}
-              >
-                JSON
-              </button>
-              <button
-                aria-label="导出全部 Markdown"
-                disabled={!hasSessions}
-                onClick={() => void handleExport('all', 'md')}
-                className="flex-1 text-xs py-1.5 rounded-lg transition-all"
-                style={{ background: 'var(--surface-hover)', color: hasSessions ? 'var(--text-secondary)' : 'var(--text-muted)', border: '1px solid var(--border)', cursor: hasSessions ? 'pointer' : 'not-allowed', opacity: hasSessions ? 1 : 0.5 }}
-              >
-                Markdown
-              </button>
-            </div>
-            {/* 导入入口（Req 7.3, 7.4）。 */}
-            <button
-              aria-label="导入会话"
-              onClick={handleImportClick}
-              className="w-full flex items-center justify-center gap-2 py-1.5 rounded-lg transition-all"
-              style={{ background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer', fontSize: 12 }}
-            >
-              <Upload size={13} />
-              导入会话
-            </button>
-          </div>
-
-          {/* Current Character */}
-          <div className="px-4 pb-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] mb-2" style={{ color: 'var(--text-muted)' }}>当前角色</div>
-            <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all" style={{ background: 'rgba(72,202,228,0.06)', border: '1px solid rgba(72,202,228,0.12)' }}>
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: currentCharacter?.avatar || 'var(--primary)', boxShadow: '0 0 10px var(--primary-glow)' }}>
-                <User size={14} style={{ color: 'var(--bg)' }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{currentCharacter?.name}</div>
-                <div className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>{currentCharacter?.description} · {currentVoice}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-px mx-4 mb-2" style={{ background: 'var(--border)' }} />
-
-          {/* Param_Panel：对话生成参数调节（chat-generation-parameters）。 */}
-          <ParamPanel />
-
-          <div className="h-px mx-4 mb-2" style={{ background: 'var(--border)' }} />
-
-          {/* Character List */}
-          <div className="px-4 pb-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] mb-2" style={{ color: 'var(--text-muted)' }}>我的角色</div>
-            <div className="space-y-1">
-              {characters.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-all"
-                  style={{ background: c.id === currentCharacterId ? 'rgba(72,202,228,0.06)' : 'transparent', border: c.id === currentCharacterId ? '1px solid rgba(72,202,228,0.1)' : '1px solid transparent' }}
-                  onClick={() => setCurrentCharacter(c.id)}
-                  onMouseEnter={(e) => { if (c.id !== currentCharacterId) (e.currentTarget as HTMLDivElement).style.background = 'var(--surface-hover)'; }}
-                  onMouseLeave={(e) => { if (c.id !== currentCharacterId) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-                >
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: c.avatar }}>
-                    <User size={12} style={{ color: 'white' }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm truncate" style={{ color: 'var(--text-primary)' }}>{c.name}</div>
-                    <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{c.description}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="h-px mx-4 mb-2" style={{ background: 'var(--border)' }} />
 
           {/* Search_Input：受控输入，绑定 searchQuery；含搜索图标与清除按钮。 */}
           <div className="px-3 pb-2">
@@ -900,17 +1105,27 @@ export default function ChatPage() {
                     </div>
                   );
                 })
-              ) : !isSearching ? (
+              ) : isSearching ? (
+                <div className="flex items-center gap-2 px-3 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <Loader2 size={14} className="animate-spin" />
+                  搜索中…
+                </div>
+              ) : (
                 // 空状态：仅在非检索中且无结果时显示（Req 6.4）。
                 <div data-testid="search-empty" className="px-3 py-6 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
                   未找到匹配结果
                 </div>
-              ) : null
+              )
             ) : sessionsLoading ? (
               // 启动加载态：显示加载占位，不渲染任何硬编码占位会话。
               <div className="flex items-center gap-2 px-3 py-2.5 text-xs" style={{ color: 'var(--text-muted)' }}>
                 <Loader2 size={14} className="animate-spin" />
                 加载会话中…
+              </div>
+            ) : sessions.length === 0 ? (
+              <div className="px-3 py-6 text-center text-xs" style={{ color: 'var(--text-muted)' }}>
+                暂无对话
+                <div className="mt-1 opacity-60">点击上方 "新建对话" 开始</div>
               </div>
             ) : (
               sessionGroups.map((group) => (
@@ -929,7 +1144,15 @@ export default function ChatPage() {
                         key={s.id}
                         className="group flex items-center gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-all"
                         style={{ background: selected ? 'rgba(72,202,228,0.06)' : 'transparent', border: selected ? '1px solid rgba(72,202,228,0.1)' : '1px solid transparent' }}
-                        onClick={() => switchSession(s.id)}
+                        onClick={() => {
+                          // Stop streaming if in progress to prevent cross-session message leakage
+                          if (isTyping) handleStop();
+                          // Save current draft before switching
+                          if (currentSessionId) {
+                            localStorage.setItem(`${DRAFT_KEY}:${currentSessionId}`, inputText);
+                          }
+                          switchSession(s.id);
+                        }}
                         onMouseEnter={(e) => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = 'var(--surface-hover)'; }}
                         onMouseLeave={(e) => { if (!selected) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
                       >
@@ -1017,46 +1240,40 @@ export default function ChatPage() {
 
         {/* Main Chat Area */}
         <main className="flex-1 flex flex-col min-w-0 relative">
-          {/* Memory_Fallback_Mode 非阻断提示条 */}
-          {!isPersistent && (
-            <div
-              role="alert"
-              className="px-4 py-2 text-xs text-center shrink-0"
-              style={{ background: 'rgba(212,175,55,0.12)', color: '#D4AF37', borderBottom: '1px solid rgba(212,175,55,0.2)' }}
-            >
-              本地历史无法保存
-            </div>
-          )}
-          {/* context-window-management：上下文占用指示 + 临近/超限告警 + 裁剪提示 */}
-          <UsageIndicator budget={budget} />
-          {budget.usageState === 'warning' && (
-            <div
-              role="alert"
-              data-testid="context-warning"
-              className="px-4 md:px-8 py-1.5 text-xs shrink-0"
-              style={{ background: 'rgba(212,175,55,0.1)', color: '#D4AF37' }}
-            >
-              对话已接近上下文上限，较旧的历史消息可能在下次发送时被裁剪。
-            </div>
-          )}
-          {budget.usageState === 'over' && (
-            <div
-              role="alert"
-              data-testid="context-over"
-              className="px-4 md:px-8 py-1.5 text-xs shrink-0"
-              style={{ background: 'rgba(255,107,107,0.1)', color: '#FF6B6B' }}
-            >
-              对话已超出上下文上限，发送时将自动裁剪较旧的历史消息。
-            </div>
-          )}
+          {/* Token usage progress bar */}
+          {(() => {
+            const ctx = resolveContextLength(activeModelContextLength);
+            const reserved = resolveReservedTokens(useUIStore.getState().chatGenParams);
+            const budget = computeBudget({
+              contextLength: ctx.contextLength,
+              isEstimated: ctx.isEstimated,
+              systemPrompt: tempSystemPrompt ?? currentCharacter?.systemPrompt ?? '',
+              messages,
+              reservedTokens: reserved,
+            });
+            const pct = Math.min(budget.usageRatio * 100, 100);
+            const barColor = budget.usageState === 'over' ? '#FF6B6B' : budget.usageState === 'warning' ? '#FFB347' : 'var(--primary)';
+            return (
+              <div className="px-4 md:px-8 py-1 shrink-0" style={{ background: 'rgba(72,202,228,0.02)' }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                    Tokens: {budget.usedTokens}/{budget.contextLength}
+                  </span>
+                  <div className="flex-1 h-1 rounded-full" style={{ background: 'var(--surface-hover)' }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-300"
+                      style={{ width: `${pct}%`, background: barColor }}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           {lastTrimmedCount > 0 && (
-            <div
-              role="status"
-              data-testid="context-trim-notice"
-              className="px-4 md:px-8 py-1.5 text-xs shrink-0"
-              style={{ background: 'rgba(72,202,228,0.08)', color: 'var(--text-secondary)' }}
-            >
-              已裁剪 {lastTrimmedCount} 条历史消息以适配上下文窗口。
+            <div className="px-4 md:px-8 py-1 text-center" style={{ background: 'rgba(255,179,71,0.08)' }}>
+              <span className="text-[10px]" style={{ color: '#FFB347' }}>
+                上下文窗口不足，已裁剪较早的 {lastTrimmedCount} 条消息
+              </span>
             </div>
           )}
           <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-6">
@@ -1136,14 +1353,14 @@ export default function ChatPage() {
                       <div className="glass rounded-2xl rounded-tl-sm px-5 py-3.5 glow-edge">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-xs font-medium" style={{ color: 'var(--primary)' }}>{currentCharacter?.name}</span>
-                          {msg.voiceName && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(72,202,228,0.08)', color: 'var(--primary)' }}>{msg.voiceName}</span>
+                        {(msg.voiceName || msg.audioUrl || ttsPendingMsgId === msg.id) && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(72,202,228,0.08)', color: 'var(--primary)' }}>{msg.voiceName || '可播放'}</span>
                           )}
                         </div>
                         <div className="mb-3">
                           <MarkdownMessage source={msg.content} />
                         </div>
-                        {msg.voiceName && (
+                        {(msg.voiceName || msg.audioUrl || ttsPendingMsgId === msg.id) && (
                           <div className="flex items-center gap-3">
                             <button
                               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg cursor-pointer transition-all"
@@ -1155,16 +1372,18 @@ export default function ChatPage() {
                               onMouseEnter={(e) => { if (!player.isPlaying(msg.id)) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(72,202,228,0.12)'; }}
                               onMouseLeave={(e) => { if (!player.isPlaying(msg.id)) (e.currentTarget as HTMLButtonElement).style.background = 'rgba(72,202,228,0.08)'; }}
                               onClick={() => handlePlayTTS(msg)}
-                              disabled={ttsLoadingId === msg.id}
+                              disabled={ttsLoadingId === msg.id || ttsPendingMsgId === msg.id}
                             >
-                              {ttsLoadingId === msg.id ? (
+                              {(ttsLoadingId === msg.id || ttsPendingMsgId === msg.id) ? (
                                 <Loader2 size={14} className="animate-spin" />
                               ) : player.isPlaying(msg.id) ? (
                                 <Square size={14} fill="currentColor" />
                               ) : (
                                 <Play size={14} fill="currentColor" />
                               )}
-                              {ttsLoadingId === msg.id ? '合成中...' : player.isPlaying(msg.id) ? '停止' : '播放'}
+                              {(ttsLoadingId === msg.id || ttsPendingMsgId === msg.id)
+                                ? (ttsSynthCount > 0 ? `合成中 ${ttsSynthDone}/${ttsSynthCount}` : '合成中...')
+                                : player.isPlaying(msg.id) ? '停止' : '播放'}
                             </button>
                             <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{msg.duration}</span>
                           </div>
@@ -1187,19 +1406,80 @@ export default function ChatPage() {
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-medium" style={{ color: 'var(--primary)' }}>{currentCharacter?.name}</span>
                   </div>
+                  {/* Streamed thinking/reasoning — collapsible, follows DeepSeek/Claude pattern */}
+                  {streamingThinking.length > 0 && (
+                    <details open={thinkOpen} onToggle={(e) => setThinkOpen((e.target as HTMLDetailsElement).open)} className="mb-3">
+                      <summary className="text-[11px] cursor-pointer flex items-center gap-1.5" style={{ color: 'var(--text-muted)' }}>
+                        <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: 'var(--primary)', animation: 'pulse-dot 1.4s infinite' }} />
+                        深度思考中...
+                        <span className="ml-1 opacity-50">{thinkRef.current.length} 字</span>
+                      </summary>
+                      <p className="mt-2 text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)', opacity: 0.75 }}>
+                        {streamingThinking}
+                        {streamingThinking.length > 0 && (
+                          <span style={{ display: 'inline-block', marginLeft: 1, color: 'var(--text-muted)', animation: 'pulse-dot 1s steps(1) infinite' }}>▍</span>
+                        )}
+                      </p>
+                    </details>
+                  )}
                   {streamingContent.length > 0 ? (
                     <div data-testid="streaming-content">
                       <MarkdownMessage source={streamingContent} streaming />
                       <span aria-hidden="true" style={{ display: 'inline-block', marginLeft: 2, color: 'var(--primary)', animation: 'pulse-dot 1s steps(1) infinite' }}>▍</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5 mb-2">
                       <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--text-muted)', animation: 'pulse-dot 1.4s infinite 0ms' }} />
                       <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--text-muted)', animation: 'pulse-dot 1.4s infinite 200ms' }} />
                       <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--text-muted)', animation: 'pulse-dot 1.4s infinite 400ms' }} />
                       <span className="text-xs ml-1" style={{ color: 'var(--text-muted)' }}>正在思考...</span>
                     </div>
                   )}
+                  {/* Pipeline status — visible during entire streaming phase */}
+                  <div className="flex items-center gap-4 text-[11px] mt-2 pt-2" style={{ color: 'var(--text-muted)', borderTop: '1px solid var(--border)' }}>
+                    <span>模型: {(currentLlmModel || '').replace(/^llm\//, '')}</span>
+                    <span>已接收 {estimateText(accRef.current)} tokens</span>
+                    {ttsSynthCount > 0 ? (
+                      <>
+                        <span style={{ color: 'var(--primary)' }}>语音合成 {ttsSynthDone}/{ttsSynthCount}</span>
+                        {/* TTS progress bar with timing */}
+                        <div className="flex items-center gap-1.5">
+                          <div className="h-1 rounded-full w-20" style={{ background: 'var(--border)' }}>
+                            <div className="h-full rounded-full transition-all duration-300" style={{
+                              background: 'var(--primary)',
+                              width: `${ttsSynthCount > 0 ? (ttsSynthDone / ttsSynthCount) * 100 : 0}%`,
+                            }} />
+                          </div>
+                          <span>{(() => {
+                            const elapsed = Math.round((Date.now() - ttsStartedAtRef.current) / 1000);
+                            const mins = Math.floor(elapsed / 60);
+                            const secs = elapsed % 60;
+                            if (ttsSynthDone > 0) {
+                              const estTotal = (elapsed / ttsSynthDone) * ttsSynthCount;
+                              const remaining = Math.max(0, Math.round(estTotal - elapsed));
+                              const rm = Math.floor(remaining / 60);
+                              const rs = remaining % 60;
+                              return `已用 ${mins}m${secs}s · 预估剩余 ${rm}m${rs}s`;
+                            }
+                            return `已用 ${mins}m${secs}s`;
+                          })()}</span>
+                        </div>
+                      </>
+                    ) : autoPlay ? (
+                      <span style={{ color: 'var(--text-muted)' }}>等待完整句子...</span>
+                    ) : null}
+                    {!sseCompletedRef.current && streamingContent.length > 0 && !isTyping && (
+                      <span style={{ color: '#FFB347' }}>连接中断</span>
+                    )}
+                  </div>
+                  {/* Streaming progress bar — shimmer animation (indeterminate, no total length) */}
+                  <div className="mt-2 h-0.5 rounded-full w-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                    {streamingContent.length > 0 ? (
+                      <div className="h-full rounded-full animate-shimmer" style={{
+                        backgroundImage: 'linear-gradient(90deg, var(--primary-dim), var(--primary), var(--primary-dim))',
+                      }} />
+                    ) : null}
+                  </div>
                 </div>
               </div>
             )}
@@ -1265,11 +1545,38 @@ export default function ChatPage() {
               />
               <div className="flex items-center justify-between mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
                 <div className="flex items-center gap-3">
-                  <button className="flex items-center justify-center" style={{ width: 32, height: 32, borderRadius: 10, color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}>
-                    <Paperclip size={18} />
+                  {/* autoPlay toggle + playback speed */}
+                  <button className="text-[10px] px-1.5 py-0.5 rounded cursor-pointer"
+                    style={{
+                      color: autoPlay ? 'var(--primary)' : 'var(--text-muted)',
+                      background: autoPlay ? 'rgba(72,202,228,0.12)' : 'transparent',
+                      border: 'none', fontWeight: 600,
+                    }}
+                    onClick={() => useUIStore.getState().updateSetting('autoPlay', !autoPlay)}
+                    title={autoPlay ? '自动朗读已开启' : '自动朗读已关闭'}
+                  >
+                    {autoPlay ? '🔊 自动' : '🔇 手动'}
                   </button>
+                  {player.playing && <span className="text-[10px] animate-pulse" style={{ color: 'var(--primary)' }}>▶ 播放中</span>}
+                  {['0.5', '1', '1.5', '2'].map((rate) => {
+                    const r = parseFloat(rate);
+                    return (
+                      <button
+                        key={rate}
+                        className="text-[10px] px-1.5 py-0.5 rounded"
+                        style={{
+                          color: playbackRate === r ? 'var(--primary)' : 'var(--text-muted)',
+                          background: playbackRate === r ? 'rgba(72,202,228,0.12)' : 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontWeight: playbackRate === r ? 600 : 400,
+                        }}
+                        onClick={() => { setPlaybackRate(r); player.setSpeed(r); }}
+                      >
+                        {rate}x
+                      </button>
+                    );
+                  })}
                   <button className="flex items-center justify-center" style={{ width: 32, height: 32, borderRadius: 10, color: recorder.isRecording ? '#FF6B6B' : asrLoading ? 'var(--primary)' : 'var(--text-secondary)', background: recorder.isRecording ? 'rgba(255,107,107,0.12)' : 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}
                     onMouseEnter={(e) => { if (!recorder.isRecording && !asrLoading) { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; } }}
                     onMouseLeave={(e) => { if (!recorder.isRecording && !asrLoading) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; } }}
@@ -1282,86 +1589,6 @@ export default function ChatPage() {
                       {Math.floor(recorder.recordingTime / 60)}:{String(recorder.recordingTime % 60).padStart(2, '0')}
                     </span>
                   )}
-                  <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{inputText.length}/2000</span>
-
-                  {/* Preset_Insert_Entry：「提示词」按钮 + 弹层。点击切换弹层，选择某条调用
-                      handleInsertPreset（经 insertPresetIntoInput 写 inputText，仅成功时聚焦）。
-                      presets 为空时弹层展示空提示并提供进入 Preset_Manager 的入口。 */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      aria-label="插入提示词预设"
-                      aria-expanded={presetMenuOpen}
-                      onClick={() => setPresetMenuOpen((v) => !v)}
-                      className="flex items-center gap-1.5 px-2.5"
-                      style={{ height: 32, borderRadius: 10, color: presetMenuOpen ? 'var(--primary)' : 'var(--text-secondary)', background: presetMenuOpen ? 'rgba(72,202,228,0.1)' : 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease', fontSize: 12 }}
-                      onMouseEnter={(e) => { if (!presetMenuOpen) { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; } }}
-                      onMouseLeave={(e) => { if (!presetMenuOpen) { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; } }}
-                    >
-                      <FileText size={16} />
-                      提示词
-                    </button>
-                    {presetMenuOpen && (
-                      <>
-                        {/* 点击遮罩关闭弹层 */}
-                        <div
-                          style={{ position: 'fixed', inset: 0, zIndex: 40 }}
-                          onClick={() => setPresetMenuOpen(false)}
-                        />
-                        <div
-                          role="menu"
-                          aria-label="提示词预设列表"
-                          className="glass rounded-xl"
-                          style={{ position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, zIndex: 50, width: 280, maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.35)', padding: 6 }}
-                        >
-                          {presets.length === 0 ? (
-                            <div className="px-3 py-4 text-center">
-                              <div className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>还没有预设</div>
-                              <button
-                                type="button"
-                                onClick={() => { setPresetMenuOpen(false); setPage('presets'); }}
-                                className="text-xs"
-                                style={{ color: 'var(--primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
-                              >
-                                去管理预设
-                              </button>
-                            </div>
-                          ) : (
-                            <>
-                              {presets.map((preset) => (
-                                <button
-                                  key={preset.id}
-                                  type="button"
-                                  role="menuitem"
-                                  aria-label={`插入预设 ${preset.title}`}
-                                  onClick={() => handleInsertPreset(preset.id)}
-                                  className="w-full text-left rounded-lg px-3 py-2 transition-all"
-                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
-                                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)'; }}
-                                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
-                                >
-                                  <div className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{preset.title}</div>
-                                  <div className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>{preset.content}</div>
-                                </button>
-                              ))}
-                              <div className="h-px my-1" style={{ background: 'var(--border)' }} />
-                              <button
-                                type="button"
-                                onClick={() => { setPresetMenuOpen(false); setPage('presets'); }}
-                                className="w-full flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-all"
-                                style={{ color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
-                                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; }}
-                                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}
-                              >
-                                <Settings size={13} />
-                                管理预设
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
                 </div>
                 {isTyping ? (
                   <button

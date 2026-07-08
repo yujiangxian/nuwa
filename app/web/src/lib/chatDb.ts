@@ -37,10 +37,11 @@ export interface ChatDb {
 }
 
 const DB_NAME = 'nuwa-chat';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_SESSIONS = 'sessions';
 const STORE_MESSAGES = 'messages';
 const INDEX_BY_SESSION = 'by-session';
+const INDEX_BY_UPDATED_AT = 'by-updated-at';
 
 /** Wrap an IDBRequest into a Promise. */
 function requestToPromise<T>(req: IDBRequest<T>): Promise<T> {
@@ -86,14 +87,27 @@ export function createChatDb(factory?: IDBFactory): ChatDb {
     }
     db = await new Promise<IDBDatabase>((resolve, reject) => {
       const req = idb.open(DB_NAME, DB_VERSION);
-      req.onupgradeneeded = () => {
+      req.onupgradeneeded = (event) => {
         const database = req.result;
-        if (!database.objectStoreNames.contains(STORE_SESSIONS)) {
-          database.createObjectStore(STORE_SESSIONS, { keyPath: 'id' });
+        // V1: initial schema
+        if (event.oldVersion < 1) {
+          if (!database.objectStoreNames.contains(STORE_SESSIONS)) {
+            database.createObjectStore(STORE_SESSIONS, { keyPath: 'id' });
+          }
+          if (!database.objectStoreNames.contains(STORE_MESSAGES)) {
+            const messages = database.createObjectStore(STORE_MESSAGES, { keyPath: 'id' });
+            messages.createIndex(INDEX_BY_SESSION, 'sessionId', { unique: false });
+          }
         }
-        if (!database.objectStoreNames.contains(STORE_MESSAGES)) {
-          const messages = database.createObjectStore(STORE_MESSAGES, { keyPath: 'id' });
-          messages.createIndex(INDEX_BY_SESSION, 'sessionId', { unique: false });
+        // V2: add updatedAt index on sessions
+        if (event.oldVersion < 2) {
+          const tx = (event.target as IDBOpenDBRequest).transaction;
+          if (tx) {
+            const sessionStore = tx.objectStore(STORE_SESSIONS);
+            if (sessionStore && !sessionStore.indexNames.contains(INDEX_BY_UPDATED_AT)) {
+              sessionStore.createIndex(INDEX_BY_UPDATED_AT, 'updatedAt', { unique: false });
+            }
+          }
         }
       };
       req.onsuccess = () => resolve(req.result);

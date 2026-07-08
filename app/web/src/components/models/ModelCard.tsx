@@ -9,7 +9,7 @@ type ModelCardProps = {
   model: InstalledModel;
   isCurrent: boolean;
   notes?: string;
-  lastUsed?: number;
+  lastUsed?: number | null;
   onSetCurrent: (id: string) => void;
   onDelete: (model: InstalledModel) => void;
   onViewDetail: (model: InstalledModel) => void;

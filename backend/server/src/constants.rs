@@ -11,3 +11,13 @@ pub const DEFAULT_REF_AUDIO: &str = "assets/datasets/voices/jyy_000.wav";
 
 /// 默认 TTS 参考音频对应文本。
 pub const DEFAULT_REF_TEXT: &str = "穿上它能更好完成任务它很美";
+
+/// 获取 TTS 输出文件保留天数（环境变量 `NUWA_TTS_RETENTION_DAYS`，默认 7 天）。
+/// 启动清理和手动清理使用同一阈值。
+pub fn tts_retention_secs() -> u64 {
+    let days: u64 = std::env::var("NUWA_TTS_RETENTION_DAYS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(7);
+    days * 86400
+}

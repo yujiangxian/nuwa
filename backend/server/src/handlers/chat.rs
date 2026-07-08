@@ -142,15 +142,12 @@ fn default_model() -> String {
     "gemma4:e4b".to_string()
 }
 
-/// Model_Selection 回退顺序：current_llm_model → current_model_id → 请求体 model。
-/// 抽取为纯函数，供 `chat`（非流式）与 `chat_stream`（流式）复用，保证行为完全一致。
+/// Model_Selection 回退顺序：current_llm_model → 请求体 model。
 pub fn resolve_model(
     current_llm_model: Option<String>,
-    current_model_id: Option<String>,
     request_model: &str,
 ) -> String {
     current_llm_model
-        .or(current_model_id)
         .unwrap_or_else(|| request_model.to_string())
 }
 
@@ -227,7 +224,6 @@ pub async fn chat(
 
     let model = resolve_model(
         config.current_llm_model,
-        config.current_model_id.clone(),
         &req.model,
     );
     // 规范化为 Ollama 裸模型名（剥离内部 `llm/` 前缀），否则 Ollama 报 model not found。
@@ -293,22 +289,17 @@ mod tests {
     // Feature: streaming-chat-output, Property 4: Model_Selection 回退顺序
     // Validates: Requirements 1.2, 7.2
     // 对任意 (current_llm_model, current_model_id, request_model)（前两者各可 Some/None），
-    // resolve_model 返回值等于 current_llm_model 若 Some，否则 current_model_id 若 Some，否则 request_model。
+    // resolve_model 返回值等于 current_llm_model 若 Some，否则 request_model。
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(200))]
 
         #[test]
         fn prop_resolve_model_fallback_order(
             llm in proptest::option::of(".*"),
-            model_id in proptest::option::of(".*"),
             request_model in ".*",
         ) {
-            let result = resolve_model(llm.clone(), model_id.clone(), &request_model);
-            let expected = match (&llm, &model_id) {
-                (Some(v), _) => v.clone(),
-                (None, Some(v)) => v.clone(),
-                (None, None) => request_model.clone(),
-            };
+            let result = resolve_model(llm.clone(), &request_model);
+            let expected = llm.unwrap_or_else(|| request_model.clone());
             prop_assert_eq!(result, expected);
         }
     }
@@ -316,19 +307,14 @@ mod tests {
     #[test]
     fn resolve_model_prefers_llm_model() {
         assert_eq!(
-            resolve_model(Some("a".into()), Some("b".into()), "c"),
+            resolve_model(Some("a".into()), "c"),
             "a"
         );
     }
 
     #[test]
-    fn resolve_model_falls_back_to_model_id() {
-        assert_eq!(resolve_model(None, Some("b".into()), "c"), "b");
-    }
-
-    #[test]
     fn resolve_model_falls_back_to_request_model() {
-        assert_eq!(resolve_model(None, None, "c"), "c");
+        assert_eq!(resolve_model(None, "c"), "c");
     }
 
     #[test]

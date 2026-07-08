@@ -2,7 +2,7 @@
 // 所有 lib/ 模块的类型导入应使用此文件而非 uiStore.ts，
 // 消除运行时依赖，仅保持类型级耦合。
 
-export type AppPage = 'home' | 'chat' | 'voice' | 'transcribe' | 'models' | 'characters' | 'presets' | 'workflow';
+export type AppPage = 'home' | 'chat' | 'playground' | 'voice' | 'transcribe' | 'models' | 'characters' | 'presets' | 'workflow';
 
 export interface VoiceItem {
   id: string;
@@ -20,6 +20,9 @@ export interface Character {
   systemPrompt: string;
   voiceId: string;
   description: string;
+  mood?: string;
+  temperature?: number;
+  topP?: number;
 }
 
 export interface CharacterInput {
@@ -28,6 +31,9 @@ export interface CharacterInput {
   description: string;
   avatar: string;
   voiceId: string;
+  mood?: string;
+  temperature?: number;
+  topP?: number;
 }
 
 export interface ChatSession {
@@ -37,6 +43,7 @@ export interface ChatSession {
   voiceId: string;
   updatedAt: string;
   pinned: boolean;
+  archived?: boolean;
 }
 
 export interface ChatMessage {
@@ -46,12 +53,16 @@ export interface ChatMessage {
   audioUrl?: string;
   voiceName?: string;
   duration?: string;
+  feedback?: 'up' | 'down';
+  /** Opaque persistence sequence: only set at append, reused by updateMessageAudio. */
+  _seq?: number;
 }
 
 export interface PromptPreset {
   id: string;
   title: string;
   content: string;
+  tags?: string[];
 }
 
 export interface GenerationParams {
