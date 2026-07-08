@@ -1,4 +1,4 @@
-//! voxcpm-server 库根。
+//! nuwa-server 库根 — Nuwa AI 助手后端服务。
 //!
 //! 暴露各模块以便集成测试（`tests/`）访问内部 handler / 纯函数 / 路由。
 //! 二进制入口 `main.rs` 复用本库，避免模块被重复编译为两份。
@@ -11,3 +11,4 @@ pub mod middleware;
 pub mod routes;
 pub mod services;
 pub mod state;
+pub mod util;

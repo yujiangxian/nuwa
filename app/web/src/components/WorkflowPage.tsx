@@ -1,6 +1,7 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { ArrowLeft, Play, StepForward, RotateCcw, CircleCheck, CircleDot, Circle, CircleX, Ban, Zap, Loader2, Mic, MessageSquare, Volume2, FileAudio } from 'lucide-react';
 import { useUIStore } from '@/store/uiStore';
+import { useToastStore } from '@/store/toastStore';
 import { apiClient } from '@/api/client';
 import type { JsonValue, NodeType, Port, PortType, WorkflowGraph, WorkflowNode } from '@/lib/workflow/types';
 import {
@@ -174,6 +175,7 @@ type RunStatusKey = ExecutionState['runStatus'];
 
 export default function WorkflowPage() {
   const setPage = useUIStore((s) => s.setPage);
+  const addToast = useToastStore((s) => s.addToast);
   const [modeTab, setModeTab] = useState<'demo' | 'agent'>('agent');
 
   // Demo graph state
@@ -204,36 +206,65 @@ export default function WorkflowPage() {
   const [agentSteps, setAgentSteps] = useState<Array<{label:string;status:string;message?:string}>>([]);
   const [agentResult, setAgentResult] = useState<string>('');
   const [agentError, setAgentError] = useState<string>('');
+  const [agentPipelines, setAgentPipelines] = useState<Array<{id:string;name:string;icon:string;description:string}>>([]);
+  const [pipelinesLoading, setPipelinesLoading] = useState(true);
+  const agentStatusRef = useRef(agentStatus);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const AGENT_PIPELINES = [
-    { id: 'voice_reply', name: '语音回复', icon: Mic, desc: 'ASR→LLM→TTS 全链路' },
-    { id: 'text_chat', name: '文本对话', icon: MessageSquare, desc: 'LLM→TTS' },
-    { id: 'transcribe', name: '语音转文字', icon: FileAudio, desc: '仅 ASR' },
-    { id: 'synthesize', name: '文字转语音', icon: Volume2, desc: '仅 TTS' },
-  ];
+  useEffect(() => { agentStatusRef.current = agentStatus; }, [agentStatus]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      eventSourceRef.current?.close();
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    };
+  }, []);
+
+  // Fetch agent pipelines from backend
+  useEffect(() => {
+    apiClient.get('/api/agents').then(r => {
+      const data = r.data as { agents?: Array<{id:string;name:string;description:string}>; pipelines?: Array<{id:string;name:string;description:string}> };
+      if (data?.pipelines) {
+        setAgentPipelines(data.pipelines.map(p => ({ ...p, icon: p.id })));
+        if (agentPipeline && !data.pipelines.find(p => p.id === agentPipeline)) {
+          setAgentPipeline(data.pipelines[0]?.id || '');
+        }
+      }
+    }).catch((err: unknown) => {
+      console.warn('Failed to fetch agent pipelines', err);
+      addToast({ message: '获取流水线列表失败，请检查后端是否运行', type: 'error' });
+    }).finally(() => setPipelinesLoading(false));
+  }, []);
 
   const runAgent = useCallback(async () => {
+    // Cleanup previous EventSource and poll timer
+    eventSourceRef.current?.close();
+    if (pollTimerRef.current) { clearTimeout(pollTimerRef.current); pollTimerRef.current = null; }
+
     setAgentStatus('running');
     setAgentError('');
     setAgentResult('');
     setAgentSteps([]);
     try {
       let input: Record<string,unknown> = {};
-      try { input = JSON.parse(agentInput); } catch { /* use raw text */ }
+      try { input = JSON.parse(agentInput); } catch {
+        addToast({ message: 'JSON 格式无效，将作为纯文本发送', type: 'warning' });
+      }
       if (typeof input === 'string') input = { text: input };
 
       const { data } = await apiClient.post('/api/agents/run', { pipeline: agentPipeline, input });
       if (!data.success) { setAgentError(data.error || '启动失败'); setAgentStatus('failed'); return; }
       setAgentTaskId(data.task_id); const _agentTid = data.task_id;
 
-      // Start SSE listener
       const eventSource = new EventSource(`/api/agents/tasks/${_agentTid}/events`);
+      eventSourceRef.current = eventSource;
       eventSource.onmessage = (e) => {
         const ev = JSON.parse(e.data);
         if (ev.status === 'completed') {
           setAgentStatus('completed');
           eventSource.close();
-          // Fetch task result
           apiClient.get(`/api/agents/tasks/${_agentTid}`).then(r => {
             setAgentResult(r.data.result || '');
           });
@@ -242,20 +273,16 @@ export default function WorkflowPage() {
           setAgentError(ev.message || '流水线执行失败');
           eventSource.close();
         } else {
-          // Running step update
-          setAgentSteps(prev => [...prev.filter(s => s.label !== ev.step), { label: ev.step || '', status: 'done', message: ev.message || '' }]);
-          if (ev.step) {
-            setAgentSteps(prev => {
-              const filtered = prev.filter(s => s.label !== ev.step);
-              return [...filtered, { label: ev.step, status: ev.status === 'failed' ? 'error' : ev.message?.includes('完成') ? 'done' : 'running', message: ev.message || '' }];
-            });
-          }
+          setAgentSteps(prev => {
+            const filtered = prev.filter(s => s.label !== ev.step);
+            return [...filtered, { label: ev.step || '', status: ev.status === 'failed' ? 'error' : ev.message?.includes('完成') ? 'done' : 'running', message: ev.message || '' }];
+          });
         }
       };
       eventSource.onerror = () => {
-        if (agentStatus === 'running') {
-          // Reconnect on SSE error
-          setTimeout(() => {
+        if (agentStatusRef.current === 'running') {
+          eventSource.close();
+          pollTimerRef.current = setTimeout(() => {
             apiClient.get(`/api/agents/tasks/${_agentTid}`).then(r => {
               if (r.data.status === 'completed') { setAgentStatus('completed'); setAgentResult(r.data.result || ''); }
               else if (r.data.status === 'failed') { setAgentStatus('failed'); setAgentError(r.data.error || ''); }
@@ -350,24 +377,28 @@ export default function WorkflowPage() {
           <div className="flex flex-col gap-4 p-6 overflow-y-auto" style={{ width: 440, borderRight: '1px solid var(--border)' }}>
             <div className="flex flex-col gap-2">
               <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>选择流水线</span>
-              {AGENT_PIPELINES.map(p => {
-                const Icon = p.icon;
-                const active = agentPipeline === p.id;
-                return (
-                  <button key={p.id} onClick={() => setAgentPipeline(p.id)}
-                    className="flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all"
-                    style={{ background: active ? 'rgba(72,202,228,0.08)' : 'var(--surface)', border: `1px solid ${active ? 'rgba(72,202,228,0.25)' : 'var(--border)'}`, cursor: 'pointer' }}>
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(72,202,228,0.15), rgba(0,150,199,0.1))' }}>
-                      <Icon size={18} style={{ color: 'var(--primary)' }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{p.name}</div>
-                      <div className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{p.desc}</div>
-                    </div>
-                    {active && <CircleCheck size={16} style={{ color: 'var(--primary)' }} />}
-                  </button>
-                );
-              })}
+              {pipelinesLoading ? (
+                <div className="flex items-center gap-2 px-3 py-2"><Loader2 size={14} className="animate-spin" /><span className="text-xs" style={{ color: 'var(--text-muted)' }}>加载流水线...</span></div>
+              ) : (
+                agentPipelines.map(p => {
+                  const Icon = p.id === 'voice_reply' ? Mic : p.id === 'text_chat' ? MessageSquare : p.id === 'transcribe' ? FileAudio : p.id === 'synthesize' ? Volume2 : Zap;
+                  const active = agentPipeline === p.id;
+                  return (
+                    <button key={p.id} onClick={() => setAgentPipeline(p.id)}
+                      className="flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-all"
+                      style={{ background: active ? 'rgba(72,202,228,0.08)' : 'var(--surface)', border: `1px solid ${active ? 'rgba(72,202,228,0.25)' : 'var(--border)'}`, cursor: 'pointer' }}>
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(72,202,228,0.15), rgba(0,150,199,0.1))' }}>
+                        <Icon size={18} style={{ color: 'var(--primary)' }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{p.name}</div>
+                        <div className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{p.description}</div>
+                      </div>
+                      {active && <CircleCheck size={16} style={{ color: 'var(--primary)' }} />}
+                    </button>
+                  );
+                })
+              )}
             </div>
 
             <div className="flex flex-col gap-2">

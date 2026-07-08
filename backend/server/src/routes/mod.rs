@@ -30,6 +30,7 @@ pub fn create_router() -> Router<Arc<RwLock<AppState>>> {
         // 系统信息
         .route("/api/system/disk", get(handlers::system::get_disk_info))
         .route("/api/system/gpu", get(handlers::system::get_gpu_info))
+        .route("/api/system/cleanup", post(handlers::system::cleanup))
         // 参考音频
         .route("/api/voices", get(handlers::voices::list_voices))
         .route("/api/voices", post(handlers::voices::add_voice))
@@ -57,6 +58,7 @@ pub fn create_router() -> Router<Arc<RwLock<AppState>>> {
         // Agent 调度器
         .route("/api/agents", get(handlers::agents::list_agents))
         .route("/api/agents/run", post(handlers::agents::run_pipeline))
+        .route("/api/agents/run-stream", post(handlers::agents::run_pipeline_stream))
         .route("/api/agents/tasks/{id}", get(handlers::agents::get_task))
         .route("/api/agents/tasks/{id}/events", get(handlers::agents::task_events))
         // SSE 进度推送

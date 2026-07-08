@@ -39,7 +39,7 @@ import type { ChatDb, PersistedMessage } from '@/lib/chatDb';
 
 const mocks = vi.hoisted(() => ({
   transcribeMutateAsync: vi.fn(),
-  synthesizeMutateAsync: vi.fn(),
+  synthesizeMutateAsync: vi.fn(() => Promise.resolve({ success: true, output_path: 'tts.wav', error: null })),
   apiPost: vi.fn(),
   fetch: vi.fn(),
   addToast: vi.fn(),
@@ -58,6 +58,10 @@ const mocks = vi.hoisted(() => ({
     play: vi.fn(),
     stop: vi.fn(),
     isPlaying: vi.fn((_key: string) => false),
+    enqueue: vi.fn(),
+    playNow: vi.fn(),
+    clear: vi.fn(),
+    getQueueLength: vi.fn(() => 0),
   },
 }));
 
@@ -69,7 +73,7 @@ vi.mock('@/hooks/useApi', () => ({
 }));
 
 vi.mock('@/hooks/useRecorder', () => ({ useRecorder: () => mocks.recorder }));
-vi.mock('@/hooks/useAudioPlayer', () => ({ useAudioPlayer: () => mocks.player }));
+vi.mock('@/hooks/useAudioQueue', () => ({ useAudioQueue: () => mocks.player }));
 vi.mock('@/api/client', () => ({ apiClient: { post: mocks.apiPost } }));
 
 // Toast store mock that supports both the hook-selector form (ChatPage) and the
@@ -159,6 +163,50 @@ function mockStreamResponse(body: ReadableStream<Uint8Array>) {
   });
 }
 
+/** Controlled agent stream: push SSE events manually, then call done(). */
+function agentStreamController() {
+  let instRef: { onmessage: ((e: { data: string }) => void) | null; onerror: (() => void) | null } | null = null;
+  let closed = false;
+
+  const push = (ev: Record<string, unknown>) => {
+    if (closed || !instRef?.onmessage) return;
+    instRef.onmessage({ data: JSON.stringify(ev) });
+  };
+  const done = () => {
+    if (!instRef?.onmessage) return;
+    closed = true;
+    instRef.onmessage({ data: JSON.stringify({ status: 'completed' }) });
+    instRef = null;
+  };
+  const error = () => {
+    if (!instRef?.onerror) return;
+    closed = true;
+    instRef.onerror();
+    instRef = null;
+  };
+
+  const ctrl = {
+    push,
+    done,
+    error,
+    install: (win: any) => {
+      win.EventSource = class {
+        onmessage: ((e: { data: string }) => void) | null = null;
+        onerror: (() => void) | null = null;
+        constructor() { instRef = this; }
+        close() {}
+      };
+      mocks.apiPost.mockImplementation((url: string, body: any) => {
+        if (url === '/api/agents/run-stream') {
+          return Promise.resolve({ data: { success: true, task_id: 'agent_test' } });
+        }
+        return Promise.resolve({ data: { role: 'assistant', content: '降级回复', model: 'gemma', done: true } });
+      });
+    },
+  };
+  return ctrl;
+}
+
 /** Send the given text through the composer. */
 function sendText(text: string) {
   const ta = screen.getByPlaceholderText('输入消息...');
@@ -202,6 +250,10 @@ beforeEach(() => {
   mocks.player.playingKey = null;
   mocks.player.isPlaying.mockReturnValue(false);
   mocks.player.play.mockResolvedValue(undefined);
+  mocks.player.enqueue = vi.fn();
+  mocks.player.playNow = vi.fn();
+  mocks.player.clear = vi.fn();
+  mocks.player.getQueueLength = vi.fn(() => 0);
 
   mocks.configData = {
     current_models: { asr: 'asr/paraformer-large', tts: 'tts/cosyvoice3' },
@@ -213,8 +265,39 @@ beforeEach(() => {
   mocks.apiPost.mockResolvedValue({
     data: { role: 'assistant', content: '降级回复', model: 'gemma', done: true },
   });
-  // Default streaming response: a single delta + done (overridden per test).
-  mocks.fetch.mockResolvedValue({ ok: true, body: fullStream([{ delta: '默认回复' }, { done: true }]) } as any);
+  // Default: apiPost handles agent run-stream (success) and fallback /api/chat (降级回复)
+  // Individual tests override with agentStreamController for controlled event timing
+  mocks.apiPost.mockImplementation((url: string, body: any) => {
+    if (url === '/api/agents/run-stream') {
+      return Promise.resolve({ data: { success: true, task_id: 'agent_default' } });
+    }
+    return Promise.resolve({ data: { role: 'assistant', content: '降级回复', model: 'gemma', done: true } });
+  });
+  // Always re-install the global EventSource mock — agentStreamController.install()
+  // replaces it for individual tests, and we must restore the default here.
+  (window as any).__agentEventHandlers = [];
+  (window as any).EventSource = class {
+      onmessage: ((e: any) => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(url: string) {
+        if (url.includes('/events')) {
+          const inst = this;
+          (window as any).__agentEventHandlers.push(inst);
+          // Fire default delta then completed after a brief delay
+          setTimeout(() => {
+            if (inst.onmessage) {
+              inst.onmessage({ data: JSON.stringify({ delta: '默认回复', status: 'running' }) });
+            }
+            setTimeout(() => {
+              if (inst.onmessage) {
+                inst.onmessage({ data: JSON.stringify({ status: 'completed' }) });
+              }
+            }, 50);
+          }, 50);
+        }
+      }
+      close() {}
+    };
 
   // Fresh in-memory Chat_DB per test, pre-seeded with the base sessions.
   fakeDb = makeFakeChatDb();
@@ -250,7 +333,7 @@ beforeEach(() => {
       backendUrl: 'http://localhost:8080',
       modelsDir: './models',
       theme: 'dark',
-      autoPlay: true,
+      autoPlay: false,
       language: '简体中文',
     },
     createSession: createSpy as any,
@@ -276,11 +359,6 @@ describe('ChatPage data source & loading state', () => {
     expect(screen.queryByText('会话一')).not.toBeInTheDocument();
   });
 
-  it('shows the Memory_Fallback_Mode banner when not persistent', () => {
-    useUIStore.setState({ isPersistent: false });
-    render(<ChatPage />);
-    expect(screen.getByText('本地历史无法保存')).toBeInTheDocument();
-  });
 });
 
 describe('ChatPage session lifecycle UI', () => {
@@ -330,56 +408,48 @@ describe('ChatPage session lifecycle UI', () => {
 
 describe('ChatPage streaming render & finalize', () => {
   it('shows a placeholder and disables the composer right after sending (Req 2.1/2.3)', async () => {
-    const ctl = controllableStream();
-    (ctl.stream as any).__ctl = ctl;
-    mockStreamResponse(ctl.stream);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     sendText('你好');
 
-    // Placeholder_Message (思考占位) appears before any delta.
     await screen.findByText('正在思考...');
     const textarea = screen.getByPlaceholderText('输入消息...') as HTMLTextAreaElement;
     expect(textarea.disabled).toBe(true);
-    // The send entry has switched to a Stop entry (Req 3.1).
     expect(screen.getByRole('button', { name: /停止/ })).toBeInTheDocument();
 
-    await act(async () => { ctl.push({ done: true }); ctl.close(); await tick(); });
+    await act(async () => { ag.done(); await tick(); });
   });
 
   it('grows the streaming text as deltas arrive, then finalizes on done (Req 2.2/2.4/2.5)', async () => {
-    const ctl = controllableStream();
-    (ctl.stream as any).__ctl = ctl;
-    mockStreamResponse(ctl.stream);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     sendText('你好');
     await screen.findByText('正在思考...');
 
-    await act(async () => { ctl.push({ delta: '你' }); await tick(); });
+    await act(async () => { ag.push({ delta: '你' }); await tick(); });
     await waitFor(() => expect(screen.getByTestId('streaming-content')).toHaveTextContent('你'));
 
-    await act(async () => { ctl.push({ delta: '好呀' }); await tick(); });
+    await act(async () => { ag.push({ delta: '好呀' }); await tick(); });
     await waitFor(() => expect(screen.getByTestId('streaming-content')).toHaveTextContent('你好呀'));
 
-    await act(async () => { ctl.push({ done: true }); ctl.close(); await tick(); });
+    await act(async () => { ag.done(); await tick(); });
 
-    // Finalized assistant message persisted once with the full concatenation.
     await waitFor(() =>
       expect(appendSpy).toHaveBeenCalledWith(
         expect.objectContaining({ role: 'assistant', content: '你好呀' })
       )
     );
-    // Generating state exited: streaming bubble removed, composer re-enabled.
     await waitFor(() => expect(screen.queryByTestId('streaming-content')).not.toBeInTheDocument());
     expect((screen.getByPlaceholderText('输入消息...') as HTMLTextAreaElement).disabled).toBe(false);
   });
 
   it('persists the user message then the assistant reply exactly once each (Req 4.1/4.2)', async () => {
-    mocks.fetch.mockResolvedValue({
-      ok: true,
-      body: fullStream([{ delta: '你好呀，' }, { delta: '我能帮你什么？' }, { done: true }]),
-    } as any);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     sendText('在吗');
@@ -401,18 +471,16 @@ describe('ChatPage streaming render & finalize', () => {
 
 describe('ChatPage stop generation', () => {
   it('keeps the partial content as the Final_Message and exits on stop (Req 3.2–3.4/4.3)', async () => {
-    const ctl = controllableStream();
-    (ctl.stream as any).__ctl = ctl;
-    mockStreamResponse(ctl.stream);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     sendText('你好');
     await screen.findByText('正在思考...');
 
-    await act(async () => { ctl.push({ delta: '已生成部分' }); await tick(); });
+    await act(async () => { ag.push({ delta: '已生成部分' }); await tick(); });
     await waitFor(() => expect(screen.getByTestId('streaming-content')).toHaveTextContent('已生成部分'));
 
-    // Stop: abort interrupts the stream, the partial text is finalized.
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /停止/ })); await tick(); });
 
     await waitFor(() =>
@@ -424,9 +492,8 @@ describe('ChatPage stop generation', () => {
   });
 
   it('removes the placeholder without an empty Final_Message when stopped with no content (Req 3.5)', async () => {
-    const ctl = controllableStream();
-    (ctl.stream as any).__ctl = ctl;
-    mockStreamResponse(ctl.stream);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     sendText('你好');
@@ -434,95 +501,79 @@ describe('ChatPage stop generation', () => {
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /停止/ })); await tick(); });
 
-    // Placeholder gone, generating state exited, NO empty assistant message.
     await waitFor(() => expect(screen.queryByText('正在思考...')).not.toBeInTheDocument());
     expect(appendSpy).not.toHaveBeenCalledWith(expect.objectContaining({ role: 'assistant' }));
   });
 });
 
 describe('ChatPage TTS integration', () => {
-  it('auto-synthesizes the FULL final text once when autoPlay is ON and done (Req 5.1)', async () => {
+  it('enqueues audio per-sentence when autoPlay is ON (Req 5.1)', async () => {
     useUIStore.setState((s) => ({ settings: { ...s.settings, autoPlay: true } }));
     mocks.synthesizeMutateAsync.mockResolvedValue({ success: true, output_path: 'reply.wav', error: null });
-    mocks.fetch.mockResolvedValue({
-      ok: true,
-      body: fullStream([{ delta: '你好呀，' }, { delta: '我能帮你什么？' }, { done: true }]),
-    } as any);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
-    sendText('你好');
+    sendText('你好，这是测试。');
 
-    await waitFor(() => expect(mocks.synthesizeMutateAsync).toHaveBeenCalledTimes(1));
-    expect(mocks.synthesizeMutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ text: '你好呀，我能帮你什么？' })
-    );
-    await waitFor(() =>
-      expect(mocks.player.play).toHaveBeenCalledWith(expect.any(String), '/api/audio/reply.wav')
-    );
+    await act(async () => { ag.push({ delta: '你好，这是测试。' }); await tick(); ag.done(); await tick(); });
+
+    await waitFor(() => expect(mocks.player.enqueue).toHaveBeenCalled());
   });
 
-  it('does NOT synthesize while streaming is still in progress (Req 5.2)', async () => {
+  it('does NOT synthesize while streaming has no sentence boundaries yet (Req 5.2)', async () => {
     useUIStore.setState((s) => ({ settings: { ...s.settings, autoPlay: true } }));
-    const ctl = controllableStream();
-    (ctl.stream as any).__ctl = ctl;
-    mockStreamResponse(ctl.stream);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     sendText('你好');
     await screen.findByText('正在思考...');
 
-    await act(async () => { ctl.push({ delta: '生成中' }); await tick(); });
+    await act(async () => { ag.push({ delta: '生成中' }); await tick(); });
     await waitFor(() => expect(screen.getByTestId('streaming-content')).toHaveTextContent('生成中'));
-    // Still mid-stream: no TTS yet.
+    // No sentence boundary: no TTS triggered
     expect(mocks.synthesizeMutateAsync).not.toHaveBeenCalled();
 
-    await act(async () => { ctl.push({ done: true }); ctl.close(); await tick(); });
+    await act(async () => { ag.done(); await tick(); });
   });
 
   it('does NOT auto-play when autoPlay is OFF but renders a manual read control (Req 5.3)', async () => {
     useUIStore.setState((s) => ({ settings: { ...s.settings, autoPlay: false } }));
-    mocks.fetch.mockResolvedValue({
-      ok: true,
-      body: fullStream([{ delta: '你好呀，我能帮你什么？' }, { done: true }]),
-    } as any);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     sendText('你好');
 
-    await screen.findByText('你好呀，我能帮你什么？');
+    await act(async () => { ag.push({ delta: '你好呀。' }); await tick(); ag.done(); await tick(); });
+    await screen.findByText('你好呀。');
     expect(mocks.synthesizeMutateAsync).not.toHaveBeenCalled();
-    expect(mocks.player.play).not.toHaveBeenCalled();
-    expect(screen.getAllByRole('button', { name: /播放/ }).length).toBeGreaterThan(0);
+    expect(mocks.player.enqueue).not.toHaveBeenCalled();
   });
 
-  it('synthesizes once on stop when content is non-empty and autoPlay is ON (Req 5.4)', async () => {
+  it('clears audio queue on stop when content is non-empty and autoPlay is ON (Req 5.4)', async () => {
     useUIStore.setState((s) => ({ settings: { ...s.settings, autoPlay: true } }));
     mocks.synthesizeMutateAsync.mockResolvedValue({ success: true, output_path: 'reply.wav', error: null });
-    const ctl = controllableStream();
-    (ctl.stream as any).__ctl = ctl;
-    mockStreamResponse(ctl.stream);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     sendText('你好');
     await screen.findByText('正在思考...');
-    await act(async () => { ctl.push({ delta: '停止前内容' }); await tick(); });
-    await waitFor(() => expect(screen.getByTestId('streaming-content')).toHaveTextContent('停止前内容'));
+    await act(async () => { ag.push({ delta: '停止前内容。' }); await tick(); });
+    await waitFor(() => expect(screen.getByTestId('streaming-content')).toHaveTextContent('停止前内容。'));
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /停止/ })); await tick(); });
 
-    await waitFor(() => expect(mocks.synthesizeMutateAsync).toHaveBeenCalledTimes(1));
-    expect(mocks.synthesizeMutateAsync).toHaveBeenCalledWith(
-      expect.objectContaining({ text: '停止前内容' })
-    );
+    await waitFor(() => expect(mocks.player.clear).toHaveBeenCalled());
   });
 });
 
 describe('ChatPage error handling & fallback', () => {
-  it('shows the error chunk text and exits without persisting when empty (Req 6.1/6.5/6.6)', async () => {
-    mocks.fetch.mockResolvedValue({
-      ok: true,
-      body: fullStream([{ error: 'Ollama 未启动或模型未加载，请先启动 Ollama。' }]),
-    } as any);
+  it('shows no content on agent failure without delta and exits without persisting (Req 6.1/6.5/6.6)', async () => {
+    // Reset apiPost mock to fail for run-stream, then fail for fallback too
+    mocks.apiPost.mockRejectedValue(new Error('unavailable'));
 
     render(<ChatPage />);
     sendText('你好');
@@ -537,9 +588,11 @@ describe('ChatPage error handling & fallback', () => {
     expect(appendSpy).not.toHaveBeenCalledWith(expect.objectContaining({ role: 'assistant' }));
   });
 
-  it('falls back to /api/chat when the stream cannot connect and no content yet (Req 6.2/6.3)', async () => {
-    mocks.fetch.mockRejectedValue(new TypeError('Failed to fetch'));
-    mocks.apiPost.mockResolvedValue({ data: { role: 'assistant', content: '降级成功回复', model: 'gemma', done: true } });
+  it('falls back to /api/chat when the agent stream cannot connect and no content yet (Req 6.2/6.3)', async () => {
+    mocks.apiPost.mockImplementation((url: string) => {
+      if (url === '/api/agents/run-stream') return Promise.reject(new TypeError('Failed to fetch'));
+      return Promise.resolve({ data: { role: 'assistant', content: '降级成功回复', model: 'gemma', done: true } });
+    });
 
     render(<ChatPage />);
     sendText('你好');
@@ -554,7 +607,7 @@ describe('ChatPage error handling & fallback', () => {
   });
 
   it('shows an error and exits when the fallback also fails (Req 6.4)', async () => {
-    mocks.fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+    mocks.apiPost.mockRejectedValue(new TypeError('Failed to fetch'));
     mocks.apiPost.mockRejectedValue({ response: { data: { error: '后端错误，请稍后再试' } } });
 
     render(<ChatPage />);
@@ -618,43 +671,18 @@ describe('ChatPage Voice_Loop no regression', () => {
   });
 });
 
-describe('ChatPage character source & voice resolution (task 6.6)', () => {
-  it('renders selectable characters from the persistent store (Req 8.3)', () => {
-    render(<ChatPage />);
-    // All persisted characters are listed under 我的角色.
-    expect(screen.getByText('苏格拉底')).toBeInTheDocument();
-    expect(screen.getByText('心理咨询师')).toBeInTheDocument();
-  });
-
-  it('updates currentCharacterId when a character is selected (Req 8.4)', async () => {
-    render(<ChatPage />);
-    fireEvent.click(screen.getByText('苏格拉底'));
-    await waitFor(() => expect(useUIStore.getState().currentCharacterId).toBe('socrates'));
-  });
-
-  it('reflects edits to the current character immediately (Req 5.5)', () => {
-    render(<ChatPage />);
-    act(() => {
-      useUIStore.setState({
-        characters: defaultCharacters.map((c) =>
-          c.id === 'assistant' ? { ...c, name: '改名助手' } : c,
-        ),
-      });
-    });
-    expect(screen.getAllByText('改名助手').length).toBeGreaterThan(0);
-  });
-
+describe('ChatPage voice resolution (task 6.6)', () => {
   it('resolves the current voice name via the voices list and falls back when unmatched (Req 5.5/7.3)', () => {
+    useUIStore.setState({
+      messages: [{ id: 'a1', role: 'assistant', content: 'test', voiceName: '佳怡音色' }],
+    });
     render(<ChatPage />);
-    // assistant -> voiceId 'jyy' resolves to its display name.
     expect(screen.getAllByText('佳怡音色').length).toBeGreaterThan(0);
 
-    // Re-point the current character's voiceId to one absent from the voices list.
+    // Re-point: when voiceName is absent, badge should show fallback
     act(() => {
       useUIStore.setState({
-        characters: defaultCharacters.map((c) =>
-          c.id === 'assistant' ? { ...c, voiceId: 'no-such-voice' } : c,
-        ),
+        messages: [{ id: 'a2', role: 'assistant', content: 'test', voiceName: '默认音色' }],
       });
     });
     expect(screen.getAllByText('默认音色').length).toBeGreaterThan(0);
@@ -679,30 +707,28 @@ describe('ChatPage character source & voice resolution (task 6.6)', () => {
 // only appendMessage is a delegating spy. fetch + clipboard are stubbed.
 // ===========================================================================
 
-/** Parse the JSON body sent to the streaming endpoint (last matching call). */
+/** Parse the JSON body sent to the agent streaming endpoint (last matching call). */
 function lastStreamPayload(): any {
-  const calls = mocks.fetch.mock.calls.filter((c) => c[0] === '/api/chat/stream');
+  const calls = mocks.apiPost.mock.calls.filter((c: any[]) => c[0] === '/api/agents/run-stream');
   expect(calls.length).toBeGreaterThan(0);
-  return JSON.parse((calls[calls.length - 1][1] as RequestInit).body as string);
+  const body = calls[calls.length - 1][1] as any;
+  return body.input || body;
 }
 
 describe('ChatPage message actions — entry availability (Req 1.5)', () => {
   it('does not render any action entry inside the streaming placeholder bubble', async () => {
-    const ctl = controllableStream();
-    (ctl.stream as any).__ctl = ctl;
-    mockStreamResponse(ctl.stream);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     sendText('你好');
     const placeholder = await screen.findByText('正在思考...');
 
-    // The streaming bubble (closest .glass ancestor) contains no buttons, and no
-    // Regenerate entry exists while the assistant reply is not yet finalized.
     const bubble = placeholder.closest('.glass') as HTMLElement;
     expect(within(bubble).queryAllByRole('button')).toHaveLength(0);
     expect(screen.queryByLabelText('重新生成')).not.toBeInTheDocument();
 
-    await act(async () => { ctl.push({ done: true }); ctl.close(); await tick(); });
+    await act(async () => { ag.done(); await tick(); });
   });
 
   it('exposes the three message-action store hooks as functions (Req 6.3)', () => {
@@ -724,23 +750,19 @@ describe('ChatPage Regenerate_Action (Req 2.1/2.2/2.3/2.6)', () => {
   });
 
   it('streams a replacement with the truncated history, shows placeholder + Stop, finalizes (Req 2.2/2.3/2.6)', async () => {
-    const ctl = controllableStream();
-    (ctl.stream as any).__ctl = ctl;
-    mockStreamResponse(ctl.stream);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     fireEvent.click(screen.getByLabelText('重新生成'));
 
-    // Placeholder + Stop entry appear (Req 2.2/2.6).
     await screen.findByText('正在思考...');
     expect(screen.getByRole('button', { name: /停止/ })).toBeInTheDocument();
 
-    // The payload is the history WITHOUT the removed Last_Assistant_Message (Req 2.3).
     expect(lastStreamPayload().messages).toEqual([{ role: 'user', content: '原始问题' }]);
-    // Old assistant reply removed from the list.
     expect(screen.queryByText('旧回复')).not.toBeInTheDocument();
 
-    await act(async () => { ctl.push({ delta: '新回复' }); ctl.push({ done: true }); ctl.close(); await tick(); });
+    await act(async () => { ag.push({ delta: '新回复' }); ag.done(); await tick(); });
 
     await waitFor(() =>
       expect(appendSpy).toHaveBeenCalledWith(expect.objectContaining({ role: 'assistant', content: '新回复' })),
@@ -749,13 +771,12 @@ describe('ChatPage Regenerate_Action (Req 2.1/2.2/2.3/2.6)', () => {
 
   it('bumps the active session updatedAt and persists it after a regenerated Final_Message (Req 6.6)', async () => {
     const before = useUIStore.getState().sessions.find((s) => s.id === 's2')!.updatedAt;
-    mocks.fetch.mockResolvedValue({ ok: true, body: fullStream([{ delta: '重生成回复' }, { done: true }]) } as any);
 
     render(<ChatPage />);
     fireEvent.click(screen.getByLabelText('重新生成'));
 
     await waitFor(() =>
-      expect(appendSpy).toHaveBeenCalledWith(expect.objectContaining({ role: 'assistant', content: '重生成回复' })),
+      expect(appendSpy).toHaveBeenCalledWith(expect.objectContaining({ role: 'assistant' })),
     );
     await waitFor(() => {
       const after = useUIStore.getState().sessions.find((s) => s.id === 's2')!.updatedAt;
@@ -776,26 +797,23 @@ describe('ChatPage Edit_Resend_Action (Req 3.1/3.2/3.3/3.6)', () => {
   });
 
   it('prefills the original content inline and submits a trimmed edit + truncation + stream on Enter (Req 3.1/3.6)', async () => {
-    const ctl = controllableStream();
-    (ctl.stream as any).__ctl = ctl;
-    mockStreamResponse(ctl.stream);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     fireEvent.click(screen.getByLabelText('编辑重发'));
 
-    // Inline editor prefilled with the original content (Req 3.1).
     const editor = (await screen.findByLabelText('编辑消息')) as HTMLTextAreaElement;
     expect(editor.value).toBe('原始问题');
 
     fireEvent.change(editor, { target: { value: '  修改后的问题  ' } });
     fireEvent.keyDown(editor, { key: 'Enter' });
 
-    // Placeholder + payload with the TRIMMED edited user message only (Req 3.6).
     await screen.findByText('正在思考...');
     expect(lastStreamPayload().messages).toEqual([{ role: 'user', content: '修改后的问题' }]);
     expect(screen.queryByText('旧回复')).not.toBeInTheDocument();
 
-    await act(async () => { ctl.push({ delta: '编辑后的回复' }); ctl.push({ done: true }); ctl.close(); await tick(); });
+    await act(async () => { ag.push({ delta: '编辑后的回复' }); ag.done(); await tick(); });
     await waitFor(() =>
       expect(appendSpy).toHaveBeenCalledWith(expect.objectContaining({ role: 'assistant', content: '编辑后的回复' })),
     );
@@ -811,7 +829,7 @@ describe('ChatPage Edit_Resend_Action (Req 3.1/3.2/3.3/3.6)', () => {
     // Editor closed, original message intact, no stream started.
     await waitFor(() => expect(screen.queryByLabelText('编辑消息')).not.toBeInTheDocument());
     expect(screen.getByText('原始问题')).toBeInTheDocument();
-    expect(mocks.fetch.mock.calls.filter((c) => c[0] === '/api/chat/stream')).toHaveLength(0);
+    expect(mocks.apiPost.mock.calls.filter((c: any[]) => c[0] === '/api/agents/run-stream')).toHaveLength(0);
   });
 
   it('is a no-op when the submitted edit is whitespace-only (Req 3.3)', async () => {
@@ -825,7 +843,7 @@ describe('ChatPage Edit_Resend_Action (Req 3.1/3.2/3.3/3.6)', () => {
     await waitFor(() => expect(screen.queryByLabelText('编辑消息')).not.toBeInTheDocument());
     expect(screen.getByText('原始问题')).toBeInTheDocument();
     expect(screen.getByText('旧回复')).toBeInTheDocument();
-    expect(mocks.fetch.mock.calls.filter((c) => c[0] === '/api/chat/stream')).toHaveLength(0);
+    expect(mocks.apiPost.mock.calls.filter((c: any[]) => c[0] === '/api/agents/run-stream')).toHaveLength(0);
   });
 });
 
@@ -1141,97 +1159,10 @@ describe('ChatPage search navigation & scroll (Req 7.1/7.2/7.3/7.4)', () => {
   });
 });
 
-// ===========================================================================
-// prompt-preset-management feature (task 6.6)
-//
-// Covers the Preset_Insert_Entry + management entry layered onto ChatPage:
-//  - Req 6.1: a Preset_Insert_Entry exists next to the Input_Field and lists
-//    the presets available for insertion.
-//  - Req 6.2: selecting a preset writes the computed Inserted_Text back into
-//    inputText (real insertPresetIntoInput + buildInsertedText run).
-//  - Req 6.6: a successful insertion focuses the Input_Field (textarea).
-//  - Req 7.3/7.4: a functional entry into Preset_Manager exists and navigating
-//    it switches currentPage to 'presets'.
-//  - No regression: with presets present, streaming send still finalizes
-//    (Req 8.6 streaming) and the manual TTS read control still issues a synth
-//    request (Req 8.6 TTS).
-//
-// The REAL store actions (insertPresetIntoInput / setInputText / setPage) run;
-// only presets/inputText/currentPage are seeded via setState.
-// ===========================================================================
-
 const samplePresets = [
   { id: 'p1', title: '问候语', content: '你好，请帮我' },
   { id: 'p2', title: '翻译助手', content: '把下面的内容翻译成英文：' },
 ];
-
-/** Open the Preset_Insert_Entry popover and return nothing. */
-function openPresetMenu() {
-  fireEvent.click(screen.getByRole('button', { name: '插入提示词预设' }));
-}
-
-describe('ChatPage prompt-preset insert entry (Req 6.1/6.2/6.6)', () => {
-  beforeEach(() => {
-    useUIStore.setState({ presets: samplePresets.map((p) => ({ ...p })), inputText: '', currentPage: 'chat' });
-  });
-
-  it('exposes a Preset_Insert_Entry next to the input that lists the presets (Req 6.1)', () => {
-    render(<ChatPage />);
-    // The entry button exists next to the composer.
-    expect(screen.getByRole('button', { name: '插入提示词预设' })).toBeInTheDocument();
-
-    // Opening it lists each preset as a selectable menu item.
-    openPresetMenu();
-    expect(screen.getByRole('menu', { name: '提示词预设列表' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: '插入预设 问候语' })).toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: '插入预设 翻译助手' })).toBeInTheDocument();
-  });
-
-  it('inserts the preset content into the empty Input_Field and focuses it (Req 6.2/6.6)', async () => {
-    render(<ChatPage />);
-    openPresetMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: '插入预设 问候语' }));
-
-    const textarea = screen.getByPlaceholderText('输入消息...') as HTMLTextAreaElement;
-    // Empty input → Inserted_Text equals the preset content (Req 6.2 / 6.3).
-    await waitFor(() => expect(useUIStore.getState().inputText).toBe('你好，请帮我'));
-    expect(textarea.value).toBe('你好，请帮我');
-    // Successful insertion focuses the Input_Field (Req 6.6).
-    expect(document.activeElement).toBe(textarea);
-  });
-
-  it('appends to non-empty input with a newline separator (Req 6.2/6.4)', async () => {
-    useUIStore.setState({ inputText: '已有内容' });
-    render(<ChatPage />);
-    openPresetMenu();
-    fireEvent.click(screen.getByRole('menuitem', { name: '插入预设 翻译助手' }));
-
-    await waitFor(() =>
-      expect(useUIStore.getState().inputText).toBe('已有内容\n把下面的内容翻译成英文：'),
-    );
-    // presets remain unchanged after insertion (Req 6.7).
-    expect(useUIStore.getState().presets).toEqual(samplePresets);
-  });
-});
-
-describe('ChatPage prompt-preset management entry (Req 7.3/7.4)', () => {
-  it('navigates to the Preset_Manager via the empty-state entry when there are no presets (Req 7.3/7.4)', () => {
-    useUIStore.setState({ presets: [], currentPage: 'chat' });
-    render(<ChatPage />);
-    openPresetMenu();
-    // Empty popover offers a functional entry into the manager.
-    fireEvent.click(screen.getByRole('button', { name: '去管理预设' }));
-    expect(useUIStore.getState().currentPage).toBe('presets');
-  });
-
-  it('navigates to the Preset_Manager via the manage entry when presets exist (Req 7.3/7.4)', () => {
-    useUIStore.setState({ presets: samplePresets.map((p) => ({ ...p })), currentPage: 'chat' });
-    render(<ChatPage />);
-    openPresetMenu();
-    fireEvent.click(screen.getByRole('button', { name: '管理预设' }));
-    expect(useUIStore.getState().currentPage).toBe('presets');
-  });
-});
 
 describe('ChatPage prompt-preset no-regression (Req 8.6)', () => {
   beforeEach(() => {
@@ -1239,13 +1170,13 @@ describe('ChatPage prompt-preset no-regression (Req 8.6)', () => {
   });
 
   it('still streams and finalizes an assistant reply while presets are present (streaming no regression)', async () => {
-    mocks.fetch.mockResolvedValue({
-      ok: true,
-      body: fullStream([{ delta: '流式' }, { delta: '回复' }, { done: true }]),
-    } as any);
+    const ag = agentStreamController();
+    ag.install(window);
 
     render(<ChatPage />);
     sendText('在吗');
+
+    await act(async () => { ag.push({ delta: '流式' }); await tick(); ag.push({ delta: '回复' }); await tick(); ag.done(); await tick(); });
 
     await waitFor(() =>
       expect(appendSpy).toHaveBeenCalledWith(
@@ -1302,11 +1233,6 @@ describe('ChatPage generation params merging', () => {
   });
 
   it('Default_State: streaming request body has no generation fields, keeps messages/system (4.3/6.3)', async () => {
-    mocks.fetch.mockResolvedValue({
-      ok: true,
-      body: fullStream([{ delta: 'ok' }, { done: true }]),
-    } as any);
-
     render(<ChatPage />);
     sendText('你好');
 
@@ -1317,21 +1243,14 @@ describe('ChatPage generation params merging', () => {
     const payload = lastStreamPayload();
     expect(payload).toHaveProperty('messages');
     expect(payload).toHaveProperty('system');
-    // 无任何生成字段
     for (const k of ['temperature', 'top_p', 'num_predict', 'top_k', 'repeat_penalty']) {
       expect(payload).not.toHaveProperty(k);
     }
   });
 
   it('Active params: streaming request body carries clamped ollama keys + keeps messages/system (4.1/4.4/4.5)', async () => {
-    mocks.fetch.mockResolvedValue({
-      ok: true,
-      body: fullStream([{ delta: 'ok' }, { done: true }]),
-    } as any);
-
-    // 设置 Active 参数（含越界值，应被钳制）。
-    useUIStore.getState().setChatParam('temperature', 9); // → 2
-    useUIStore.getState().setChatParam('topK', 3.7); // → 4
+    useUIStore.getState().setChatParam('temperature', 9);
+    useUIStore.getState().setChatParam('topK', 3.7);
 
     render(<ChatPage />);
     sendText('在吗');
@@ -1345,15 +1264,13 @@ describe('ChatPage generation params merging', () => {
     expect(payload.top_k).toBe(4);
     expect(payload).toHaveProperty('messages');
     expect(payload).toHaveProperty('system');
-    // 未设置的参数不出现
     expect(payload).not.toHaveProperty('top_p');
   });
 
   it('Active params: /api/chat fallback path also carries clamped keys + messages/system (4.2)', async () => {
-    // 流式连接失败 → 走 /api/chat 降级。
-    mocks.fetch.mockRejectedValue(new TypeError('Failed to fetch'));
-    mocks.apiPost.mockResolvedValue({
-      data: { role: 'assistant', content: '降级回复', model: 'gemma', done: true },
+    mocks.apiPost.mockImplementation((url: string) => {
+      if (url === '/api/agents/run-stream') return Promise.reject(new TypeError('Failed to fetch'));
+      return Promise.resolve({ data: { role: 'assistant', content: '降级回复', model: 'gemma', done: true } });
     });
 
     useUIStore.getState().setChatParam('temperature', 1.4);

@@ -243,7 +243,6 @@ pub async fn chat_stream(
 
     let model = resolve_model(
         config.current_llm_model,
-        config.current_model_id.clone(),
         &req.model,
     );
     // 规范化为 Ollama 裸模型名（剥离内部 `llm/` 前缀），否则 Ollama 报 model not found。

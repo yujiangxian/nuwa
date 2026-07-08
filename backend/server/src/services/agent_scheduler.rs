@@ -9,7 +9,11 @@ use uuid::Uuid;
 
 /// 全局单例：Agent 注册表 + 任务仓库 + 并发控制
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 static SCHEDULER: OnceLock<Arc<AgentScheduler>> = OnceLock::new();
+
+/// Consecutive Ollama failures for auto-recovery
+static OLLAMA_FAILURES: AtomicUsize = AtomicUsize::new(0);
 
 pub fn scheduler() -> Arc<AgentScheduler> {
     SCHEDULER
@@ -79,6 +83,12 @@ pub struct TaskEvent {
     pub progress: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    /// Streaming LLM delta — each token/chunk emitted as a separate event
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delta: Option<String>,
+    /// Streaming LLM reasoning/thinking tokens (DeepSeek-R1, Qwen3 thinking mode, etc.)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,6 +178,14 @@ impl AgentScheduler {
                     description: "文本输入 → LLM 回复 → TTS 合成语音".into(),
                 },
                 PipelineDef {
+                    id: "text_chat_stream".into(),
+                    name: "文本对话（流式）".into(),
+                    steps: vec![
+                        PipelineStep { label: "AI 思考".into(), agent_id: "llm".into() },
+                    ],
+                    description: "文本输入 → LLM 流式回复（无 TTS，前端自行合成语音）".into(),
+                },
+                PipelineDef {
                     id: "transcribe".into(),
                     name: "语音转文字".into(),
                     steps: vec![
@@ -255,6 +273,251 @@ impl AgentScheduler {
         Ok(task_id)
     }
 
+    /// Submit a streaming pipeline — LLM deltas are emitted via SSE in real time.
+    /// Only the `text_chat_stream` pipeline uses this; TTS stays on the frontend.
+    pub async fn submit_stream(
+        &self,
+        req: RunRequest,
+        _project_root: &PathBuf,
+    ) -> Result<String, String> {
+        let registry = self.registry();
+        let _pipeline = registry
+            .pipelines
+            .iter()
+            .find(|p| p.id == req.pipeline)
+            .ok_or_else(|| format!("未知流水线: {}", req.pipeline))?;
+
+        let task_id = format!("agent_{}", Uuid::new_v4().to_string()[..8].to_string());
+        let now = chrono::Utc::now().to_rfc3339();
+
+        let (tx, _) = broadcast::channel::<TaskEvent>(64);
+        {
+            let mut events = self.events.write().await;
+            events.insert(task_id.clone(), tx.clone());
+        }
+
+        let task = AgentTask {
+            id: task_id.clone(),
+            pipeline_id: req.pipeline.clone(),
+            status: TaskStatus::Running,
+            current_step: Some("AI 思考".into()),
+            result: None,
+            error: None,
+            created_at: now,
+        };
+        {
+            let mut tasks = self.tasks.write().await;
+            tasks.insert(task_id.clone(), task);
+        }
+
+        let input = req.input.clone();
+        let tid = task_id.clone();
+
+        // Send initial Running event
+        let _ = tx.send(TaskEvent {
+            task_id: tid.clone(),
+            status: TaskStatus::Running,
+            step: Some("AI 思考".into()),
+            progress: Some(0.0),
+            message: Some("流水线启动".into()),
+            delta: None,
+            thinking: None,
+        });
+
+        tokio::spawn(async move {
+            let send_messages = if let Some(msgs) = input.get("messages").and_then(|v| v.as_array()) {
+            msgs.iter()
+                .filter_map(|m| {
+                    let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("user");
+                    let content = m.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                    Some(serde_json::json!({"role": role, "content": content}))
+                })
+                .collect::<Vec<_>>()
+        } else {
+            let prompt = input
+                .get("text")
+                .or_else(|| input.get("prompt"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("你好");
+            vec![serde_json::json!({"role": "user", "content": prompt})]
+        };
+        let model_id = input
+            .get("model_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("gemma4:e4b");
+        let system_prompt = input.get("system").and_then(|v| v.as_str());
+
+        let mut ollama_msgs = Vec::new();
+        if let Some(sys) = system_prompt {
+            if !sys.is_empty() {
+                ollama_msgs.push(serde_json::json!({"role": "system", "content": sys}));
+            }
+        }
+        ollama_msgs.extend(send_messages);
+
+        let ollama_body = serde_json::json!({
+            "model": model_id,
+            "messages": ollama_msgs,
+            "stream": true,
+        });
+
+            // Ollama auto-recovery: add delay if recent failures
+            let failures = OLLAMA_FAILURES.load(Ordering::SeqCst);
+            if failures >= 3 {
+                tracing::warn!(
+                    "Ollama has {} consecutive failures, waiting 5s before retry",
+                    failures
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+
+            let client = reqwest::Client::new();
+            match client
+                .post("http://localhost:11434/api/chat")
+                .json(&ollama_body)
+                .timeout(std::time::Duration::from_secs(300))
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    // Reset consecutive Ollama failures on success
+                    let prev_failures = OLLAMA_FAILURES.swap(0, Ordering::SeqCst);
+                    if prev_failures > 0 {
+                        tracing::info!("Ollama connection restored");
+                    }
+                    use futures::StreamExt;
+                    let mut stream = resp.bytes_stream();
+                    let mut accumulated = String::new();
+                    let mut emitted_pos = 0usize;
+                    let mut buffer = String::new();
+                    let mut think_active = false;
+                    while let Some(Ok(chunk)) = stream.next().await {
+                        buffer.push_str(&String::from_utf8_lossy(&chunk));
+                        while let Some(pos) = buffer.find('\n') {
+                            let line = buffer[..pos].to_string();
+                            buffer = buffer[pos + 1..].to_string();
+                            if line.is_empty() { continue; }
+                            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
+                                let done = val["done"].as_bool() == Some(true);
+                                if let Some(delta) = val["message"]["content"].as_str() {
+                                    if !delta.is_empty() {
+                                        accumulated.push_str(delta);
+                                        let new_part = &accumulated[emitted_pos..];
+                                        let chars: Vec<char> = new_part.chars().collect();
+                                        let mut i = 0usize;
+                                        let mut chunk_buf = String::new();
+                                        while i < chars.len() {
+                                            if !think_active && i + 7 <= chars.len()
+                                                && chars[i..i+7].iter().collect::<String>() == "<think>"
+                                            {
+                                                if !chunk_buf.is_empty() {
+                                                    let _ = tx.send(TaskEvent {
+                                                        task_id: tid.clone(), status: TaskStatus::Running,
+                                                        step: Some("AI 回答".into()),
+                                                        progress: None, message: None,
+                                                        delta: Some(chunk_buf.clone()), thinking: None,
+                                                    });
+                                                    chunk_buf.clear();
+                                                }
+                                                think_active = true;
+                                                i += 7;
+                                                continue;
+                                            }
+                                            if think_active && i + 8 <= chars.len()
+                                                && chars[i..i+8].iter().collect::<String>() == "</think>"
+                                            {
+                                                if !chunk_buf.is_empty() {
+                                                    let _ = tx.send(TaskEvent {
+                                                        task_id: tid.clone(), status: TaskStatus::Running,
+                                                        step: Some("深度思考".into()),
+                                                        progress: None, message: None,
+                                                        delta: None, thinking: Some(chunk_buf.clone()),
+                                                    });
+                                                    chunk_buf.clear();
+                                                }
+                                                think_active = false;
+                                                i += 8;
+                                                continue;
+                                            }
+                                            chunk_buf.push(chars[i]);
+                                            i += 1;
+                                        }
+                                        if !chunk_buf.is_empty() {
+                                            if think_active {
+                                                let _ = tx.send(TaskEvent {
+                                                    task_id: tid.clone(), status: TaskStatus::Running,
+                                                    step: Some("深度思考".into()),
+                                                    progress: None, message: None,
+                                                    delta: None, thinking: Some(chunk_buf),
+                                                });
+                                            } else {
+                                                let _ = tx.send(TaskEvent {
+                                                    task_id: tid.clone(), status: TaskStatus::Running,
+                                                    step: Some("AI 回答".into()),
+                                                    progress: None, message: None,
+                                                    delta: Some(chunk_buf), thinking: None,
+                                                });
+                                            }
+                                        }
+                                        emitted_pos = accumulated.len();
+                                    }
+                                }
+                                if done {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    // Final text without thinking tags
+                    let final_text = accumulated
+                        .replace("<think>", "")
+                        .replace("</think>", "");
+
+                    let sched = scheduler();
+                    {
+                        let mut tasks = sched.tasks.write().await;
+                        if let Some(t) = tasks.get_mut(&tid) {
+                            t.status = TaskStatus::Completed;
+                            t.result = Some(serde_json::json!({ "text": final_text }).to_string());
+                        }
+                    }
+                    let _ = tx.send(TaskEvent {
+                        task_id: tid.clone(),
+                        status: TaskStatus::Completed,
+                        step: None,
+                        progress: Some(1.0),
+                        message: Some("流水线执行完成".into()),
+                        delta: None,
+                        thinking: None,
+                    });
+                }
+                Err(e) => {
+                    let failures = OLLAMA_FAILURES.fetch_add(1, Ordering::SeqCst) + 1;
+                    let error_msg = format!("Ollama 请求失败 (consecutive failure #{}): {}", failures, e);
+                    let sched = scheduler();
+                    {
+                        let mut tasks = sched.tasks.write().await;
+                        if let Some(t) = tasks.get_mut(&tid) {
+                            t.status = TaskStatus::Failed;
+                            t.error = Some(error_msg.clone());
+                        }
+                    }
+                    let _ = tx.send(TaskEvent {
+                        task_id: tid.clone(),
+                        status: TaskStatus::Failed,
+                        step: None,
+                        progress: None,
+                        message: Some(error_msg),
+                        delta: None,
+                        thinking: None,
+                    });
+                }
+            }
+        });
+
+        Ok(task_id)
+    }
+
     async fn run_pipeline(
         &self,
         task_id: &str,
@@ -269,6 +532,8 @@ impl AgentScheduler {
             step: None,
             progress: Some(0.0),
             message: Some("流水线启动".into()),
+            delta: None,
+            thinking: None,
         });
 
         let mut current_value: serde_json::Value = input.clone();
@@ -289,6 +554,8 @@ impl AgentScheduler {
                 step: Some(step.label.clone()),
                 progress: Some((i as f64) / total),
                 message: Some(format!("正在执行: {}", step.label)),
+                delta: None,
+                thinking: None,
             });
 
             // 获取该 agent 对应的 model 信号量（保证独占）
@@ -409,6 +676,8 @@ impl AgentScheduler {
                         step: Some(step.label.clone()),
                         progress: Some((i as f64 + 1.0) / total),
                         message: Some(format!("完成: {}", step.label)),
+                    delta: None,
+                    thinking: None,
                     });
                 }
                 Err(e) => {
@@ -432,6 +701,8 @@ impl AgentScheduler {
             step: None,
             progress: Some(1.0),
             message: Some("流水线执行完成".into()),
+            delta: None,
+            thinking: None,
         });
 
         Ok(())
@@ -455,6 +726,8 @@ impl AgentScheduler {
                 step: None,
                 progress: None,
                 message: Some(error),
+                delta: None,
+                thinking: None,
             });
         }
     }

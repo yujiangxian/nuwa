@@ -13,12 +13,20 @@ interface ToastState {
   removeToast: (id: string) => void;
 }
 
+const MAX_TOASTS = 5;
+
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
   addToast: (toast) => {
     const id = Date.now().toString() + Math.random().toString(36).slice(2, 6);
-    set((s) => ({ toasts: [...s.toasts, { ...toast, id }] }));
-    // Auto remove
+    set((s) => {
+      const updated = [...s.toasts, { ...toast, id }];
+      // Enforce max visible count: remove oldest when exceeding limit
+      if (updated.length > MAX_TOASTS) {
+        return { toasts: updated.slice(updated.length - MAX_TOASTS) };
+      }
+      return { toasts: updated };
+    });
     setTimeout(() => {
       set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
     }, toast.duration ?? 3000);

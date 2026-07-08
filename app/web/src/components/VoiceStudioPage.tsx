@@ -23,6 +23,78 @@ function formatDuration(sec: number | null | undefined): string | null {
 }
 
 /**
+ * WaveformCanvas：从音频 URL 解码并在 80x30 canvas 上渲染波形峰值。
+ * 使用 AudioContext 离线解码，提取峰值后绘制竖条。
+ */
+function WaveformCanvas({ audioUrl }: { audioUrl: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let aborted = false;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    void (async () => {
+      try {
+        const res = await fetch(audioUrl);
+        if (!res.ok || aborted) return;
+        const buffer = await res.arrayBuffer();
+        if (aborted) return;
+        const audioCtx = new AudioContext();
+        const audioBuffer = await audioCtx.decodeAudioData(buffer);
+        if (aborted) { await audioCtx.close(); return; }
+
+        // 提取单声道峰值：将多声道合并取绝对值最大值，再按列降采样到 canvas 宽度。
+        const raw = audioBuffer.getChannelData(0);
+        const w = canvas.width;
+        const h = canvas.height;
+        const samplesPerBar = Math.floor(raw.length / w) || 1;
+        const peaks: number[] = [];
+        for (let i = 0; i < w; i++) {
+          let max = 0;
+          for (let j = 0; j < samplesPerBar; j++) {
+            const idx = i * samplesPerBar + j;
+            if (idx < raw.length) {
+              const v = Math.abs(raw[idx]);
+              if (v > max) max = v;
+            }
+          }
+          peaks.push(max);
+        }
+        // 归一化到 [0, h*0.8]，留上下边距。
+        const peakMax = Math.max(...peaks, 0.001);
+        const norm = peaks.map((p) => (p / peakMax) * (h * 0.8));
+
+        ctx.clearRect(0, 0, w, h);
+        const barW = Math.max(1, w / w - 0.5);
+        for (let i = 0; i < norm.length; i++) {
+          const barH = Math.max(1, norm[i]);
+          const y = (h - barH) / 2;
+          ctx.fillStyle = 'rgba(72,202,228,0.35)';
+          ctx.fillRect(i * (w / w), y, barW, barH);
+        }
+        await audioCtx.close();
+      } catch {
+        // 解码失败：静默降级，不渲染波形。
+      }
+    })();
+
+    return () => { aborted = true; };
+  }, [audioUrl]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={80}
+      height={30}
+      style={{ width: 80, height: 30, borderRadius: 6, display: 'block' }}
+    />
+  );
+}
+
+/**
  * 读取当前 TTS 模型 ID：优先 `current_models.tts`，回退兼容字段 `current_tts_model`。
  * 后端 `AppConfig` 实际包含这些字段（前端类型清理见任务 11.2），此处做容忍式读取。
  */
@@ -61,6 +133,7 @@ export default function VoiceStudioPage() {
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
   const [generatedPath, setGeneratedPath] = useState<string | null>(null);
   const [synthError, setSynthError] = useState<string | null>(null);
+  const [synthHistory, setSynthHistory] = useState<Array<{ path: string; text: string; time: number }>>([]);
   const isGenerating = synthesize.isPending;
 
   // 音色加载完成且尚未选择时，默认选中第一个，保证 ref_audio 有值
@@ -185,7 +258,8 @@ export default function VoiceStudioPage() {
   };
 
   const handleSynthesize = async () => {
-    if (!synthText.trim() || isGenerating) return;
+    if (!synthText.trim()) { addToast({ message: '请输入要合成的文本', type: 'warning' }); return; }
+    if (isGenerating) return;
     setSynthError(null);
     setGeneratedPath(null);
     player.stop();
@@ -199,6 +273,7 @@ export default function VoiceStudioPage() {
       if (data.success && data.output_path) {
         const path = data.output_path;
         setGeneratedPath(path);
+        setSynthHistory((prev) => [...prev, { path, text: synthText, time: Date.now() }]);
         addToast({ message: '合成完成', type: 'success' });
         if (autoPlay) {
           void player.play(SYNTH_KEY, `/api/audio/${path}`);
@@ -222,7 +297,7 @@ export default function VoiceStudioPage() {
     player.stop();
     try {
       let segments;
-      try { segments = JSON.parse(synthScript); } catch { setSynthError('JSON 格式错误，请检查脚本'); return; }
+      try { segments = JSON.parse(synthScript); } catch { setSynthError('JSON 格式错误，请检查脚本'); setScriptGenerating(false); return; }
       if (!Array.isArray(segments)) { setSynthError('脚本必须是 JSON 数组'); return; }
       setScriptGenerating(true);
       const { data } = await apiClient.post('/api/inference/tts/script', {
@@ -234,6 +309,7 @@ export default function VoiceStudioPage() {
       setScriptGenerating(false);
       if (data.success && data.output_path) {
         setGeneratedPath(data.output_path);
+        setSynthHistory((prev) => [...prev, { path: data.output_path, text: synthScript, time: Date.now() }]);
         addToast({ message: '多段合成完成', type: 'success' });
         if (autoPlay) void player.play(SYNTH_KEY, `/api/audio/${data.output_path}`);
       } else {
@@ -348,6 +424,11 @@ export default function VoiceStudioPage() {
                           )}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Waveform visualization */}
+                    <div className="mt-3">
+                      <WaveformCanvas audioUrl={voiceAudioUrl(v.id)} />
                     </div>
 
                     <div className="flex items-center gap-2 mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
@@ -468,6 +549,7 @@ export default function VoiceStudioPage() {
                           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                           if (audioBlob.size < 1000) {
                             addToast({ message: '录音太短，请重新录制', type: 'warning' });
+                            setIsTranscribing(false);
                             return;
                           }
 
@@ -556,19 +638,41 @@ export default function VoiceStudioPage() {
                   {voices.map((v) => {
                     const active = v.id === selectedVoiceId;
                     return (
-                      <button
+                      <div
                         key={v.id}
-                        onClick={() => setSelectedVoiceId(v.id)}
-                        className="flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all"
+                        className="flex items-center gap-1 rounded-xl transition-all"
                         style={{
                           background: active ? 'rgba(72,202,228,0.1)' : 'transparent',
                           border: `1px solid ${active ? 'rgba(72,202,228,0.3)' : 'var(--border)'}`,
-                          cursor: 'pointer',
                         }}
                       >
-                        <User size={16} style={{ color: active ? 'var(--primary)' : 'var(--text-secondary)', flexShrink: 0 }} />
-                        <span className="text-xs font-medium truncate" style={{ color: active ? 'var(--primary)' : 'var(--text-primary)' }}>{v.name}</span>
-                      </button>
+                        <button
+                          onClick={() => setSelectedVoiceId(v.id)}
+                          className="flex items-center gap-2 px-3 py-2 text-left flex-1 min-w-0"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <User size={16} style={{ color: active ? 'var(--primary)' : 'var(--text-secondary)', flexShrink: 0 }} />
+                          <span className="text-xs font-medium truncate" style={{ color: active ? 'var(--primary)' : 'var(--text-primary)' }}>{v.name}</span>
+                        </button>
+                        {v.path && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); void player.play(`voice-preview-${v.id}`, `/api/audio/${v.path}`); }}
+                            className="flex items-center justify-center shrink-0 mr-1"
+                            style={{
+                              width: 24, height: 24, borderRadius: 6,
+                              color: 'var(--primary)', background: 'rgba(72,202,228,0.08)',
+                              border: 'none', cursor: 'pointer',
+                            }}
+                            title={`试听 ${v.name}`}
+                          >
+                            {player.isPlaying(`voice-preview-${v.id}`) ? <Square size={10} fill="currentColor" /> : <Play size={10} fill="currentColor" />}
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -581,7 +685,7 @@ export default function VoiceStudioPage() {
                 <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>合成模式</span>
                 <div className="flex rounded-lg p-0.5" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                   {(['single','script'] as const).map(m => (
-                    <button key={m} onClick={() => { setSynthMode(m); setGeneratedPath(null); setSynthError(null); }}
+                    <button key={m} onClick={() => { player.stop(); setSynthMode(m); setGeneratedPath(null); setSynthError(null); }}
                       className="px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer"
                       style={{ background: synthMode === m ? 'var(--primary)' : 'transparent', color: synthMode === m ? 'var(--bg)' : 'var(--text-secondary)' }}>
                       {m === 'single' ? '单句' : '多段脚本'}
@@ -644,6 +748,37 @@ export default function VoiceStudioPage() {
                 </div>
               )}
             </div>
+
+            {/* Synthesis history */}
+            {synthHistory.length > 0 && (
+              <div className="glass glow-edge rounded-2xl p-5">
+                <h3 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>合成历史</h3>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {[...synthHistory].reverse().map((entry, idx) => {
+                    const historyKey = `synth-history-${entry.time}`;
+                    const isPlayingHistory = player.isPlaying(historyKey);
+                    return (
+                      <div key={`${entry.time}-${idx}`} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                        <button
+                          onClick={() => player.play(historyKey, `/api/audio/${entry.path}`)}
+                          className="flex items-center justify-center shrink-0"
+                          style={{ width: 28, height: 28, borderRadius: 8, color: 'var(--primary)', background: 'rgba(72,202,228,0.08)', border: 'none', cursor: 'pointer' }}
+                          title={isPlayingHistory ? '停止' : '重播'}
+                        >
+                          {isPlayingHistory ? <Square size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
+                        </button>
+                        <span className="text-xs truncate flex-1" style={{ color: 'var(--text-secondary)' }}>
+                          {entry.text.length > 50 ? entry.text.slice(0, 50) + '...' : entry.text}
+                        </span>
+                        <span className="text-[10px] font-mono shrink-0" style={{ color: 'var(--text-muted)' }}>
+                          {new Date(entry.time).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

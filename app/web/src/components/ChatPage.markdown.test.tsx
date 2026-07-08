@@ -21,7 +21,7 @@ import type { ChatDb, PersistedMessage } from '@/lib/chatDb';
 
 const mocks = vi.hoisted(() => ({
   transcribeMutateAsync: vi.fn(),
-  synthesizeMutateAsync: vi.fn(),
+  synthesizeMutateAsync: vi.fn(() => Promise.resolve({ success: true, output_path: 'tts.wav', error: null })),
   apiPost: vi.fn(),
   fetch: vi.fn(),
   addToast: vi.fn(),
@@ -40,6 +40,10 @@ const mocks = vi.hoisted(() => ({
     play: vi.fn(),
     stop: vi.fn(),
     isPlaying: vi.fn((_key: string) => false),
+    enqueue: vi.fn(),
+    playNow: vi.fn(),
+    clear: vi.fn(),
+    getQueueLength: vi.fn(() => 0),
   },
 }));
 
@@ -50,7 +54,7 @@ vi.mock('@/hooks/useApi', () => ({
   useVoices: () => ({ data: mocks.voicesData }),
 }));
 vi.mock('@/hooks/useRecorder', () => ({ useRecorder: () => mocks.recorder }));
-vi.mock('@/hooks/useAudioPlayer', () => ({ useAudioPlayer: () => mocks.player }));
+vi.mock('@/hooks/useAudioQueue', () => ({ useAudioQueue: () => mocks.player }));
 vi.mock('@/api/client', () => ({ apiClient: { post: mocks.apiPost } }));
 vi.mock('@/store/toastStore', () => {
   const useToastStore: any = (selector: any) => selector({ addToast: mocks.addToast });
@@ -128,7 +132,6 @@ const baseSessions: ChatSession[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubGlobal('fetch', mocks.fetch);
 
   mocks.player.isPlaying.mockReturnValue(false);
   mocks.player.play.mockResolvedValue(undefined);
@@ -136,6 +139,32 @@ beforeEach(() => {
   mocks.voicesData = [
     { id: 'jyy', name: '佳怡音色', path: '/voices/jyy.wav', transcript: '你好世界', sample_rate: 24000 },
   ];
+  // Mock agent API for streaming
+  mocks.apiPost.mockImplementation((url: string) => {
+    if (url === '/api/agents/run-stream') {
+      return Promise.resolve({ data: { success: true, task_id: 'agent_md_test' } });
+    }
+    return Promise.resolve({ data: { role: 'assistant', content: '降级回复', model: 'gemma', done: true } });
+  });
+  // Mock EventSource auto-complete
+  (window as any).EventSource = class {
+    onmessage: ((e: any) => void) | null = null;
+    onerror: (() => void) | null = null;
+    constructor() {
+      const inst = this;
+      setTimeout(() => {
+        if (inst.onmessage) {
+          inst.onmessage({ data: JSON.stringify({ delta: '默认回复', status: 'running' }) });
+        }
+        setTimeout(() => {
+          if (inst.onmessage) {
+            inst.onmessage({ data: JSON.stringify({ status: 'completed' }) });
+          }
+        }, 50);
+      }, 50);
+    }
+    close() {}
+  };
   mocks.fetch.mockResolvedValue({ ok: true, body: undefined } as any);
 
   const fakeDb = makeFakeChatDb();
@@ -167,23 +196,14 @@ afterEach(() => {
 
 describe('ChatPage 流式气泡无消息操作入口（Req 3.4）', () => {
   it('流式态 streaming-content 区域不渲染任何 message-actions testid', async () => {
-    const ctl = controllableStream();
-    (ctl.stream as any).__ctl = ctl;
-    mockStreamResponse(ctl.stream);
-
     render(<ChatPage />);
     sendText('你好');
     await screen.findByText('正在思考...');
 
-    await act(async () => { ctl.push({ delta: '# 流式标题\n**生成中**' }); await tick(); });
     const streaming = await screen.findByTestId('streaming-content');
-
-    // 流式气泡内复用 MarkdownMessage 渲染，但其外层包裹气泡不包含任何 message-actions 入口。
     const streamingBubble = streaming.closest('div.flex.gap-3') as HTMLElement;
     expect(streamingBubble).not.toBeNull();
     expect(streamingBubble.querySelector('[data-testid^="message-actions"]')).toBeNull();
-
-    await act(async () => { ctl.push({ done: true }); ctl.close(); await tick(); });
   });
 });
 
