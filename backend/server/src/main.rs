@@ -2,16 +2,42 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use voxcpm_server::{config_persist, middleware, routes, services, state};
+use nuwa_server::{config_persist, constants, middleware, routes, services, state, util};
 
 use state::AppState;
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::info!("Shutdown signal received, draining connections...");
+}
 
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "voxcpm_server=debug,tower_http=debug".into()),
+                .unwrap_or_else(|_| "nuwa_server=debug,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -30,23 +56,63 @@ async fn main() {
         app_state.config.models_dir = "models".to_string();
     }
 
-    // 解析项目根目录（基于 exe 路径推断）
-    let project_root = std::env::current_exe()
-        .ok()
-        .and_then(|exe| {
-            exe.parent()
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .map(|p| p.to_path_buf())
-        })
-        .unwrap_or_else(|| {
-            std::env::current_dir()
-                .ok()
-                .and_then(|cd| cd.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()))
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-        });
+    let project_root = util::project_root();
+
+    // 清理过期的临时文件（超过 24 小时的 nuwa_* 文件）
+    {
+        let temp_dir = std::env::temp_dir();
+        if let Ok(entries) = std::fs::read_dir(&temp_dir) {
+            let cutoff = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .saturating_sub(std::time::Duration::from_secs(86400));
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("nuwa_") {
+                    if let Ok(meta) = entry.metadata() {
+                        if let Ok(mtime) = meta.modified() {
+                            if mtime.duration_since(std::time::UNIX_EPOCH).unwrap_or_default() < cutoff {
+                                let _ = std::fs::remove_file(entry.path());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 清理过期的 TTS 输出文件（阈值由 NUWA_TTS_RETENTION_DAYS 环境变量控制，默认 7 天）
+    {
+        let output_dir = project_root.join("output");
+        let retention = constants::tts_retention_secs();
+        let cutoff = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .saturating_sub(std::time::Duration::from_secs(retention));
+        if let Ok(entries) = std::fs::read_dir(&output_dir) {
+            let mut cleaned = 0u64;
+            let mut cleaned_bytes = 0u64;
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map(|e| e == "wav").unwrap_or(false) {
+                    if let Ok(meta) = entry.metadata() {
+                        if let Ok(mtime) = meta.modified() {
+                            if mtime.duration_since(std::time::UNIX_EPOCH).unwrap_or_default() < cutoff {
+                                cleaned_bytes += meta.len();
+                                if std::fs::remove_file(&path).is_ok() {
+                                    cleaned += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if cleaned > 0 {
+                tracing::info!(cleaned, cleaned_mb = cleaned_bytes / 1_048_576, "Cleaned stale TTS output files");
+            }
+        }
+    }
 
     // 启动时扫描模型目录
     let models_dir = std::path::PathBuf::from(&app_state.config.models_dir);
@@ -56,32 +122,52 @@ async fn main() {
         models_dir
     };
 
-    tracing::info!("Scanning models directory: {}", models_dir.display());
+    tracing::info!(models_dir = %models_dir.display(), "Scanning models directory");
     let mut scanned = services::model_scanner::scan_models_dir(&models_dir);
-    // 同时扫描 Ollama 模型
     let ollama_models = services::model_scanner::scan_ollama_models().await;
     scanned.extend(ollama_models);
     scanned.sort_by(|a, b| a.name.cmp(&b.name));
     app_state.models = scanned;
-    tracing::info!("Found {} models", app_state.models.len());
+    tracing::info!(count = app_state.models.len(), "Model scan complete");
     for m in &app_state.models {
-        tracing::info!("  - {} ({}, {} MB, {} files)", m.name, m.model_type, m.size_mb, m.files);
+        tracing::info!(name = %m.name, model_type = %m.model_type, size_mb = m.size_mb, files = m.files, "  model");
     }
 
-    // 如果配置中有 current_model_id，校验它是否存在于已扫描的模型中
-    if let Some(ref current_id) = app_state.config.current_model_id {
-        if !app_state.models.iter().any(|m| &m.id == current_id) {
-            tracing::warn!(
-                "配置的 current_model_id '{}' 不存在于已扫描模型中，已清除",
-                current_id
-            );
-            app_state.config.current_model_id = None;
+    // 校验所有已配置模型是否存在于扫描结果中（兼容带/不带类型前缀的 ID）
+    let all_ids: Vec<String> = app_state.models.iter().map(|m| m.id.clone()).collect();
+    for (model_type, model_id) in app_state.config.current_models.clone() {
+        let found = all_ids.iter().any(|id| {
+            id == &model_id || id == &format!("{}/{}", model_type, model_id)
+        });
+        if !found {
+            tracing::warn!(%model_type, %model_id, "Configured model not found in scanned models, removing");
+            app_state.config.current_models.remove(&model_type);
+        }
+    }
+    if let Some(ref id) = app_state.config.current_llm_model.clone() {
+        let found = all_ids.iter().any(|m| m == id || m == &format!("llm/{}", id));
+        if !found {
+            tracing::warn!(%id, "current_llm_model not found, clearing");
+            app_state.config.current_llm_model = None;
+        }
+    }
+    if let Some(ref id) = app_state.config.current_asr_model.clone() {
+        let found = all_ids.iter().any(|m| m == id || m == &format!("asr/{}", id));
+        if !found {
+            tracing::warn!(%id, "current_asr_model not found, clearing");
+            app_state.config.current_asr_model = None;
+        }
+    }
+    if let Some(ref id) = app_state.config.current_tts_model.clone() {
+        let found = all_ids.iter().any(|m| m == id || m == &format!("tts/{}", id));
+        if !found {
+            tracing::warn!(%id, "current_tts_model not found, clearing");
+            app_state.config.current_tts_model = None;
         }
     }
 
     // 启动恢复：从 Voice_Library_Store + Voices_Directory 对账恢复音色库
     {
-        // 解析 voices_dir 绝对路径（空则回退默认 assets/datasets/voices）
         let voices_dir_rel = {
             let v = app_state.config.voices_dir.trim();
             if v.is_empty() {
@@ -97,10 +183,8 @@ async fn main() {
             voices_dir
         };
 
-        // 读取持久化 store（缺失/空/损坏 → 空 Vec）
         let store_entries = services::voice_library::load_store(&voices_dir);
 
-        // 列出目录内受支持音频文件名（目录不存在则空）
         let existing_files: Vec<String> = std::fs::read_dir(&voices_dir)
             .ok()
             .map(|rd| {
@@ -112,31 +196,65 @@ async fn main() {
             })
             .unwrap_or_default();
 
-        // 对账：保留文件仍存在的条目，补登记未登记的受支持文件
         let original_ids: std::collections::HashSet<String> =
             store_entries.iter().map(|v| v.id.clone()).collect();
         let reconciled = services::voice_library::reconcile_library(store_entries, &existing_files);
         let reconciled_ids: std::collections::HashSet<String> =
             reconciled.iter().map(|v| v.id.clone()).collect();
 
-        // 若发生变化（补登记或丢弃缺失条目）则回写持久化
         if original_ids != reconciled_ids {
             if let Err(e) = services::voice_library::save_library(&voices_dir, &reconciled) {
-                tracing::warn!("回写音色库失败: {}", e);
+                tracing::warn!(error = %e, "Failed to persist voice library");
             }
         }
 
-        tracing::info!("Recovered {} voices from {}", reconciled.len(), voices_dir.display());
+        tracing::info!(count = reconciled.len(), voices_dir = %voices_dir.display(), "Voices recovered");
         app_state.voices = reconciled;
     }
 
     let state = Arc::new(RwLock::new(app_state));
 
+    // CORS: read allowed origins from env, default to localhost:5173
+    let allowed_origins: Vec<String> = std::env::var("NUWA_ALLOWED_ORIGINS")
+        .ok()
+        .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
+        .unwrap_or_else(|| vec!["http://localhost:5173".to_string()]);
+
     let app = routes::create_router()
-        .layer(middleware::cors())
+        .layer(axum::middleware::from_fn(middleware::inject_security_headers))
+        .layer(tower_http::limit::RequestBodyLimitLayer::new(50 * 1024 * 1024))
+        .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(middleware::cors(&allowed_origins))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
-    tracing::info!("Nuwa server listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, app).await.unwrap();
+    let port: u16 = std::env::var("NUWA_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(8080);
+
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::error!(error = %e, addr = %addr, "Failed to bind port");
+            std::process::exit(1);
+        });
+    tracing::info!(addr = %listener.local_addr().unwrap(), "Nuwa server listening");
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+        .unwrap_or_else(|e| {
+            tracing::error!(error = %e, "Server error");
+        });
+
+    // Cleanup temp files on shutdown
+    tracing::info!("Server stopped, cleaning up temporary files");
+    if let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            if name.to_string_lossy().starts_with("nuwa_") {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
 }

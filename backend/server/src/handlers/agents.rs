@@ -42,6 +42,27 @@ pub async fn run_pipeline(
     }
 }
 
+/// POST /api/agents/run-stream — 执行一个流式流水线（LLM deltas 通过 SSE 实时推送）
+pub async fn run_pipeline_stream(
+    State(state): State<Arc<RwLock<AppState>>>,
+    Json(req): Json<RunRequest>,
+) -> Json<serde_json::Value> {
+    let project_root = std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    drop(state);
+
+    match scheduler().submit_stream(req, &project_root).await {
+        Ok(task_id) => Json(serde_json::json!({
+            "success": true,
+            "task_id": task_id,
+        })),
+        Err(e) => Json(serde_json::json!({
+            "success": false,
+            "error": e,
+        })),
+    }
+}
+
 /// GET /api/agents/tasks/:id — 查询任务状态
 pub async fn get_task(Path(task_id): Path<String>) -> Json<serde_json::Value> {
     let sched = scheduler();

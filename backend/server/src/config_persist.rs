@@ -4,13 +4,19 @@ use crate::state::AppConfig;
 
 const CONFIG_FILE: &str = "config.json";
 
-/// 获取配置文件路径（与可执行文件同级目录）
+/// 获取配置文件路径。
+///
+/// 优先级：
+/// 1. 环境变量 `NUWA_CONFIG`（指向具体 .json 文件路径）
+/// 2. 项目根目录下的 `config.json`
 pub fn config_path() -> std::path::PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(CONFIG_FILE)
+    if let Ok(p) = std::env::var("NUWA_CONFIG") {
+        let path = std::path::PathBuf::from(&p);
+        if path.exists() || path.parent().map(|d| d.exists()).unwrap_or(false) {
+            return path;
+        }
+    }
+    crate::util::project_root().join(CONFIG_FILE)
 }
 
 /// 从文件加载配置
@@ -21,6 +27,25 @@ pub fn load_config() -> Option<AppConfig> {
         return None;
     }
     let content = std::fs::read_to_string(&path).ok()?;
+
+    // Warn about unknown config keys (won't break loading, but flags typos)
+    if let Ok(raw) = serde_json::from_str::<serde_json::Value>(&content) {
+        if let Some(obj) = raw.as_object() {
+            let known = std::collections::HashSet::from([
+                "models_dir", "output_dir", "voices_dir",
+                "backend", "threads", "default_cfg", "default_timesteps",
+                "current_llm_model", "current_asr_model", "current_tts_model",
+                "current_models", "current_mode", "current_voice_id",
+                "theme", "model_meta",
+            ]);
+            for key in obj.keys() {
+                if !known.contains(key.as_str()) {
+                    tracing::warn!(key = %key, "Unknown key in config.json — typo or legacy field?");
+                }
+            }
+        }
+    }
+
     let mut cfg = match serde_json::from_str::<AppConfig>(&content) {
         Ok(cfg) => cfg,
         Err(e) => {
@@ -28,28 +53,6 @@ pub fn load_config() -> Option<AppConfig> {
             return None;
         }
     };
-
-    // ========== 向后兼容：旧版 current_model_id 迁移 ==========
-    if let Some(ref old_id) = cfg.current_model_id {
-        if cfg.current_llm_model.is_none() && old_id.starts_with("llm/") {
-            cfg.current_llm_model = Some(old_id.clone());
-            cfg.current_models.insert("llm".to_string(), old_id.clone());
-            tracing::info!("配置迁移: current_model_id ({}) → current_llm_model", old_id);
-        }
-        if cfg.current_asr_model.is_none() && old_id.starts_with("asr/") {
-            cfg.current_asr_model = Some(old_id.clone());
-            cfg.current_models.insert("asr".to_string(), old_id.clone());
-            tracing::info!("配置迁移: current_model_id ({}) → current_asr_model", old_id);
-        }
-        if cfg.current_tts_model.is_none() && old_id.starts_with("tts/") {
-            cfg.current_tts_model = Some(old_id.clone());
-            cfg.current_models.insert("tts".to_string(), old_id.clone());
-            tracing::info!("配置迁移: current_model_id ({}) → current_tts_model", old_id);
-        }
-        cfg.current_model_id = None;
-        // 立即保存迁移后的配置
-        let _ = save_config(&cfg);
-    }
 
     // ========== 同步旧字段到 current_models ==========
     if let Some(ref id) = cfg.current_llm_model {
@@ -66,13 +69,16 @@ pub fn load_config() -> Option<AppConfig> {
     Some(cfg)
 }
 
-/// 保存配置到文件
+/// 保存配置到文件（原子写入：先写临时文件，再 rename）。
 pub fn save_config(config: &AppConfig) -> Result<(), String> {
     let path = config_path();
     let content = serde_json::to_string_pretty(config)
         .map_err(|e| format!("序列化配置失败: {}", e))?;
-    std::fs::write(&path, content)
-        .map_err(|e| format!("写入配置文件失败 ({}): {}", path.display(), e))?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, &content)
+        .map_err(|e| format!("写入临时配置文件失败 ({}): {}", tmp.display(), e))?;
+    std::fs::rename(&tmp, &path)
+        .map_err(|e| format!("重命名配置文件失败 ({}): {}", path.display(), e))?;
     tracing::info!("配置已保存到 {}", path.display());
     Ok(())
 }

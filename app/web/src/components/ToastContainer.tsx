@@ -22,7 +22,7 @@ export default function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2" style={{ maxWidth: 360 }}>
+    <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2" style={{ maxWidth: 360 }} role="status" aria-live="polite">
       {toasts.map((toast) => {
         const Icon = iconMap[toast.type];
         const colors = colorMap[toast.type];

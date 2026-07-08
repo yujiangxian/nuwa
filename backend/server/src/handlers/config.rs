@@ -46,6 +46,15 @@ pub async fn set_model(
     let mut state = state.write().await;
     let old_config = state.config.clone();
 
+    // Validate model_type against known set
+    const VALID_MODEL_TYPES: &[&str] = &["llm", "asr", "tts"];
+
+    if !VALID_MODEL_TYPES.contains(&req.model_type.as_str()) {
+        return Err(Json(serde_json::json!({
+            "error": format!("不支持的模型类型: {}，有效值: {:?}", req.model_type, VALID_MODEL_TYPES)
+        })));
+    }
+
     // 更新 current_models HashMap
     state.config.current_models.insert(req.model_type.clone(), req.model_id.clone());
 

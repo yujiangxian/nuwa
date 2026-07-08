@@ -9,9 +9,9 @@ use crate::services::downloader::ChunkedDownloader;
 pub struct ScanProgress {
     pub phase: String,
     pub current_dir: Option<String>,
-    pub total_dirs: i32,
-    pub processed_dirs: i32,
-    pub models_found: i32,
+    pub total_dirs: u32,
+    pub processed_dirs: u32,
+    pub models_found: u32,
 }
 
 /// 共享应用状态（被 Axum State 提取器使用）。
@@ -69,11 +69,12 @@ impl Default for ModelMeta {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
-    pub voxcpm_tts_path: Option<String>,
-    pub voxcpm_server_path: Option<String>,
+    // ========== 路径配置 ==========
     pub models_dir: String,
     pub output_dir: String,
     pub voices_dir: String,
+
+    // ========== 推理配置 ==========
     pub backend: String,
     pub threads: i32,
     pub default_cfg: f32,
@@ -81,34 +82,21 @@ pub struct AppConfig {
 
     // ========== 模型配置（按类型分离）==========
     /// 当前 LLM 对话模型（Ollama 模型名）
-    /// 示例: "gemma4:e4b"
     pub current_llm_model: Option<String>,
-
     /// 当前 ASR 语音识别模型
-    /// 示例: "asr/paraformer-large"
     pub current_asr_model: Option<String>,
-
     /// 当前 TTS 语音合成模型
-    /// 示例: "tts/cosyvoice3"
     pub current_tts_model: Option<String>,
-
-    /// 所有模型类型的当前模型（扩展字段，支持任意类型）
-    /// key = model_type, value = model_id
+    /// 按 model_type → model_id 的映射（扩展字段）
     #[serde(default)]
     pub current_models: HashMap<String, String>,
 
-    // ========== 已废弃：向后兼容 ==========
-    /// 【已废弃】原用于同时表示 ASR/TTS/LLM
-    /// 保留用于旧配置迁移，逻辑上不再使用
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub current_model_id: Option<String>,
-
-    // ========== 其他配置 ==========
+    // ========== UI 配置 ==========
     pub current_mode: String,
     pub current_voice_id: Option<String>,
     pub theme: String,
 
-    /// 模型元数据（用户备注、标签、最近使用时间）
+    // ========== 模型元数据 ==========
     #[serde(default)]
     pub model_meta: HashMap<String, ModelMeta>,
 }
@@ -134,6 +122,9 @@ pub struct ModelInfo {
     /// 模型来源: "local" | "ollama"
     #[serde(default = "default_source")]
     pub source: String,
+    /// 上下文窗口长度（tokens），LLM 模型此字段有效
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_length: Option<u32>,
 }
 
 fn default_source() -> String {

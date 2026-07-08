@@ -147,6 +147,7 @@ fn scan_single_model(
         main_files: main_files.into_iter().take(5).collect(),
         description: desc,
         source: "local".to_string(),
+        context_length: None,
     })
 }
 
@@ -400,6 +401,26 @@ use crate::constants::OLLAMA_TAGS_URL;
 
 use serde_json::Value;
 
+/// Known context window sizes for common model families (tokens).
+fn known_context_length(name: &str) -> Option<u32> {
+    let lower = name.to_lowercase();
+    if lower.contains("gemma3") { return Some(128_000); }
+    if lower.contains("gemma2") || lower.contains("gemma") { return Some(8_192); }
+    if lower.contains("llama3.3") || lower.contains("llama3.2") || lower.contains("llama3.1") { return Some(128_000); }
+    if lower.contains("llama3") { return Some(8_192); }
+    if lower.contains("llama2") { return Some(4_096); }
+    if lower.contains("qwen3") { return Some(32_768); }
+    if lower.contains("qwen2.5") || lower.contains("qwen2") { return Some(32_768); }
+    if lower.contains("qwen") { return Some(8_192); }
+    if lower.contains("mistral") || lower.contains("mixtral") { return Some(32_768); }
+    if lower.contains("phi4") { return Some(16_384); }
+    if lower.contains("phi3") { return Some(128_000); }
+    if lower.contains("phi") { return Some(2_048); }
+    if lower.contains("deepseek") { return Some(128_000); }
+    if lower.contains("command-r") { return Some(128_000); }
+    None
+}
+
 /// 扫描 Ollama 本地模型（通过 Ollama HTTP API）
 pub async fn scan_ollama_models() -> Vec<crate::state::ModelInfo> {
     let mut models = Vec::new();
@@ -492,6 +513,7 @@ pub async fn scan_ollama_models() -> Vec<crate::state::ModelInfo> {
             main_files: vec![family.to_string()],
             description: desc,
             source: "ollama".to_string(),
+            context_length: known_context_length(name),
         });
     }
 

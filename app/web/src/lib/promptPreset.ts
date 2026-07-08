@@ -71,6 +71,30 @@ export interface InsertResult {
 }
 
 /**
+ * 替换 content 中的模板变量为当前日期/时间：
+ * - {{date}}     → YYYY-MM-DD
+ * - {{time}}     → HH:MM
+ * - {{datetime}} → YYYY-MM-DD HH:MM
+ *
+ * 纯函数：无 I/O，仅依赖 `new Date()`。
+ */
+export function processTemplateVariables(content: string): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const mo = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const h = String(now.getHours()).padStart(2, '0');
+  const mi = String(now.getMinutes()).padStart(2, '0');
+  const date = `${y}-${mo}-${d}`;
+  const time = `${h}:${mi}`;
+  const datetime = `${date} ${time}`;
+  return content
+    .replace(/\{\{datetime\}\}/g, datetime)
+    .replace(/\{\{date\}\}/g, date)
+    .replace(/\{\{time\}\}/g, time);
+}
+
+/**
  * 由 Input_Field 当前文本 `prev` 与所选预设 `content` 构造 Inserted_Text：
  * - 若 `prev.trim()` 为空 -> 结果文本为 `content`（Req 6.3）；
  * - 否则 -> 结果文本为 `prev + '\n' + content`（Req 6.4）；

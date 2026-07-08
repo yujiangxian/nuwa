@@ -846,9 +846,10 @@ async fn refresh_models(state: &Arc<RwLock<AppState>>) {
     let mut state = state.write().await;
     state.models = scanned;
 
-    if let Some(ref current_id) = state.config.current_model_id {
-        if !state.models.iter().any(|m| &m.id == current_id) {
-            state.config.current_model_id = None;
+    // Validate configured models still exist after rescan
+    for (model_type, model_id) in state.config.current_models.clone() {
+        if !state.models.iter().any(|m| m.id == model_id) {
+            state.config.current_models.remove(&model_type);
         }
     }
 

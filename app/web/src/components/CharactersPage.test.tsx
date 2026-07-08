@@ -48,7 +48,7 @@ function makeFakeDb(): CharacterDb {
 }
 
 const baseCharacters: Character[] = [
-  { id: 'assistant', name: '小助手', avatar: 'linear-gradient(135deg, #48CAE4, #0096C7)', systemPrompt: '你是助手', voiceId: 'jyy', description: '通用问答' },
+  { id: 'assistant', name: '季莹莹', avatar: 'linear-gradient(135deg, #8090FF, #4050C0)', systemPrompt: '你是季莹莹，无常司的白无常。', voiceId: 'jyy', description: '无常司白无常·鬼火少女' },
   { id: 'socrates', name: '苏格拉底', avatar: 'linear-gradient(135deg, #FF6B9D, #D44D7A)', systemPrompt: '提问引导', voiceId: 'unknown-voice', description: '苏式提问' },
 ];
 
@@ -78,8 +78,8 @@ beforeEach(() => {
 describe('CharactersPage list rendering', () => {
   it('renders name, description and bound voice name for each character (Req 3.1/3.2)', () => {
     render(<CharactersPage />);
-    expect(screen.getByText('小助手')).toBeInTheDocument();
-    expect(screen.getByText('通用问答')).toBeInTheDocument();
+    expect(screen.getByText('季莹莹')).toBeInTheDocument();
+    expect(screen.getByText('无常司白无常·鬼火少女')).toBeInTheDocument();
     // jyy resolves to its display name.
     expect(screen.getByText('音色：佳怡音色')).toBeInTheDocument();
     // avatar swatch rendered.
@@ -96,14 +96,14 @@ describe('CharactersPage list rendering', () => {
     render(<CharactersPage />);
     expect(screen.getByText('音色加载中…')).toBeInTheDocument();
     // Characters still render.
-    expect(screen.getByText('小助手')).toBeInTheDocument();
+    expect(screen.getByText('季莹莹')).toBeInTheDocument();
   });
 
   it('shows the error state but still renders characters (Req 3.4)', () => {
     mocks.voices = { data: [], isLoading: false, isError: true };
     render(<CharactersPage />);
     expect(screen.getByText('音色加载失败')).toBeInTheDocument();
-    expect(screen.getByText('小助手')).toBeInTheDocument();
+    expect(screen.getByText('季莹莹')).toBeInTheDocument();
   });
 });
 
@@ -125,6 +125,7 @@ describe('CharactersPage create form', () => {
     fireEvent.click(screen.getByRole('button', { name: '新建角色' }));
 
     fireEvent.change(screen.getByLabelText('角色名称'), { target: { value: '诗人' } });
+    fireEvent.change(screen.getByLabelText('人设提示词'), { target: { value: '你是一位诗人' } });
     fireEvent.change(screen.getByLabelText('角色描述'), { target: { value: '吟诗作对' } });
     fireEvent.click(screen.getByRole('button', { name: '创建' }));
 
@@ -161,54 +162,54 @@ describe('CharactersPage create form', () => {
 describe('CharactersPage edit form', () => {
   it('edits a character and reflects the updated fields (Req 5.4)', async () => {
     render(<CharactersPage />);
-    fireEvent.click(screen.getByRole('button', { name: '编辑小助手' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑季莹莹' }));
 
     const nameInput = screen.getByLabelText('角色名称') as HTMLInputElement;
-    expect(nameInput.value).toBe('小助手');
+    expect(nameInput.value).toBe('季莹莹');
     fireEvent.change(nameInput, { target: { value: '超级助手' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
     await waitFor(() => expect(screen.getByText('超级助手')).toBeInTheDocument());
-    expect(screen.queryByText('小助手')).not.toBeInTheDocument();
+    expect(screen.queryByText('季莹莹')).not.toBeInTheDocument();
   });
 
   it('shows 请填写名称 and does not update when edited name is blank (Req 5.3)', async () => {
     render(<CharactersPage />);
-    fireEvent.click(screen.getByRole('button', { name: '编辑小助手' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑季莹莹' }));
 
     fireEvent.change(screen.getByLabelText('角色名称'), { target: { value: '  ' } });
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
     expect(await screen.findByText('请填写名称')).toBeInTheDocument();
     // Character unchanged.
-    expect(useUIStore.getState().characters.find((c) => c.id === 'assistant')?.name).toBe('小助手');
+    expect(useUIStore.getState().characters.find((c) => c.id === 'assistant')?.name).toBe('季莹莹');
   });
 });
 
 describe('CharactersPage delete', () => {
   it('deletes after the two-step confirm (Req 6.1)', async () => {
     render(<CharactersPage />);
-    fireEvent.click(screen.getByRole('button', { name: '删除小助手' }));
+    fireEvent.click(screen.getByRole('button', { name: '删除季莹莹' }));
     // Confirm controls appear; nothing deleted yet.
     expect(useUIStore.getState().characters.length).toBe(2);
 
     fireEvent.click(screen.getByRole('button', { name: '确认删除' }));
-    await waitFor(() => expect(screen.queryByText('小助手')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('季莹莹')).not.toBeInTheDocument());
     expect(useUIStore.getState().characters.find((c) => c.id === 'assistant')).toBeUndefined();
   });
 
   it('does not delete when the confirm is cancelled (Req 6.3)', () => {
     render(<CharactersPage />);
-    fireEvent.click(screen.getByRole('button', { name: '删除小助手' }));
+    fireEvent.click(screen.getByRole('button', { name: '删除季莹莹' }));
     fireEvent.click(screen.getByRole('button', { name: '取消删除' }));
-    expect(screen.getByText('小助手')).toBeInTheDocument();
+    expect(screen.getByText('季莹莹')).toBeInTheDocument();
     expect(useUIStore.getState().characters.length).toBe(2);
   });
 
   it('disables delete and shows the prompt for the only character (Req 6.4)', () => {
     useUIStore.setState({ characters: [baseCharacters[0]] });
     render(<CharactersPage />);
-    const delBtn = screen.getByRole('button', { name: '删除小助手' }) as HTMLButtonElement;
+    const delBtn = screen.getByRole('button', { name: '删除季莹莹' }) as HTMLButtonElement;
     expect(delBtn.disabled).toBe(true);
     expect(screen.getByText('至少需保留一个角色')).toBeInTheDocument();
   });

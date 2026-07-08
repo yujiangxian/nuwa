@@ -2,7 +2,14 @@ use axum::{extract::State, Json};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::state::AppState;
+use crate::{constants, state::AppState};
+
+#[derive(serde::Serialize)]
+pub struct DirectorySize {
+    pub path: String,
+    pub bytes: u64,
+    pub text: String,
+}
 
 #[derive(serde::Serialize)]
 pub struct DiskInfo {
@@ -13,6 +20,8 @@ pub struct DiskInfo {
     pub free_text: String,
     pub used_text: String,
     pub used_percent: f64,
+    /// Per-directory size breakdown
+    pub directories: Vec<DirectorySize>,
 }
 
 #[derive(serde::Serialize)]
@@ -28,26 +37,16 @@ pub async fn get_disk_info(
     State(state): State<Arc<RwLock<AppState>>>,
 ) -> Json<DiskInfo> {
     let state = state.read().await;
+    let project_root = crate::util::project_root();
 
     let models_dir = std::path::PathBuf::from(&state.config.models_dir);
     let models_dir = if models_dir.is_relative() {
-        let project_root = std::env::current_exe()
-            .ok()
-            .and_then(|exe| {
-                exe.parent()
-                    .and_then(|p| p.parent())
-                    .and_then(|p| p.parent())
-                    .and_then(|p| p.parent())
-                    .and_then(|p| p.parent())
-                    .map(|p| p.to_path_buf())
-            })
-            .unwrap_or_else(|| std::path::PathBuf::from("."));
         project_root.join(&models_dir)
     } else {
         models_dir
     };
 
-    let disk_info = if let Ok(info) = get_disk_space(&models_dir) {
+    let mut disk_info = if let Ok(info) = get_disk_space(&models_dir) {
         info
     } else {
         DiskInfo {
@@ -58,10 +57,59 @@ pub async fn get_disk_info(
             free_text: "未知".to_string(),
             used_text: "未知".to_string(),
             used_percent: 0.0,
+            directories: vec![],
         }
     };
 
+    // Per-directory size breakdown
+    let output_dir = if state.config.output_dir.is_empty() {
+        project_root.join("output")
+    } else {
+        let p = std::path::PathBuf::from(&state.config.output_dir);
+        if p.is_relative() { project_root.join(p) } else { p }
+    };
+    let voices_dir = if state.config.voices_dir.is_empty() {
+        project_root.join("assets/datasets/voices")
+    } else {
+        let p = std::path::PathBuf::from(&state.config.voices_dir);
+        if p.is_relative() { project_root.join(p) } else { p }
+    };
+
+    disk_info.directories = vec![
+        dir_size(&models_dir, "models").await,
+        dir_size(&output_dir, "output (TTS)").await,
+        dir_size(&voices_dir, "voices").await,
+    ];
+
     Json(disk_info)
+}
+
+async fn dir_size(dir: &std::path::Path, label: &str) -> DirectorySize {
+    let dir = dir.to_path_buf();
+    let bytes = tokio::task::spawn_blocking(move || compute_dir_size(&dir))
+        .await
+        .unwrap_or(0);
+    DirectorySize {
+        path: label.to_string(),
+        bytes,
+        text: format_size(bytes),
+    }
+}
+
+fn compute_dir_size(dir: &std::path::Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_dir() {
+                    total += compute_dir_size(&entry.path());
+                } else {
+                    total += meta.len();
+                }
+            }
+        }
+    }
+    total
 }
 
 pub async fn get_gpu_info() -> Json<Option<GpuInfo>> {
@@ -78,6 +126,7 @@ async fn query_gpu_info() -> Option<GpuInfo> {
     if let Some(info) = query_nvidia_smi().await {
         return Some(info);
     }
+    tracing::info!("No GPU detected (rocm-smi and nvidia-smi unavailable)");
     None
 }
 
@@ -162,6 +211,78 @@ fn get_disk_space(path: &std::path::Path) -> std::io::Result<DiskInfo> {
         free_text: format_size(free_bytes),
         used_text: format_size(used_bytes),
         used_percent,
+        directories: vec![],
+    })
+}
+
+#[derive(serde::Serialize)]
+pub struct CleanupResult {
+    pub files_removed: u64,
+    pub bytes_freed: u64,
+    pub bytes_freed_text: String,
+}
+
+/// Manual cleanup endpoint: remove stale TTS output files and temp files.
+pub async fn cleanup(
+    State(state): State<Arc<RwLock<AppState>>>,
+) -> Json<CleanupResult> {
+    let state = state.read().await;
+    let project_root = crate::util::project_root();
+    let output_dir = state.config.output_dir.clone();
+    let output_dir = if output_dir.is_empty() {
+        project_root.join("output")
+    } else {
+        let p = std::path::PathBuf::from(&output_dir);
+        if p.is_relative() { project_root.join(p) } else { p }
+    };
+
+    let mut total_removed = 0u64;
+    let mut total_bytes = 0u64;
+
+    // Clean output/ WAV files (same retention window as startup cleanup)
+    let retention = constants::tts_retention_secs();
+    let cutoff = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .saturating_sub(std::time::Duration::from_secs(retention));
+
+    if let Ok(entries) = std::fs::read_dir(&output_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().map(|e| e == "wav").unwrap_or(false) {
+                if let Ok(meta) = entry.metadata() {
+                    if let Ok(mtime) = meta.modified() {
+                        if mtime.duration_since(std::time::UNIX_EPOCH).unwrap_or_default() < cutoff {
+                            total_bytes += meta.len();
+                            if std::fs::remove_file(&path).is_ok() {
+                                total_removed += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Clean system temp nuwa_* files
+    if let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            if name.to_string_lossy().starts_with("nuwa_") {
+                if let Ok(meta) = entry.metadata() {
+                    total_bytes += meta.len();
+                    if std::fs::remove_file(entry.path()).is_ok() {
+                        total_removed += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    Json(CleanupResult {
+        files_removed: total_removed,
+        bytes_freed: total_bytes,
+        bytes_freed_text: format_size(total_bytes),
     })
 }
 

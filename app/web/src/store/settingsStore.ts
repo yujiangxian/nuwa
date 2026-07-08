@@ -19,7 +19,18 @@ function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem('nuwa_settings');
     if (raw) {
-      const merged = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      // Validate types before merging
+      if (typeof parsed !== 'object' || parsed === null) {
+        console.warn('nuwa_settings is not an object, resetting to defaults');
+        return { ...DEFAULT_SETTINGS };
+      }
+      const merged = { ...DEFAULT_SETTINGS };
+      if (typeof parsed.backendUrl === 'string') merged.backendUrl = parsed.backendUrl;
+      if (typeof parsed.modelsDir === 'string') merged.modelsDir = parsed.modelsDir;
+      if (typeof parsed.theme === 'string') merged.theme = parsed.theme as AppSettings['theme'];
+      if (typeof parsed.autoPlay === 'boolean') merged.autoPlay = parsed.autoPlay;
+      if (typeof parsed.language === 'string') merged.language = parsed.language;
       if (merged.backendUrl === LEGACY_DEFAULT_BACKEND_URL) {
         merged.backendUrl = DEFAULT_SETTINGS.backendUrl;
         saveSettings(merged);
@@ -27,13 +38,15 @@ function loadSettings(): AppSettings {
       return merged;
     }
   } catch { /* localStorage 不可用时静默降级 */ }
-  return DEFAULT_SETTINGS;
+  return { ...DEFAULT_SETTINGS };
 }
 
 function saveSettings(s: AppSettings): void {
   try {
     localStorage.setItem('nuwa_settings', JSON.stringify(s));
-  } catch { /* localStorage 不可用时静默降级 */ }
+  } catch {
+    console.warn('Failed to save settings to localStorage (quota exceeded?)');
+  }
 }
 
 interface SettingsState {

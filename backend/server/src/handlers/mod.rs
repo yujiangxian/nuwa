@@ -13,6 +13,46 @@ pub mod voices;
 use axum::Json;
 use serde_json::json;
 
-pub async fn health() -> Json<serde_json::Value> {
-    Json(json!({ "status": "ok" }))
+/// Health check endpoint.
+///
+/// When `?detailed=1` is passed, also probes Ollama connectivity and returns
+/// per-dependency status suitable for Kubernetes liveness/readiness probes.
+pub async fn health(
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let detailed = params.get("detailed").map(|v| v == "1").unwrap_or(false);
+    if !detailed {
+        return Json(json!({ "status": "ok" }));
+    }
+
+    let mut checks = serde_json::Map::new();
+
+    // Ollama connectivity
+    let ollama_ok = match reqwest::Client::new()
+        .head("http://localhost:11434/api/tags")
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => true,
+        _ => false,
+    };
+    checks.insert("ollama".into(), json!(if ollama_ok { "ok" } else { "unreachable" }));
+
+    // Disk space check (output directory)
+    let output_dir = crate::util::project_root().join("output");
+    let disk_ok = match tokio::fs::metadata(&output_dir).await {
+        Ok(_) => true,
+        Err(_) => {
+            // Try to create it
+            tokio::fs::create_dir_all(&output_dir).await.is_ok()
+        }
+    };
+    checks.insert("output_dir".into(), json!(if disk_ok { "ok" } else { "error" }));
+
+    let all_healthy = ollama_ok && disk_ok;
+    Json(json!({
+        "status": if all_healthy { "healthy" } else { "degraded" },
+        "checks": checks,
+    }))
 }

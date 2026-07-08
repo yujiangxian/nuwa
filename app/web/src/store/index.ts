@@ -12,6 +12,10 @@ export interface Model {
   sample_rate: number;
   /** 模型类型（asr/tts/llm），对齐后端 `Model.model_type` */
   model_type: string;
+  /** 模型总大小(MB) */
+  size_mb?: number;
+  description?: string;
+  source?: string;
 }
 
 export interface Voice {
@@ -32,13 +36,13 @@ export interface AppConfig {
   models_dir: string;
   output_dir: string;
   voices_dir: string;
-  /** 推理后端类型 (cpu/...)，非 URL */
   backend: string;
   threads: number;
+  default_cfg: number;
+  default_timesteps: number;
   current_llm_model: string | null;
   current_asr_model: string | null;
   current_tts_model: string | null;
-  /** key=model_type, value=model_id */
   current_models: Record<string, string>;
   current_voice_id: string | null;
   theme: string;

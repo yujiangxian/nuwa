@@ -11,6 +11,16 @@ interface State {
 }
 
 export default class ErrorBoundary extends Component<Props, State> {
+  /**
+   * Configurable error-reporting hook. Consumers can wire it to external services:
+   *
+   *   ErrorBoundary.onError = (err, info) => { Sentry.captureException(err); };
+   *   ErrorBoundary.onError = (err, info) => { postToAnalytics(err.message); };
+   *
+   * Set it once at app bootstrap. Set to `null` to disable.
+   */
+  static onError: ((error: Error, errorInfo: React.ErrorInfo) => void) | null = null;
+
   constructor(props: Props) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -22,6 +32,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('ErrorBoundary caught:', error, info);
+    ErrorBoundary.onError?.(error, info);
   }
 
   handleReset = () => {

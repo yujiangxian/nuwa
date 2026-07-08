@@ -1,9 +1,10 @@
 import { useUIStore } from '@/store/uiStore';
 import { useI18n } from '@/hooks/useI18n';
-import { MessageSquare, Music, Mic, Monitor, Settings, AudioWaveform, Users, MessageSquareText, Workflow } from 'lucide-react';
+import { MessageSquare, Music, Mic, Monitor, Settings, AudioWaveform, Users, MessageSquareText, Workflow, FlaskConical } from 'lucide-react';
 
 const features = [
   { id: 'chat' as const, titleKey: 'home.feature.chat.title', descKey: 'home.feature.chat.desc', icon: MessageSquare, color: '#48CAE4', bg: 'rgba(72,202,228,0.08)', border: 'rgba(72,202,228,0.15)' },
+  { id: 'playground' as const, title: 'Playground', desc: '模型调参与测试工作台', icon: FlaskConical, color: '#E57C48', bg: 'rgba(229,124,72,0.08)', border: 'rgba(229,124,72,0.15)' },
   { id: 'characters' as const, titleKey: 'home.feature.characters.title', descKey: 'home.feature.characters.desc', icon: Users, color: '#9B5DE5', bg: 'rgba(155,93,229,0.08)', border: 'rgba(155,93,229,0.15)' },
   { id: 'presets' as const, titleKey: 'home.feature.presets.title', descKey: 'home.feature.presets.desc', icon: MessageSquareText, color: '#F4A261', bg: 'rgba(244,162,97,0.08)', border: 'rgba(244,162,97,0.15)' },
   { id: 'voice' as const, titleKey: 'home.feature.voice.title', descKey: 'home.feature.voice.desc', icon: Music, color: '#FF6B9D', bg: 'rgba(255,107,157,0.08)', border: 'rgba(255,107,157,0.15)' },
@@ -27,6 +28,7 @@ export default function HomePage() {
           <span className="text-lg font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>女娲</span>
         </div>
         <button
+          aria-label="设置"
           className="flex items-center justify-center"
           style={{ width: 36, height: 36, borderRadius: 10, color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}
           onClick={() => setSettingsOpen(true)}
