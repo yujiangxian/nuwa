@@ -63,22 +63,30 @@ ollama pull gemma4:e4b
 
 ```
 .
-├── app/web/                    # React 前端
+├── app/web/                    # React 19 前端 (Vite + Zustand + Tailwind)
 │   ├── src/
-│   │   ├── pages/              # Home / Chat / Voice / Models
-│   │   ├── components/         # 可复用组件
-│   │   └── store/              # Zustand 状态管理
-│   └── package.json
-├── backend/server/             # Rust Axum 后端
+│   │   ├── components/         # 页面组件 (ChatPage, VoiceStudio, ...)
+│   │   ├── hooks/              # 自定义 hooks (useAudioQueue, useRecorder)
+│   │   ├── lib/                # 纯函数层 (chatDb, sentenceSplit, ...)
+│   │   ├── store/              # Zustand 状态管理 (uiStore, settingsStore)
+│   │   └── api/                # HTTP 客户端 (axios, 重试, 请求ID)
+│   └── e2e/                    # Playwright E2E 测试
+├── backend/server/             # Rust Axum 0.8 后端
 │   ├── src/
-│   │   ├── handlers/           # HTTP 路由处理器
-│   │   ├── services/           # 业务逻辑（模型扫描、下载器）
-│   │   └── state.rs            # 应用状态
-│   └── Cargo.toml
-├── models/                     # 模型文件目录
-│   ├── asr/                    # 语音识别模型
-│   ├── tts/                    # 语音合成模型
-│   └── llm/                    # 大语言模型（Ollama 外部管理）
+│   │   ├── handlers/           # HTTP 路由处理器 (chat, inference, config, ...)
+│   │   ├── services/           # 业务逻辑 (model_scanner, inference, voice_library)
+│   │   ├── middleware/         # CORS + 安全头部中间件
+│   │   ├── routes/             # 路由注册 (66 个端点)
+│   │   └── state.rs            # AppState + AppConfig + ModelInfo
+│   └── tests/                  # 集成测试 (oneshot pattern)
+├── models/                     # 模型文件目录 (gitignored)
+│   ├── asr/                    # 语音识别模型 (Paraformer, Whisper, GLM-ASR)
+│   └── tts/                    # 语音合成模型 (CosyVoice, GLM-TTS, Qwen3-TTS)
+├── output/                     # TTS 合成输出 (自动清理 >7天)
+├── assets/datasets/voices/     # 音色参考音频库
+├── scripts/                    # Python 推理脚本
+├── docs/                       # 项目文档 (API, 架构, 全景分析)
+└── config.json                 # 运行时配置 (项目根)
 ├── docs/                       # 项目文档
 │   ├── tested_models.md        # 已测试可用模型清单 ⭐
 │   ├── model_management.md     # 模型管理功能文档 ⭐

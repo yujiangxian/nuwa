@@ -1,5 +1,5 @@
 [package]
-name = "voxcpm-server"
+name = "nuwa-server"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
@@ -8,7 +8,7 @@ rust-version = "1.75"
 axum = { version = "0.8", features = ["multipart", "ws"] }
 tokio = { version = "1", features = ["full"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "fs", "compression-gzip"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs", "compression-gzip", "set-header", "limit"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
@@ -19,6 +19,7 @@ thiserror = "2"
 anyhow = "1"
 futures = "0.3"
 tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-util = { version = "0.7", features = ["io"] }
 async-stream = "0.3"
 
 reqwest = { version = "0.12", features = ["json", "stream"] }

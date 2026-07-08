@@ -8,6 +8,36 @@ use crate::constants::{DEFAULT_REF_AUDIO, DEFAULT_REF_TEXT};
 use crate::services::inference;
 use crate::state::AppState;
 
+/// RAII guard: inserts a model into `active_inference_models` on acquire,
+/// and removes it on drop — even if the handler panics.
+struct ModelGuard {
+    state: Arc<RwLock<AppState>>,
+    model_id: Option<String>,
+}
+
+impl ModelGuard {
+    async fn acquire(state: Arc<RwLock<AppState>>, model_id: String) -> Self {
+        {
+            let mut s = state.write().await;
+            s.active_inference_models.insert(model_id.clone());
+        }
+        Self { state, model_id: Some(model_id) }
+    }
+}
+
+impl Drop for ModelGuard {
+    fn drop(&mut self) {
+        if let Some(ref id) = self.model_id.take() {
+            let state = self.state.clone();
+            let id = id.clone();
+            tokio::spawn(async move {
+                let mut s = state.write().await;
+                s.active_inference_models.remove(&id);
+            });
+        }
+    }
+}
+
 // ========== ASR ==========
 
 #[derive(serde::Deserialize)]
@@ -35,13 +65,12 @@ pub async fn transcribe(
     // 测量墙钟耗时
     let started = std::time::Instant::now();
 
-    // 确定模型 ID：优先 current_asr_model，其次 current_model_id（兼容旧配置），最后 fallback
+    // 确定模型 ID：优先 current_asr_model，最后 fallback 到第一个可用 ASR 模型
     let model_id = match req.model_id {
         Some(id) => id,
         None => {
             let state = state.read().await;
             state.config.current_asr_model.clone()
-                .or_else(|| state.config.current_model_id.clone())
                 .unwrap_or_else(|| {
                     // 自动 fallback 到第一个可用 ASR 模型
                     state.models.iter()
@@ -73,13 +102,23 @@ pub async fn transcribe(
         });
     }
 
-    let audio_path = PathBuf::from(&req.audio_path);
+    let audio_path = match crate::util::safe_resolve(
+        &crate::util::project_root().join("assets"),
+        &req.audio_path,
+    ) {
+        Ok(p) => p,
+        Err(_) => {
+            return Json(AsrResponse {
+                success: false,
+                text: String::new(),
+                error: Some("音频路径不合法".to_string()),
+                model: model_id.clone(),
+                elapsed_ms: started.elapsed().as_millis() as u64,
+            });
+        }
+    };
 
-    // 标记模型使用中
-    {
-        let mut state = state.write().await;
-        state.active_inference_models.insert(model_id.clone());
-    }
+    let _guard = ModelGuard::acquire(state.clone(), model_id.clone()).await;
 
     let result = match inference::transcribe(&audio_path, &model_id).await {
         Ok(text) => {
@@ -94,7 +133,6 @@ pub async fn transcribe(
                 if let Err(e) = config_persist::save_config(&state.config) {
                     tracing::warn!("更新模型最后使用时间失败: {}", e);
                 }
-                state.active_inference_models.remove(&model_id);
             }
             Json(AsrResponse {
                 success: true,
@@ -107,7 +145,6 @@ pub async fn transcribe(
         Err(e) => {
             {
                 let mut state = state.write().await;
-                state.active_inference_models.remove(&model_id);
             }
             Json(AsrResponse {
                 success: false,
@@ -137,6 +174,7 @@ pub struct TtsRequest {
 pub struct TtsResponse {
     pub success: bool,
     pub output_path: Option<String>,
+    pub duration_sec: Option<f64>,
     pub error: Option<String>,
 }
 
@@ -144,27 +182,33 @@ pub async fn synthesize(
     State(state): State<Arc<RwLock<AppState>>>,
     Json(req): Json<TtsRequest>,
 ) -> Json<TtsResponse> {
-    // 确定模型 ID：优先 current_tts_model，其次 current_model_id（兼容旧配置），最后 fallback
-    let model_id = match req.model_id {
-        Some(id) => id,
-        None => {
-            let state = state.read().await;
+    // 确定模型 ID 和输出目录
+    let (model_id, output_dir) = {
+        let state = state.read().await;
+        let model_id = req.model_id.clone().unwrap_or_else(|| {
             state.config.current_tts_model.clone()
-                .or_else(|| state.config.current_model_id.clone())
                 .unwrap_or_else(|| {
-                    // 自动 fallback 到第一个可用 TTS 模型
                     state.models.iter()
                         .find(|m| m.model_type == "tts" && inference::resolve_tts_model(&m.id).is_ok())
                         .map(|m| m.id.clone())
                         .unwrap_or_default()
                 })
-        }
+        });
+        let od = state.config.output_dir.clone();
+        let od = if od.is_empty() {
+            crate::util::project_root().join("output")
+        } else {
+            let p = std::path::PathBuf::from(&od);
+            if p.is_relative() { crate::util::project_root().join(p) } else { p }
+        };
+        (model_id, od)
     };
 
     if model_id.is_empty() {
         return Json(TtsResponse {
             success: false,
             output_path: None,
+            duration_sec: None,
             error: Some("未选择模型，请先在我的模型中选择一个 TTS 模型".to_string()),
         });
     }
@@ -174,14 +218,36 @@ pub async fn synthesize(
         return Json(TtsResponse {
             success: false,
             output_path: None,
+            duration_sec: None,
             error: Some(format!("模型 {} 不支持 TTS 推理", model_id)),
+        });
+    }
+
+    // Validate text length before processing
+    const MAX_TTS_TEXT_LEN: usize = 5000;
+    if req.text.len() > MAX_TTS_TEXT_LEN {
+        return Json(TtsResponse {
+            success: false,
+            output_path: None,
+            duration_sec: None,
+            error: Some(format!("文本过长 (>{MAX_TTS_TEXT_LEN} 字符)")),
         });
     }
 
     let ref_audio = if req.ref_audio.is_empty() {
         PathBuf::from(DEFAULT_REF_AUDIO)
     } else {
-        PathBuf::from(&req.ref_audio)
+        match crate::util::safe_resolve(&crate::util::project_root().join("assets"), &req.ref_audio) {
+            Ok(p) => p,
+            Err(_) => {
+                return Json(TtsResponse {
+                    success: false,
+                    output_path: None,
+                    duration_sec: None,
+                    error: Some("参考音频路径不合法".to_string()),
+                });
+            }
+        }
     };
     let ref_text = if req.ref_text.is_empty() {
         DEFAULT_REF_TEXT.to_string()
@@ -189,17 +255,13 @@ pub async fn synthesize(
         req.ref_text.clone()
     };
 
-    // 生成输出路径（保存到 output/ 目录，便于前端通过 /api/audio 访问）
-    let output_dir = std::path::PathBuf::from("output");
+    // 生成输出路径
     let _ = tokio::fs::create_dir_all(&output_dir).await;
     let output_filename = format!("tts_{}.wav", uuid::Uuid::new_v4());
     let output_path = output_dir.join(&output_filename);
 
-    // 标记模型使用中
-    {
-        let mut state = state.write().await;
-        state.active_inference_models.insert(model_id.clone());
-    }
+    // RAII guard removes model on drop (even on panic)
+    let _guard = ModelGuard::acquire(state.clone(), model_id.clone()).await;
 
     let result = match inference::synthesize(&req.text, &model_id, &ref_audio, &ref_text, &output_path).await {
         Ok(()) => {
@@ -213,22 +275,23 @@ pub async fn synthesize(
                 if let Err(e) = config_persist::save_config(&state.config) {
                     tracing::warn!("更新模型最后使用时间失败: {}", e);
                 }
-                state.active_inference_models.remove(&model_id);
             }
+            let dur = inference::wav_duration_secs(&output_path);
             Json(TtsResponse {
                 success: true,
                 output_path: Some(output_filename),
+                duration_sec: dur,
                 error: None,
             })
         }
         Err(e) => {
             {
                 let mut state = state.write().await;
-                state.active_inference_models.remove(&model_id);
             }
             Json(TtsResponse {
                 success: false,
                 output_path: None,
+                duration_sec: None,
                 error: Some(e),
             })
         }
@@ -259,19 +322,25 @@ pub async fn synthesize_script(
     State(state): State<Arc<RwLock<AppState>>>,
     Json(req): Json<TtsScriptRequest>,
 ) -> Json<TtsScriptResponse> {
-    let model_id = match req.model_id {
-        Some(id) => id,
-        None => {
-            let state = state.read().await;
+    let (model_id, output_dir) = {
+        let state = state.read().await;
+        let mid = req.model_id.clone().unwrap_or_else(|| {
             state.config.current_tts_model.clone()
-                .or_else(|| state.config.current_model_id.clone())
                 .unwrap_or_else(|| {
                     state.models.iter()
                         .find(|m| m.model_type == "tts" && inference::resolve_tts_model(&m.id).is_ok())
                         .map(|m| m.id.clone())
                         .unwrap_or_default()
                 })
-        }
+        });
+        let od = state.config.output_dir.clone();
+        let od = if od.is_empty() {
+            crate::util::project_root().join("output")
+        } else {
+            let p = std::path::PathBuf::from(&od);
+            if p.is_relative() { crate::util::project_root().join(p) } else { p }
+        };
+        (mid, od)
     };
 
     if model_id.is_empty() {
@@ -288,8 +357,17 @@ pub async fn synthesize_script(
         });
     }
 
-    let ref_audio = req.ref_audio.as_deref()
-        .unwrap_or(DEFAULT_REF_AUDIO);
+    let ref_audio_path = match req.ref_audio.as_deref().unwrap_or(DEFAULT_REF_AUDIO) {
+        "" => PathBuf::from(DEFAULT_REF_AUDIO),
+        p => match crate::util::safe_resolve(&crate::util::project_root().join("assets"), p) {
+            Ok(path) => path,
+            Err(_) => return Json(TtsScriptResponse {
+                success: false, output_path: None, duration_sec: None,
+                error: Some("参考音频路径不合法".to_string()),
+            }),
+        },
+    };
+    let ref_audio = ref_audio_path;
     let ref_text = req.ref_text.as_deref()
         .unwrap_or(DEFAULT_REF_TEXT);
 
@@ -297,12 +375,9 @@ pub async fn synthesize_script(
         .unwrap_or_else(|_| "[]".to_string());
 
     let output_filename = format!("tts_script_{}.wav", uuid::Uuid::new_v4());
-    let output_path = std::path::PathBuf::from("output").join(&output_filename);
+    let output_path = output_dir.join(&output_filename);
 
-    {
-        let mut state = state.write().await;
-        state.active_inference_models.insert(model_id.clone());
-    }
+    let _guard = ModelGuard::acquire(state.clone(), model_id.clone()).await;
 
     let result = match inference::synthesize_script(
         &segments_json, &model_id,
@@ -316,7 +391,6 @@ pub async fn synthesize_script(
                 .as_secs();
             {
                 let mut state = state.write().await;
-                state.active_inference_models.remove(&model_id);
             }
             Json(TtsScriptResponse {
                 success: true,
@@ -328,7 +402,6 @@ pub async fn synthesize_script(
         Err(e) => {
             {
                 let mut state = state.write().await;
-                state.active_inference_models.remove(&model_id);
             }
             Json(TtsScriptResponse {
                 success: false, output_path: None, duration_sec: None,
@@ -418,7 +491,6 @@ pub async fn transcribe_upload(
         None => {
             let state = state.read().await;
             state.config.current_asr_model.clone()
-                .or_else(|| state.config.current_model_id.clone())
                 .unwrap_or_else(|| {
                     state.models.iter()
                         .find(|m| m.model_type == "asr" && inference::resolve_asr_model(&m.id).is_ok())
@@ -462,11 +534,7 @@ pub async fn transcribe_upload(
         });
     }
 
-    // 标记模型使用中
-    {
-        let mut state = state.write().await;
-        state.active_inference_models.insert(model_id.clone());
-    }
+    let _guard = ModelGuard::acquire(state.clone(), model_id.clone()).await;
 
     // 调用 ASR 推理
     let result = match inference::transcribe(&temp_path, &model_id).await {
@@ -481,7 +549,6 @@ pub async fn transcribe_upload(
                 if let Err(e) = config_persist::save_config(&state.config) {
                     tracing::warn!("更新模型最后使用时间失败: {}", e);
                 }
-                state.active_inference_models.remove(&model_id);
             }
             Json(AsrUploadResponse {
                 success: true,
@@ -494,7 +561,6 @@ pub async fn transcribe_upload(
         Err(e) => {
             {
                 let mut state = state.write().await;
-                state.active_inference_models.remove(&model_id);
             }
             Json(AsrUploadResponse {
                 success: false,

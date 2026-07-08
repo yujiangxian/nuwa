@@ -14,6 +14,7 @@ import { filterInstalledByType, filterPresets } from '@/lib/modelFilter';
 import { parseActiveModelMap } from '@/lib/activeModel';
 import { countActiveTasks } from '@/lib/downloadTask';
 import { totalInstalledSizeMb } from '@/lib/systemResource';
+import { formatSize } from '@/lib/modelFormat';
 import { typeConfig } from '@/lib/modelTypeConfig';
 import DiskBar from './models/DiskBar';
 import GpuBar from './models/GpuBar';
@@ -90,7 +91,7 @@ export default function ModelsPage() {
   const [mySortBy, setMySortBy] = useState<InstalledSortBy>('recent');
   const [loadingMy, setLoadingMy] = useState(true);
   // 模型元数据（备注、标签、最近使用时间）
-  const [modelMeta, setModelMeta] = useState<Record<string, { notes: string; tags: string[]; last_used?: number }>>({});
+  const [modelMeta, setModelMeta] = useState<Record<string, { notes: string; tags: string[]; last_used?: number | null }>>({});
 
   // Store
   const [presets, setPresets] = useState<PresetModel[]>([]);
@@ -139,25 +140,21 @@ export default function ModelsPage() {
   const fetchModels = async () => {
     try {
       setLoadingMy(true);
-      const [{ data: modelsData }, { data: cfg }] = await Promise.all([
-        apiClient.get<ModelItem[]>('/api/models'),
-        apiClient.get<{
-          current_asr_model: string | null;
-          current_tts_model: string | null;
-          current_llm_model: string | null;
-          current_models: Record<string, string>;
-          model_meta: Record<string, { notes: string; tags: string[]; last_used?: number }>;
-        }>('/api/config'),
-      ]);
+      const { data: modelsData } = await apiClient.get<ModelItem[]>('/api/models');
       setModels(modelsData);
-      // 当前模型选择由 useConfig 统一读取回显；此处仅取模型元数据（备注/标签/最近使用）
-      setModelMeta(cfg.model_meta || {});
     } catch {
       addToast({ message: '获取模型列表失败', type: 'error' });
     } finally {
       setLoadingMy(false);
     }
   };
+
+  // 从 useConfig 缓存中同步 model_meta，避免重复请求 /api/config
+  useEffect(() => {
+    if (configData?.model_meta) {
+      setModelMeta(configData.model_meta);
+    }
+  }, [configData?.model_meta]);
 
   // Fetch presets
   const fetchPresets = async () => {
@@ -526,6 +523,27 @@ export default function ModelsPage() {
 
               {/* Stats bar */}
               {!loadingMy && models.length > 0 && <StatsBar models={models} />}
+
+              {/* Storage breakdown by model type */}
+              {!loadingMy && models.length > 0 && (() => {
+                const typeSizeMap: Record<string, number> = {};
+                models.forEach((m) => { typeSizeMap[m.model_type] = (typeSizeMap[m.model_type] || 0) + m.size_mb; });
+                const entries = Object.entries(typeSizeMap);
+                if (entries.length === 0) return null;
+                const typeColor: Record<string, string> = { asr: '#52B788', tts: '#FF6B9D', llm: '#48CAE4' };
+                return (
+                  <div className="flex items-center gap-3 mb-5 px-3 py-2 rounded-xl text-xs" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)' }}>
+                    <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>按模型类型存储:</span>
+                    {entries.map(([type, sizeMb]) => (
+                      <span key={type} className="flex items-center gap-1" style={{ color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: typeColor[type] || 'var(--text-muted)' }} />
+                        <span style={{ color: typeColor[type] || 'var(--text-secondary)' }}>{type.toUpperCase()}:</span>
+                        <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>{formatSize(sizeMb)}</span>
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {/* Filter + Sort + Scan */}
               <div className="flex items-center justify-between mb-5 gap-3">

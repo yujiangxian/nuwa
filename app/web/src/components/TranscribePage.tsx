@@ -4,7 +4,7 @@ import { useToastStore } from '@/store/toastStore';
 import { errorMessage } from '@/lib/errorDetail';
 import { useTranscribe } from '@/hooks/useApi';
 import type { AsrUploadResponse } from '@/hooks/useApi';
-import { ArrowLeft, Mic, Square, Upload, Copy, Check, Loader2, FileAudio, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Mic, Square, Upload, Copy, Check, Loader2, FileAudio, AlertCircle, Download } from 'lucide-react';
 import { useRecorder } from '@/hooks/useRecorder';
 
 /**
@@ -30,6 +30,10 @@ export default function TranscribePage() {
   const [errorText, setErrorText] = useState<string | null>(null);
   /** 已选择的本地文件名（仅用于展示）。 */
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  /** 已选文件大小（字节）。 */
+  const [fileSize, setFileSize] = useState<number | null>(null);
+  /** 已选音频时长（秒）。 */
+  const [fileDuration, setFileDuration] = useState<number | null>(null);
   /** 复制成功的瞬时反馈状态。 */
   const [copied, setCopied] = useState(false);
 
@@ -85,6 +89,20 @@ export default function TranscribePage() {
       e.target.value = '';
       if (!file || isSubmitting) return;
       setSelectedFileName(file.name);
+      setFileSize(file.size);
+      setFileDuration(null);
+      // 读取音频时长
+      const objectUrl = URL.createObjectURL(file);
+      const audio = new Audio(objectUrl);
+      audio.addEventListener('loadedmetadata', () => {
+        if (Number.isFinite(audio.duration) && audio.duration > 0) {
+          setFileDuration(audio.duration);
+        }
+        URL.revokeObjectURL(objectUrl);
+      });
+      audio.addEventListener('error', () => {
+        URL.revokeObjectURL(objectUrl);
+      });
       await submitAudio(file, file.name);
     },
     [isSubmitting, submitAudio]
@@ -102,10 +120,46 @@ export default function TranscribePage() {
     }
   }, [result, addToast]);
 
+  /** 通用下载辅助：创建 blob URL、触发点击、释放。 */
+  const downloadText = useCallback((content: string, filename: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  /** 导出为纯文本 TXT。 */
+  const handleExportTxt = useCallback(() => {
+    if (!result?.text) return;
+    downloadText(result.text, 'transcribe.txt', 'text/plain;charset=utf-8');
+  }, [result, downloadText]);
+
+  /** 导出为基础 SRT 字幕。 */
+  const handleExportSrt = useCallback(() => {
+    if (!result?.text) return;
+    const srt = `1\n00:00:00,000 --> 99:59:59,999\n${result.text}\n`;
+    downloadText(srt, 'transcribe.srt', 'text/plain;charset=utf-8');
+  }, [result, downloadText]);
+
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);
     const s = sec % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const formatDuration = (msOrSec: number) => {
+    if (!Number.isFinite(msOrSec) || msOrSec <= 0) return '--';
+    if (msOrSec >= 60) {
+      const m = Math.floor(msOrSec / 60);
+      const s = Math.round(msOrSec % 60);
+      return `${m}:${String(s).padStart(2, '0')}`;
+    }
+    return `${msOrSec.toFixed(1)}s`;
   };
 
   return (
@@ -213,8 +267,14 @@ export default function TranscribePage() {
                 上传音频文件
               </button>
               {selectedFileName && (
-                <div className="text-xs truncate max-w-full" style={{ color: 'var(--text-secondary)' }}>
-                  已选择：{selectedFileName}
+                <div className="text-xs space-y-0.5 max-w-full">
+                  <div className="truncate" style={{ color: 'var(--text-secondary)' }}>
+                    已选择：{selectedFileName}
+                  </div>
+                  <div className="flex gap-3" style={{ color: 'var(--text-muted)' }}>
+                    {fileSize != null && <span>{(fileSize / 1024).toFixed(1)} KB</span>}
+                    {fileDuration != null && <span>{formatDuration(fileDuration)}</span>}
+                  </div>
                 </div>
               )}
             </div>
@@ -266,6 +326,23 @@ export default function TranscribePage() {
                 <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
                   耗时：<span style={{ color: 'var(--text-primary)' }}>{result.elapsed_ms} ms</span>
                 </span>
+                <div className="flex-1" />
+                <button
+                  onClick={handleExportTxt}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                  style={{ color: 'var(--text-secondary)', background: 'transparent', border: '1px solid var(--border)' }}
+                >
+                  <Download size={12} />
+                  导出 TXT
+                </button>
+                <button
+                  onClick={handleExportSrt}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg cursor-pointer transition-all"
+                  style={{ color: 'var(--text-secondary)', background: 'transparent', border: '1px solid var(--border)' }}
+                >
+                  <Download size={12} />
+                  导出 SRT
+                </button>
               </div>
             </div>
           )}

@@ -1,19 +1,28 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { useUIStore } from '@/store/uiStore';
 import { useThemeEffect } from '@/hooks/useThemeEffect';
 import { useLangEffect } from '@/hooks/useLangEffect';
 import { useKeybindings } from '@/hooks/useKeybindings';
 import HomePage from '@/components/HomePage';
-import ChatPage from '@/components/ChatPage';
-import VoiceStudioPage from '@/components/VoiceStudioPage';
-import TranscribePage from '@/components/TranscribePage';
-import ModelsPage from '@/components/ModelsPage';
 import CharactersPage from '@/components/CharactersPage';
 import PromptPresetsPage from '@/components/PromptPresetsPage';
-import WorkflowPage from '@/components/WorkflowPage';
 import SettingsModal from '@/components/SettingsModal';
 import CommandPalette from '@/components/CommandPalette';
 import ToastContainer from '@/components/ToastContainer';
+import { Loader2 } from 'lucide-react';
+
+const ChatPage = lazy(() => import('@/components/ChatPage'));
+const VoiceStudioPage = lazy(() => import('@/components/VoiceStudioPage'));
+const TranscribePage = lazy(() => import('@/components/TranscribePage'));
+const ModelsPage = lazy(() => import('@/components/ModelsPage'));
+const WorkflowPage = lazy(() => import('@/components/WorkflowPage'));
+const PlaygroundPage = lazy(() => import('@/components/PlaygroundPage'));
+
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-full" style={{ color: 'var(--text-muted)' }}>
+    <Loader2 size={24} className="animate-spin" />
+  </div>
+);
 
 function App() {
   // 运行期主题副作用：应用 settings.theme 并在 system 模式跟随系统偏好（Req 2.1/3.4）。
@@ -47,6 +56,7 @@ function App() {
       '/characters': 'characters',
       '/presets': 'presets',
       '/workflow': 'workflow',
+      '/playground': 'playground',
     };
     // Init from URL on mount
     const path = window.location.pathname;
@@ -75,7 +85,8 @@ function App() {
       currentPage === 'models' ? '/models' :
       currentPage === 'characters' ? '/characters' :
       currentPage === 'presets' ? '/presets' :
-      currentPage === 'workflow' ? '/workflow' : '/';
+      currentPage === 'workflow' ? '/workflow' :
+      currentPage === 'playground' ? '/playground' : '/';
     if (window.location.pathname !== targetPath) {
       window.history.pushState({}, '', targetPath);
     }
@@ -85,13 +96,14 @@ function App() {
   const renderPage = () => {
     switch (currentPage) {
       case 'home': return <HomePage />;
-      case 'chat': return <ChatPage />;
-      case 'voice': return <VoiceStudioPage />;
-      case 'transcribe': return <TranscribePage />;
-      case 'models': return <ModelsPage />;
+      case 'chat': return <Suspense fallback={<PageLoader />}><ChatPage /></Suspense>;
+      case 'voice': return <Suspense fallback={<PageLoader />}><VoiceStudioPage /></Suspense>;
+      case 'transcribe': return <Suspense fallback={<PageLoader />}><TranscribePage /></Suspense>;
+      case 'models': return <Suspense fallback={<PageLoader />}><ModelsPage /></Suspense>;
       case 'characters': return <CharactersPage />;
       case 'presets': return <PromptPresetsPage />;
-      case 'workflow': return <WorkflowPage />;
+      case 'workflow': return <Suspense fallback={<PageLoader />}><WorkflowPage /></Suspense>;
+      case 'playground': return <Suspense fallback={<PageLoader />}><PlaygroundPage /></Suspense>;
       default: return <HomePage />;
     }
   };

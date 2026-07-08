@@ -33,8 +33,8 @@ export interface AsrUploadResponse {
  */
 export interface TtsResponse {
   success: boolean;
-  /** `output/` 目录下的文件名，经 `GET /api/audio/{output_path}` 访问 */
   output_path: string | null;
+  duration_sec: number | null;
   error: string | null;
 }
 

@@ -1,13 +1,16 @@
 import { useUIStore } from '@/store/uiStore';
+import { useToastStore } from '@/store/toastStore';
 import { useI18n } from '@/hooks/useI18n';
 import { LOCALE_LABELS, SUPPORTED_LOCALES } from '@/lib/i18n';
-import { X, Moon, Sun, Monitor, FolderOpen } from 'lucide-react';
+import { apiClient } from '@/api/client';
+import { X, Moon, Sun, Monitor, FolderOpen, Download, Trash2 } from 'lucide-react';
 
 export default function SettingsModal() {
   const isOpen = useUIStore((s) => s.isSettingsOpen);
   const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
   const settings = useUIStore((s) => s.settings);
   const updateSetting = useUIStore((s) => s.updateSetting);
+  const addToast = useToastStore((s) => s.addToast);
   const { t } = useI18n();
 
   if (!isOpen) return null;
@@ -92,6 +95,17 @@ export default function SettingsModal() {
                 style={{ background: 'var(--surface)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
               />
               <button
+                title="保存模型目录到服务端配置"
+                onClick={async () => {
+                  try {
+                    const resp = await apiClient.get('/api/config');
+                    const cfg = (resp as any).data;
+                    await apiClient.post('/api/config', { ...cfg, models_dir: settings.modelsDir });
+                    addToast({ message: '模型目录已保存，请重启服务生效', type: 'success' });
+                  } catch {
+                    addToast({ message: '保存失败，请检查后端连接', type: 'error' });
+                  }
+                }}
                 className="flex items-center justify-center"
                 style={{ width: 38, height: 38, borderRadius: 10, color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; }}
@@ -146,6 +160,84 @@ export default function SettingsModal() {
                 }}
               />
             </button>
+          </div>
+
+          {/* Keyboard Shortcuts */}
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] mb-3 block" style={{ color: 'var(--text-muted)' }}>快捷键</label>
+            <div className="space-y-2">
+              {[
+                { key: 'Ctrl+K', desc: '命令面板' },
+                { key: 'Ctrl+N', desc: '新建对话' },
+                { key: 'Enter', desc: '发送消息' },
+                { key: 'Shift+Enter', desc: '换行' },
+                { key: 'Escape', desc: '停止生成 / 清空输入' },
+              ].map((shortcut) => (
+                <div key={shortcut.key} className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--surface)' }}>
+                  <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{shortcut.desc}</span>
+                  <kbd className="text-[11px] font-mono px-2 py-0.5 rounded" style={{ color: 'var(--primary)', background: 'rgba(72,202,228,0.08)', border: '1px solid rgba(72,202,228,0.15)' }}>
+                    {shortcut.key}
+                  </kbd>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="h-px" style={{ background: 'var(--border)' }} />
+
+          {/* Data management */}
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-[0.08em] mb-3 block" style={{ color: 'var(--text-muted)' }}>数据管理</label>
+            <div className="space-y-2">
+              <button
+                onClick={async () => {
+                  try {
+                    const store = useUIStore.getState();
+                    const sessions = await store.collectExportSessions('all');
+                    const bundle = {
+                      exportedAt: new Date().toISOString(),
+                      version: 'nuwa-v0.3.0',
+                      sessions,
+                      characters: store.characters,
+                      presets: store.presets,
+                      settings: store.settings,
+                    };
+                    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `nuwa-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    addToast({ message: '数据已导出（音频文件不可跨机器迁移，需重新合成）', type: 'success', duration: 6000 });
+                  } catch {
+                    addToast({ message: '导出失败', type: 'error' });
+                  }
+                }}
+                className="flex items-center gap-2 w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer transition-all"
+                style={{ background: 'rgba(72,202,228,0.08)', color: 'var(--primary)', border: '1px solid rgba(72,202,228,0.15)' }}
+              >
+                <Download size={16} />
+                导出全部数据
+              </button>
+              <button
+                onClick={async () => {
+                  if (!window.confirm('确定要清除所有本地数据和服务器临时文件吗？此操作不可撤销，应用将重新加载。')) return;
+                  // Also clean server-side output files
+                  try { await apiClient.post('/api/system/cleanup'); } catch { /* ignore */ }
+                  indexedDB.deleteDatabase('nuwa-chat');
+                  localStorage.clear();
+                  window.location.reload();
+                }}
+                className="flex items-center gap-2 w-full rounded-lg px-4 py-2.5 text-sm font-medium cursor-pointer transition-all"
+                style={{ background: 'rgba(255,107,107,0.08)', color: '#FF6B6B', border: '1px solid rgba(255,107,107,0.15)' }}
+              >
+                <Trash2 size={16} />
+                清除本地数据
+              </button>
+            </div>
           </div>
 
           <div className="text-center pt-1">

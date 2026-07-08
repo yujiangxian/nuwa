@@ -16,11 +16,11 @@ use std::sync::Arc;
 use axum::{body::Body, http::StatusCode, response::Response, routing::post, Router};
 use tokio::sync::RwLock;
 
-use voxcpm_server::handlers::chat_stream::{
+use nuwa_server::handlers::chat_stream::{
     build_ollama_messages, parse_ollama_line, split_lines, StreamChunk,
 };
-use voxcpm_server::routes;
-use voxcpm_server::state::AppState;
+use nuwa_server::routes;
+use nuwa_server::state::AppState;
 
 /// 启动被测服务（真实路由 + 默认 AppState），返回基础 URL（如 `http://127.0.0.1:54321`）。
 async fn spawn_server() -> String {
