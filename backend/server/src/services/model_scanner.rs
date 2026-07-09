@@ -12,8 +12,24 @@ use std::path::Path;
 
 use crate::state::ModelInfo;
 
-const MODEL_EXTS: &[&str] = &[".pth", ".ckpt", ".safetensors", ".gguf", ".bin", ".onnx", ".pt"];
-const SKIP_PATTERNS: &[&str] = &[".cache", ".git", "__pycache__", ".mdl", ".msc", ".mv", ".download"];
+const MODEL_EXTS: &[&str] = &[
+    ".pth",
+    ".ckpt",
+    ".safetensors",
+    ".gguf",
+    ".bin",
+    ".onnx",
+    ".pt",
+];
+const SKIP_PATTERNS: &[&str] = &[
+    ".cache",
+    ".git",
+    "__pycache__",
+    ".mdl",
+    ".msc",
+    ".mv",
+    ".download",
+];
 
 /// 扫描指定目录下的所有模型
 ///
@@ -60,11 +76,16 @@ pub fn scan_models_dir(models_dir: &Path) -> Vec<ModelInfo> {
                     .to_string();
 
                 // 跳过隐藏目录、缓存和源码目录
-                if model_name.starts_with('.') || model_name == "__pycache__" || model_name.ends_with("_src") {
+                if model_name.starts_with('.')
+                    || model_name == "__pycache__"
+                    || model_name.ends_with("_src")
+                {
                     continue;
                 }
 
-                if let Some(model) = scan_single_model(&model_dir, &type_dir, models_dir, &parent_type, &model_name) {
+                if let Some(model) =
+                    scan_single_model(&model_dir, &type_dir, models_dir, &parent_type, &model_name)
+                {
                     models.push(model);
                     has_submodels = true;
                 }
@@ -78,7 +99,9 @@ pub fn scan_models_dir(models_dir: &Path) -> Vec<ModelInfo> {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string();
-            if let Some(model) = scan_single_model(&type_dir, &type_dir, models_dir, &parent_type, &dir_name) {
+            if let Some(model) =
+                scan_single_model(&type_dir, &type_dir, models_dir, &parent_type, &dir_name)
+            {
                 models.push(model);
             }
         }
@@ -101,7 +124,13 @@ fn scan_single_model(
     let mut file_count = 0i32;
     let mut main_files: Vec<String> = Vec::new();
 
-    collect_files(model_dir, model_dir, &mut total_size, &mut file_count, &mut main_files);
+    collect_files(
+        model_dir,
+        model_dir,
+        &mut total_size,
+        &mut file_count,
+        &mut main_files,
+    );
 
     if file_count == 0 {
         return None;
@@ -155,7 +184,13 @@ fn scan_single_model(
 }
 
 /// 递归收集文件信息
-fn collect_files(dir: &Path, root: &Path, total_size: &mut u64, file_count: &mut i32, main_files: &mut Vec<String>) {
+fn collect_files(
+    dir: &Path,
+    root: &Path,
+    total_size: &mut u64,
+    file_count: &mut i32,
+    main_files: &mut Vec<String>,
+) {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return,
@@ -181,7 +216,10 @@ fn collect_files(dir: &Path, root: &Path, total_size: &mut u64, file_count: &mut
 
             if let Some(ext) = path.extension() {
                 let ext_lower = ext.to_string_lossy().to_lowercase();
-                if MODEL_EXTS.iter().any(|e| e.trim_start_matches('.') == ext_lower) {
+                if MODEL_EXTS
+                    .iter()
+                    .any(|e| e.trim_start_matches('.') == ext_lower)
+                {
                     main_files.push(rel_str.replace('\\', "/"));
                 }
             }
@@ -232,38 +270,27 @@ fn detect_type_from_name(name: &str) -> String {
         || d.contains("chattts")
     {
         "tts".to_string()
-    } else if d.contains("llm") || d.contains("gemma") || d.contains("glm")
-    {
+    } else if d.contains("llm") || d.contains("gemma") || d.contains("glm") {
         "llm".to_string()
-    } else if d.contains("singer") || d.contains("svs") || d.contains("soulx")
-    {
+    } else if d.contains("singer") || d.contains("svs") || d.contains("soulx") {
         "svs".to_string()
-    } else if d.contains("music") || d.contains("musicgen")
-    {
+    } else if d.contains("music") || d.contains("musicgen") {
         "music".to_string()
-    } else if d.contains("sound") || d.contains("audiogen")
-    {
+    } else if d.contains("sound") || d.contains("audiogen") {
         "sound".to_string()
-    } else if d.contains("enhance") || d.contains("deepfilter") || d.contains("denoise")
-    {
+    } else if d.contains("enhance") || d.contains("deepfilter") || d.contains("denoise") {
         "enhance".to_string()
-    } else if d.contains("vad") || d.contains("silero")
-    {
+    } else if d.contains("vad") || d.contains("silero") {
         "vad".to_string()
-    } else if d.contains("diarization") || d.contains("pyannote")
-    {
+    } else if d.contains("diarization") || d.contains("pyannote") {
         "diarization".to_string()
-    } else if d.contains("speaker") || d.contains("ecapa") || d.contains("wavlm")
-    {
+    } else if d.contains("speaker") || d.contains("ecapa") || d.contains("wavlm") {
         "speaker".to_string()
-    } else if d.contains("emotion") || d.contains("emotion2vec")
-    {
+    } else if d.contains("emotion") || d.contains("emotion2vec") {
         "emotion".to_string()
-    } else if d.contains("audio_lm") || d.contains("qwen-audio") || d.contains("moshi")
-    {
+    } else if d.contains("audio_lm") || d.contains("qwen-audio") || d.contains("moshi") {
         "audio_lm".to_string()
-    } else if d.contains("translation") || d.contains("hibiki")
-    {
+    } else if d.contains("translation") || d.contains("hibiki") {
         "translation".to_string()
     } else {
         "other".to_string()
@@ -299,10 +326,14 @@ fn generate_friendly_name(raw: &str) -> String {
         s if s.contains("glm tts") && s.contains("full") => "GLM-TTS (Full)".to_string(),
         s if s.contains("glm tts") && !s.contains("full") => "GLM-TTS".to_string(),
         s if s.contains("qwen3 tts") && s.contains("base") => "Qwen3-TTS-Base".to_string(),
-        s if s.contains("qwen3 tts") && s.contains("tokenizer") => "Qwen3-TTS-Tokenizer".to_string(),
+        s if s.contains("qwen3 tts") && s.contains("tokenizer") => {
+            "Qwen3-TTS-Tokenizer".to_string()
+        }
         s if s.contains("qwen3 tts") => "Qwen3-TTS".to_string(),
         s if s.contains("openvoice") => "OpenVoice".to_string(),
-        s if s.contains("gpt sovits") && s.contains("pretrained") => "GPT-SoVITS Pretrained".to_string(),
+        s if s.contains("gpt sovits") && s.contains("pretrained") => {
+            "GPT-SoVITS Pretrained".to_string()
+        }
         s if s.contains("gpt sovits") => "GPT-SoVITS".to_string(),
         _ => name,
     }
@@ -312,7 +343,9 @@ fn generate_friendly_name(raw: &str) -> String {
 fn detect_quant(main_files: &[String]) -> String {
     let has_safetensors = main_files.iter().any(|f| f.ends_with(".safetensors"));
     let has_gguf = main_files.iter().any(|f| f.ends_with(".gguf"));
-    let has_pth = main_files.iter().any(|f| f.ends_with(".pth") || f.ends_with(".pt"));
+    let has_pth = main_files
+        .iter()
+        .any(|f| f.ends_with(".pth") || f.ends_with(".pt"));
     let has_ckpt = main_files.iter().any(|f| f.ends_with(".ckpt"));
     let has_onnx = main_files.iter().any(|f| f.ends_with(".onnx"));
 
@@ -407,20 +440,48 @@ use serde_json::Value;
 /// Known context window sizes for common model families (tokens).
 fn known_context_length(name: &str) -> Option<u32> {
     let lower = name.to_lowercase();
-    if lower.contains("gemma3") { return Some(128_000); }
-    if lower.contains("gemma2") || lower.contains("gemma") { return Some(8_192); }
-    if lower.contains("llama3.3") || lower.contains("llama3.2") || lower.contains("llama3.1") { return Some(128_000); }
-    if lower.contains("llama3") { return Some(8_192); }
-    if lower.contains("llama2") { return Some(4_096); }
-    if lower.contains("qwen3") { return Some(32_768); }
-    if lower.contains("qwen2.5") || lower.contains("qwen2") { return Some(32_768); }
-    if lower.contains("qwen") { return Some(8_192); }
-    if lower.contains("mistral") || lower.contains("mixtral") { return Some(32_768); }
-    if lower.contains("phi4") { return Some(16_384); }
-    if lower.contains("phi3") { return Some(128_000); }
-    if lower.contains("phi") { return Some(2_048); }
-    if lower.contains("deepseek") { return Some(128_000); }
-    if lower.contains("command-r") { return Some(128_000); }
+    if lower.contains("gemma3") {
+        return Some(128_000);
+    }
+    if lower.contains("gemma2") || lower.contains("gemma") {
+        return Some(8_192);
+    }
+    if lower.contains("llama3.3") || lower.contains("llama3.2") || lower.contains("llama3.1") {
+        return Some(128_000);
+    }
+    if lower.contains("llama3") {
+        return Some(8_192);
+    }
+    if lower.contains("llama2") {
+        return Some(4_096);
+    }
+    if lower.contains("qwen3") {
+        return Some(32_768);
+    }
+    if lower.contains("qwen2.5") || lower.contains("qwen2") {
+        return Some(32_768);
+    }
+    if lower.contains("qwen") {
+        return Some(8_192);
+    }
+    if lower.contains("mistral") || lower.contains("mixtral") {
+        return Some(32_768);
+    }
+    if lower.contains("phi4") {
+        return Some(16_384);
+    }
+    if lower.contains("phi3") {
+        return Some(128_000);
+    }
+    if lower.contains("phi") {
+        return Some(2_048);
+    }
+    if lower.contains("deepseek") {
+        return Some(128_000);
+    }
+    if lower.contains("command-r") {
+        return Some(128_000);
+    }
     None
 }
 
@@ -436,11 +497,7 @@ pub async fn scan_ollama_models() -> Vec<crate::state::ModelInfo> {
         Err(_) => return models,
     };
 
-    let res = match client
-        .get(OLLAMA_TAGS_URL)
-        .send()
-        .await
-    {
+    let res = match client.get(OLLAMA_TAGS_URL).send().await {
         Ok(r) => r,
         Err(_) => {
             tracing::debug!("Ollama 未运行或无法连接，跳过 LLM 模型扫描");

@@ -14,11 +14,11 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::constants::OLLAMA_CHAT_URL;
 use crate::handlers::chat::{
     build_ollama_body, clamp_params, ollama_model_name, params_to_options, resolve_model,
     ChatRequest,
 };
-use crate::constants::OLLAMA_CHAT_URL;
 use crate::state::AppState;
 
 // 保持公开 API 稳定：纯函数 build_ollama_messages 现归属 chat.rs，
@@ -149,7 +149,10 @@ fn build_response_body(initial: StreamState) -> Body {
         match state {
             StreamState::SingleError(msg) => {
                 let out = encode_chunk(&StreamChunk::error(msg));
-                Some((Ok::<Bytes, std::io::Error>(Bytes::from(out)), StreamState::End))
+                Some((
+                    Ok::<Bytes, std::io::Error>(Bytes::from(out)),
+                    StreamState::End,
+                ))
             }
             StreamState::Streaming {
                 mut stream,
@@ -205,10 +208,8 @@ fn build_response_body(initial: StreamState) -> Body {
                     }
                     Some(Err(e)) => {
                         // 流读取出错：以 error chunk 表达（此时已开始响应，无法改状态码）。
-                        let out = encode_chunk(&StreamChunk::error(format!(
-                            "读取 Ollama 流出错: {}",
-                            e
-                        )));
+                        let out =
+                            encode_chunk(&StreamChunk::error(format!("读取 Ollama 流出错: {}", e)));
                         return Some((Ok(Bytes::from(out)), StreamState::End));
                     }
                     None => {
@@ -244,10 +245,7 @@ pub async fn chat_stream(
         state.config.clone()
     };
 
-    let model = resolve_model(
-        config.current_llm_model,
-        &req.model,
-    );
+    let model = resolve_model(config.current_llm_model, &req.model);
     // 规范化为 Ollama 裸模型名（剥离内部 `llm/` 前缀），否则 Ollama 报 model not found。
     let model = ollama_model_name(&model).to_string();
 

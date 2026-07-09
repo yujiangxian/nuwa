@@ -30,7 +30,10 @@ pub fn cors(allowed_origins: &[String]) -> CorsLayer {
             "No valid CORS origins parsed, falling back to defaults: {:?}",
             DEFAULT_ORIGINS
         );
-        let defaults: Vec<_> = DEFAULT_ORIGINS.iter().filter_map(|d| d.parse().ok()).collect();
+        let defaults: Vec<_> = DEFAULT_ORIGINS
+            .iter()
+            .filter_map(|d| d.parse().ok())
+            .collect();
         return CorsLayer::new()
             .allow_origin(AllowOrigin::list(defaults))
             .allow_methods(tower_http::cors::Any)
@@ -50,7 +53,10 @@ pub async fn inject_security_headers(
 ) -> axum::response::Response {
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
-    headers.insert("x-content-type-options", HeaderValue::from_static("nosniff"));
+    headers.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
     headers.insert("x-frame-options", HeaderValue::from_static("DENY"));
     headers.insert("x-xss-protection", HeaderValue::from_static("0"));
     response

@@ -24,7 +24,11 @@ pub fn project_root() -> PathBuf {
         .unwrap_or_else(|| {
             std::env::current_dir()
                 .ok()
-                .and_then(|cd| cd.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()))
+                .and_then(|cd| {
+                    cd.parent()
+                        .and_then(|p| p.parent())
+                        .map(|p| p.to_path_buf())
+                })
                 .unwrap_or_else(|| PathBuf::from("."))
         })
 }
@@ -58,10 +62,10 @@ pub fn resolve_path(path: &std::path::Path) -> PathBuf {
 /// Returns the canonical path on success, or an error if path traversal is detected.
 pub fn safe_resolve(base: &std::path::Path, filename: &str) -> Result<PathBuf, String> {
     let candidate = base.join(filename);
-    let canonical = std::fs::canonicalize(&candidate)
-        .map_err(|e| format!("无法解析路径: {}", e))?;
-    let canonical_base = std::fs::canonicalize(base)
-        .map_err(|e| format!("无法解析基准路径: {}", e))?;
+    let canonical =
+        std::fs::canonicalize(&candidate).map_err(|e| format!("无法解析路径: {}", e))?;
+    let canonical_base =
+        std::fs::canonicalize(base).map_err(|e| format!("无法解析基准路径: {}", e))?;
     if !canonical.starts_with(&canonical_base) {
         return Err("路径遍历检测: 不允许访问目录外的文件".to_string());
     }

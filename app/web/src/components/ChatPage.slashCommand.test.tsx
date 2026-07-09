@@ -36,6 +36,7 @@ vi.mock('@/hooks/useApi', () => ({
   useSynthesize: () => ({ mutateAsync: mocks.synthesizeMutateAsync }),
   useConfig: () => ({ data: mocks.configData }),
   useVoices: () => ({ data: mocks.voicesData }),
+  useModels: () => ({ data: [] }),
 }));
 vi.mock('@/hooks/useRecorder', () => ({ useRecorder: () => mocks.recorder }));
 vi.mock('@/hooks/useAudioPlayer', () => ({ useAudioPlayer: () => mocks.player }));

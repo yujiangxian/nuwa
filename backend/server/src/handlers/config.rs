@@ -8,9 +8,7 @@ use tokio::sync::RwLock;
 use crate::config_persist;
 use crate::state::{AppConfig, AppState};
 
-pub async fn get_config(
-    State(state): State<Arc<RwLock<AppState>>>,
-) -> Json<AppConfig> {
+pub async fn get_config(State(state): State<Arc<RwLock<AppState>>>) -> Json<AppConfig> {
     let state = state.read().await;
     Json(state.config.clone())
 }
@@ -59,7 +57,10 @@ pub async fn set_model(
     }
 
     // 更新 current_models HashMap
-    state.config.current_models.insert(req.model_type.clone(), req.model_id.clone());
+    state
+        .config
+        .current_models
+        .insert(req.model_type.clone(), req.model_id.clone());
 
     // 同步到旧字段（向后兼容）
     match req.model_type.as_str() {

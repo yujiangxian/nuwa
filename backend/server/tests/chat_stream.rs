@@ -97,7 +97,10 @@ async fn stream_endpoint_ndjson_paths() {
         .to_str()
         .unwrap()
         .to_string();
-    assert_eq!(ct, "application/x-ndjson", "AC 1.1：Content-Type 须为 NDJSON");
+    assert_eq!(
+        ct, "application/x-ndjson",
+        "AC 1.1：Content-Type 须为 NDJSON"
+    );
 
     let text = resp.text().await.unwrap();
     let chunks = nonempty_lines(&text);
@@ -106,9 +109,16 @@ async fn stream_endpoint_ndjson_paths() {
         .iter()
         .filter_map(|c| c.get("delta").and_then(|d| d.as_str()))
         .collect();
-    assert_eq!(combined, "你好，我是女娲", "AC 1.1：delta 顺序拼接应还原全文");
+    assert_eq!(
+        combined, "你好，我是女娲",
+        "AC 1.1：delta 顺序拼接应还原全文"
+    );
     assert!(
-        chunks.last().and_then(|c| c.get("done")).and_then(|d| d.as_bool()) == Some(true),
+        chunks
+            .last()
+            .and_then(|c| c.get("done"))
+            .and_then(|d| d.as_bool())
+            == Some(true),
         "AC 1.1：末块应为 done:true，实际: {:?}",
         chunks
     );
@@ -125,19 +135,36 @@ async fn stream_endpoint_ndjson_paths() {
         .await
         .unwrap();
 
-    assert_eq!(resp.status(), reqwest::StatusCode::OK, "AC 1.6：仍为 200（错误以流内块表达）");
     assert_eq!(
-        resp.headers().get("content-type").unwrap().to_str().unwrap(),
+        resp.status(),
+        reqwest::StatusCode::OK,
+        "AC 1.6：仍为 200（错误以流内块表达）"
+    );
+    assert_eq!(
+        resp.headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "application/x-ndjson"
     );
     let text = resp.text().await.unwrap();
     let chunks = nonempty_lines(&text);
-    assert_eq!(chunks.len(), 1, "AC 1.6：应只有一个 error chunk，实际: {:?}", chunks);
+    assert_eq!(
+        chunks.len(),
+        1,
+        "AC 1.6：应只有一个 error chunk，实际: {:?}",
+        chunks
+    );
     let err = chunks[0]
         .get("error")
         .and_then(|e| e.as_str())
         .expect("AC 1.6：应含 error 字段");
-    assert!(err.contains("Ollama"), "AC 1.6：错误文案应提到 Ollama: {}", err);
+    assert!(
+        err.contains("Ollama"),
+        "AC 1.6：错误文案应提到 Ollama: {}",
+        err
+    );
     assert!(
         err.contains("启动") || err.contains("加载"),
         "AC 1.6：错误文案应为友好提示: {}",
@@ -160,10 +187,19 @@ async fn stream_endpoint_ndjson_paths() {
         .await
         .unwrap();
 
-    assert_eq!(resp.status(), reqwest::StatusCode::OK, "AC 1.7：仍为 200（错误以流内块表达）");
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::OK,
+        "AC 1.7：仍为 200（错误以流内块表达）"
+    );
     let text = resp.text().await.unwrap();
     let chunks = nonempty_lines(&text);
-    assert_eq!(chunks.len(), 1, "AC 1.7：应只有一个 error chunk，实际: {:?}", chunks);
+    assert_eq!(
+        chunks.len(),
+        1,
+        "AC 1.7：应只有一个 error chunk，实际: {:?}",
+        chunks
+    );
     let err = chunks[0]
         .get("error")
         .and_then(|e| e.as_str())

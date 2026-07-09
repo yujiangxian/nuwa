@@ -31,7 +31,11 @@ fn project_root() -> std::path::PathBuf {
         .unwrap_or_else(|| {
             std::env::current_dir()
                 .ok()
-                .and_then(|cd| cd.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()))
+                .and_then(|cd| {
+                    cd.parent()
+                        .and_then(|p| p.parent())
+                        .map(|p| p.to_path_buf())
+                })
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
         })
 }
@@ -77,7 +81,9 @@ pub async fn scan_models(
             let dir_clone = models_dir.clone();
             let mut scanned = match tokio::task::spawn_blocking(move || {
                 model_scanner::scan_models_dir(&dir_clone)
-            }).await {
+            })
+            .await
+            {
                 Ok(result) => result,
                 Err(e) => {
                     tracing::error!("扫描线程 panic: {}", e);
@@ -97,7 +103,8 @@ pub async fn scan_models(
             state.models = scanned;
             tracing::info!("后台扫描完成，发现 {} 个模型", count);
             Ok::<(), ()>(())
-        }.await;
+        }
+        .await;
 
         if let Err(_) = result {
             tracing::error!("扫描任务异常终止");
@@ -191,7 +198,9 @@ pub async fn delete_model(
     }
 
     // 从 current_models HashMap 移除
-    let types_to_remove: Vec<String> = state.config.current_models
+    let types_to_remove: Vec<String> = state
+        .config
+        .current_models
         .iter()
         .filter(|(_, v)| *v == &id)
         .map(|(k, _)| k.clone())
