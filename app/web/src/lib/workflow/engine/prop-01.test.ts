@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 1: 就绪选择的确定性
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /// 模型类型与下载状态视觉配置 — 从 ModelsPage 提取，供全项目复用。
 import { Cpu, Mic, MessageSquare, Box, AudioLines, Music, Volume2, Wand2, Activity, Users, Fingerprint, Heart, Brain, Languages, Check, Clock, Gauge, AlertTriangle, X } from 'lucide-react';
 

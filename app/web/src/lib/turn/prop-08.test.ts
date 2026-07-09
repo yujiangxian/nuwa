@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 8: 未知 Call_Id 工具结果失败
 //
 // 对任意 awaiting_tools 的 s 与含一个 callId 不在 s.pendingCallIds 的 outcome 的

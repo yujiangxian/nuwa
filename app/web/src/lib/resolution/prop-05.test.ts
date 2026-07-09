@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 5: 悬空引用校验对应 unresolved
 /**
  * Property 5: validateAgentToolRefs emits exactly one RESOLUTION_TOOL_NOT_FOUND

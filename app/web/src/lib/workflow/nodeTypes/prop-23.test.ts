@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 23: 规范形式唯一（语义等价归一）
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

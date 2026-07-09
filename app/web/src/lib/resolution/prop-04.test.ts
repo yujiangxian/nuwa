@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 4: 解析确定性与不可变性
 /**
  * Property 4: resolveAgentTools is deterministic (two calls deep-equal) and

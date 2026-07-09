@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: markdown-message-rendering
 //
 // 任务 4.2 单元测试：CodeBlock 复制按钮与语言标签。

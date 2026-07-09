@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 4: 装配首元素为系统消息
 //
 // 对任意 a、transcript t 与 options，assembleMessages(a, t, options) 非空，其首元素

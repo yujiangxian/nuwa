@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 13: 注册表合法蕴含逐项合法
 /**
  * Property 13: a valid registry implies each tool is individually valid.

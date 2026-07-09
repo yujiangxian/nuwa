@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! Voice library pure-logic layer.
 //!
 //! Centralizes side-effect-light logic for the voice library so it can be

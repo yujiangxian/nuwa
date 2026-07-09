@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 10: 错误结构良构（定位与描述）
 //
 // Property 10, Validates: Requirements 16.1, 16.5

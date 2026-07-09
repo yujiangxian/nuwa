@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { memo } from 'react';
 import { Cpu, Check, Database, Globe, Zap, Download, AlertTriangle } from 'lucide-react';
 import { formatSize } from '@/lib/modelFormat';

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-graph-model — minimal reproducer for each ErrorCode (regression locator)
 // Requirements: 4.2, 4.4, 5.2, 5.4, 5.6, 6.2, 7.2, 8.2, 9.2, 9.4, 9.6, 10.3, 11.2, 11.4, 11.6, 11.8
 import { describe, it, expect } from 'vitest';

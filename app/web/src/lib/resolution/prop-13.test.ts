@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 13: 能力索引与逐项派生一致
 /**
  * Property 13: For any Capability c, buildCapabilityIndex maps c to exactly the

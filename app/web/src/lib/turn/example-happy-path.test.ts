@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Example: 完整一轮快乐路径
 
 import { describe, it, expect } from 'vitest';

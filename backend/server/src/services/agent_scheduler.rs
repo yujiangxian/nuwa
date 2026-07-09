@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! Agent 调度器 — 把 ASR/TTS/LLM 注册为 Agent，定义流水线并执行。
 
 use serde::{Deserialize, Serialize};

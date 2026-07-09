@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 13: normalizeMessage 幂等与不动点
 
 import { describe, it } from 'vitest';

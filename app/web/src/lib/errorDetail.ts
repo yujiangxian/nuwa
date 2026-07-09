@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /// 结构化错误提取 — 替代全项目中 `catch (err: any)` 模式。
 
 /** Axios 错误或标准 Error 的结构化接口。 */

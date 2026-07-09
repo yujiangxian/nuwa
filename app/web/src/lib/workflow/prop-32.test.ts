@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-graph-model, Property 32: 变更操作幂等性
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

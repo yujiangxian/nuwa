@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: integration-roadmap, Property 7: 状态一致性不变量保持
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

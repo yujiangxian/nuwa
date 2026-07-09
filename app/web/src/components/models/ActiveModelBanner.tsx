@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { Check, Sparkles } from 'lucide-react';
 import { typeConfig } from '@/lib/modelTypeConfig';
 import { formatSize } from '@/lib/modelFormat';

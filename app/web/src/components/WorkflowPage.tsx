@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { ArrowLeft, Play, StepForward, RotateCcw, CircleCheck, CircleDot, Circle, CircleX, Ban, Zap, Loader2, Mic, MessageSquare, Volume2, FileAudio } from 'lucide-react';
 import { useUIStore } from '@/store/uiStore';

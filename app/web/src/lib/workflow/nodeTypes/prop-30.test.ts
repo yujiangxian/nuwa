@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 30: 输入加宽下类型推导单调可靠
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 6: validateMessage 逐类违规检测
 //
 // 对任意合法 Message，单点注入：空 id ⇒ MESSAGE_EMPTY_ID(field='id')；空 parts ⇒

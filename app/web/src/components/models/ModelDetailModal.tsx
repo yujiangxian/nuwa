@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { File, FolderOpen, X } from 'lucide-react';
 import { formatBytes } from '@/lib/modelFormat';
 import ModelNotesEditor from './ModelNotesEditor';

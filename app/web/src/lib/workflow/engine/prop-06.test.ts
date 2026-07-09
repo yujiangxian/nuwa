@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 6: Completed 节点输入完备
 //
 // For any ExecutionState produced by run() over a Valid_Graph, every `Completed`

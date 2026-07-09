@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: integration-roadmap, Property 8: 中断恢复等价（model-based）
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

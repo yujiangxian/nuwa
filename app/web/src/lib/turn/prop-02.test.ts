@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 2: 非 awaiting_model 施加模型输出失败
 
 import { describe, it, expect } from 'vitest';

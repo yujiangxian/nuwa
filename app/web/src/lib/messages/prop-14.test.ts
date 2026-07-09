@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 14: normalizeMessage 语义等价唯一且保持关键字段
 
 import { describe, it } from 'vitest';

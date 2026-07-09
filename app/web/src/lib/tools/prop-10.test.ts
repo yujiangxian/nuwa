@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 10: validateTool 完整报告、确定与稳定排序
 /**
  * Property 10: complete reporting, determinism and stable ordering.

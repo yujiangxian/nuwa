@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 12: 能力派生忠实且完备
 /**
  * Property 12: agentCapabilities is faithful and complete with respect to the

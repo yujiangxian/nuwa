@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 6: 超限装配长度恰为上限且历史为最近后缀
 //
 // 对任意 a、t 与整数 max，满足 2 <= max < 1 + t.messages.length，

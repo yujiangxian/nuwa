@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 7: validateMessage 完整报告、确定与稳定排序
 //
 // 对任意注入 k≥2 处独立违规的 Message，validateMessage 报告每处对应码（不短路），

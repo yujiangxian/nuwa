@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 8: 校验结果 valid 当且仅当无错误且错误良构
 //
 // 对任意 Message m，validateMessage(m).valid ⇔ errors 空，每条 message 非空、location

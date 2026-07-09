@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: command-palette — Command_Registry builder 单元测试（任务 4.2，Req 2, 5）
 import { describe, it, expect, vi } from 'vitest';
 import { buildCommandRegistry, type CommandRegistryContext } from './commandRegistry';

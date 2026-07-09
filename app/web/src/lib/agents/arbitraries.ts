@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry
 /**
  * Custom fast-check arbitraries for the agent definition registry test suite.

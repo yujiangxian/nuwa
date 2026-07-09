@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 9: 跳过排他性且不执行被跳过节点
 //
 // For a Valid_Graph with a `condition` branch, after the condition is executed the

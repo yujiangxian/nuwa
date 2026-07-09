@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Example: AssemblyErrorCode 成员完整且仅 2 个
 //
 // Validates: Requirements 7.1

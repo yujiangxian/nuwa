@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine — example/edge test: loop hits maxIterations exactly.
 // Validates: Requirements 8.4, 9.1
 //

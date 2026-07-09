@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 16: 校验结果 valid 当且仅当无错误且错误良构
 /**
  * Property 16: For legal inputs to each of the three validation functions, the

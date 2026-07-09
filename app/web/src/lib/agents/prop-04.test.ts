@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 4: 添加/移除往返恒等
 //
 // 对任意 AgentRegistry r 与 Agent_Id 不在 r 中的 AgentDefinition a，先 addAgent(r, a)

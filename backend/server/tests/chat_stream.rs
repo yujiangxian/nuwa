@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! 集成测试：流式对话接口 `POST /api/chat/stream`（Stream_Endpoint）。
 //!
 //! 通过临时端口启动真实 axum 服务（被测服务），并按需启动一个临时 **mock Ollama**

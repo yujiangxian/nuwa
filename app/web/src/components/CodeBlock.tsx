@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: markdown-message-rendering
 // 围栏代码块组件：渲染语法高亮后的代码，提供语言标签与「复制代码」按钮。
 //

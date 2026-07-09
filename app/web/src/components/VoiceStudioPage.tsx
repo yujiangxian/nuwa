@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { useState, useRef, useEffect } from 'react';
 import { useUIStore } from '@/store/uiStore';
 import { useToastStore } from '@/store/toastStore';

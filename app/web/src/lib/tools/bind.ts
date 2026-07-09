@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system
 /**
  * Bridge helpers between the tool layer and the prior workflow / agent layers.

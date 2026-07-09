@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 8: 装配长度上界
 //
 // 对任意 a、t 与含 maxMessages = max (max >= 1) 的 options，assembleMessages 的

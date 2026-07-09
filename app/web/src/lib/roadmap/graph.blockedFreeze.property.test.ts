@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: integration-roadmap, Property 6: 被阻塞模块的下游冻结且不被重试选取
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

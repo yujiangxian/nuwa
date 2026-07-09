@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 13: human_input 配置错误检测
 //
 // Property 13, Validates: Requirements 6.4, 6.5

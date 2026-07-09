@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /**
  * Pure helpers for the chat-input slash-command feature (Slash_Command_Engine).
  *

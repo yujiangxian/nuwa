@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 11: 校验结果 valid 当且仅当无错误且错误良构
 /**
  * Property 11: valid iff errors empty, and errors are well-formed.

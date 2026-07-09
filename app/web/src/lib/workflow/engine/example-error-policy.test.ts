@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine — example/edge test: error policy contrast.
 // Validates: Requirements 14.2, 14.3, 14.4
 //

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /// 应用设置独立 store — 从 uiStore 拆分。
 /// 管理 theme、language、autoPlay、backendUrl、modelsDir 五个字段，
 /// 持久化到 localStorage 键 `nuwa_settings`。

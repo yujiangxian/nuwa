@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Example: 具体列表的截断与 max=1 装配
 //
 // Validates: Requirements 5.2, 5.3, 8.4
