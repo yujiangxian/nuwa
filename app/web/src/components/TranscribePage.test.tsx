@@ -44,6 +44,7 @@ vi.mock('@/hooks/useApi', () => ({
     mutateAsync: mockMutateAsync,
     isPending: getIsPending(),
   }),
+  useModels: () => ({ data: [] }),
 }));
 
 vi.mock('@/hooks/useRecorder', () => ({

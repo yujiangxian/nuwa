@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 yujiangxian
 
+use axum::response::sse::{Event, KeepAlive, Sse};
 /// Agent 调度器 HTTP 端点。
 use axum::{
     extract::{Path, State},
     Json,
 };
-use axum::response::sse::{Event, KeepAlive, Sse};
 use futures::Stream;
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -29,8 +29,7 @@ pub async fn run_pipeline(
     Json(req): Json<RunRequest>,
 ) -> Json<serde_json::Value> {
     // 获取项目根目录用于 output/ 路径
-    let project_root = std::env::current_dir()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let project_root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     drop(state); // 释放锁
 
     match scheduler().submit(req, &project_root).await {
@@ -50,8 +49,7 @@ pub async fn run_pipeline_stream(
     State(state): State<Arc<RwLock<AppState>>>,
     Json(req): Json<RunRequest>,
 ) -> Json<serde_json::Value> {
-    let project_root = std::env::current_dir()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let project_root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     drop(state);
 
     match scheduler().submit_stream(req, &project_root).await {

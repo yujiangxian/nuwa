@@ -17,8 +17,7 @@ use crate::state::VoiceInfo;
 use std::path::{Path, PathBuf};
 
 /// Supported audio extensions (lowercase, with leading dot).
-pub const SUPPORTED_EXTENSIONS: &[&str] =
-    &[".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm"];
+pub const SUPPORTED_EXTENSIONS: &[&str] = &[".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm"];
 
 /// Single-file upload size limit: 20 MB.
 pub const MAX_UPLOAD_SIZE: usize = 20 * 1024 * 1024;
@@ -164,14 +163,13 @@ fn parse_wav(bytes: &[u8]) -> Option<(i32, Option<f64>)> {
 
 /// Persist: write `voices` to `voices.json` (serde_json pretty).
 pub fn save_library(voices_dir: &Path, voices: &[VoiceInfo]) -> Result<(), String> {
-    let json = serde_json::to_string_pretty(voices)
-        .map_err(|e| format!("序列化音色库失败: {e}"))?;
+    let json =
+        serde_json::to_string_pretty(voices).map_err(|e| format!("序列化音色库失败: {e}"))?;
     let path = store_path(voices_dir);
     // Ensure the parent directory exists before writing.
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("创建音色目录失败: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(|e| format!("创建音色目录失败: {e}"))?;
         }
     }
     std::fs::write(&path, json).map_err(|e| format!("写入音色库失败: {e}"))
@@ -226,9 +224,7 @@ pub fn reconcile_library(
     let mut kept: Vec<VoiceInfo> = Vec::new();
     for entry in store_entries {
         let fname = file_name_of(&entry.path);
-        let present = existing_files
-            .iter()
-            .any(|f| file_name_of(f) == fname);
+        let present = existing_files.iter().any(|f| file_name_of(f) == fname);
         if present {
             kept.push(entry);
         }
@@ -253,10 +249,7 @@ pub fn reconcile_library(
             continue;
         }
         // Avoid duplicating the same uncovered filename twice within this pass.
-        if kept
-            .iter()
-            .any(|e| file_name_of(&e.path) == fname)
-        {
+        if kept.iter().any(|e| file_name_of(&e.path) == fname) {
             continue;
         }
         let id = allocate_id(&kept);
@@ -296,11 +289,11 @@ mod tests {
     /// (finite, bounded `duration_seconds`; printable strings).
     fn arb_voice() -> impl Strategy<Value = VoiceInfo> {
         (
-            "[a-zA-Z0-9_-]{1,16}",                 // id
-            "[ -~]{0,20}",                         // name (printable ASCII)
-            "[a-zA-Z0-9_./-]{1,30}",               // path
-            proptest::option::of("[ -~]{0,30}"),   // transcript
-            any::<i32>(),                          // sample_rate
+            "[a-zA-Z0-9_-]{1,16}",                     // id
+            "[ -~]{0,20}",                             // name (printable ASCII)
+            "[a-zA-Z0-9_./-]{1,30}",                   // path
+            proptest::option::of("[ -~]{0,30}"),       // transcript
+            any::<i32>(),                              // sample_rate
             proptest::option::of(-1.0e6f64..1.0e6f64), // duration_seconds (finite)
         )
             .prop_map(
@@ -358,9 +351,8 @@ mod tests {
 
     /// Filenames mixing supported and unsupported extensions (and none).
     fn arb_filename() -> impl Strategy<Value = String> {
-        let stems = prop::sample::select(vec![
-            "a", "b", "c", "voice", "x", "data1", "sound", "rec",
-        ]);
+        let stems =
+            prop::sample::select(vec!["a", "b", "c", "voice", "x", "data1", "sound", "rec"]);
         let exts = prop::sample::select(vec![
             ".wav", ".mp3", ".m4a", ".flac", ".ogg", ".webm", ".txt", ".bin", ".json", "",
         ]);
@@ -839,7 +831,10 @@ mod tests {
         // Size check mirrors the handler: reject when size > MAX_UPLOAD_SIZE.
         let exactly_max = MAX_UPLOAD_SIZE;
         let over_max = MAX_UPLOAD_SIZE + 1;
-        assert!(!(exactly_max > MAX_UPLOAD_SIZE), "exactly 20MB must be accepted");
+        assert!(
+            !(exactly_max > MAX_UPLOAD_SIZE),
+            "exactly 20MB must be accepted"
+        );
         assert!(over_max > MAX_UPLOAD_SIZE, "20MB + 1 must be rejected");
         assert_eq!(MAX_UPLOAD_SIZE, 20 * 1024 * 1024);
     }
@@ -850,16 +845,14 @@ mod tests {
     // ========================================================================
     #[test]
     fn serve_lookup_missing_id_returns_none() {
-        let voices = vec![
-            VoiceInfo {
-                id: "exists-1".to_string(),
-                name: "a".to_string(),
-                path: "assets/datasets/voices/a.wav".to_string(),
-                transcript: Some(String::new()),
-                sample_rate: 16000,
-                duration_seconds: None,
-            },
-        ];
+        let voices = vec![VoiceInfo {
+            id: "exists-1".to_string(),
+            name: "a".to_string(),
+            path: "assets/datasets/voices/a.wav".to_string(),
+            transcript: Some(String::new()),
+            sample_rate: 16000,
+            duration_seconds: None,
+        }];
         // Mirrors the handler lookup: voices.iter().find(|v| v.id == id).
         assert!(voices.iter().find(|v| v.id == "does-not-exist").is_none());
         assert!(voices.iter().find(|v| v.id == "exists-1").is_some());

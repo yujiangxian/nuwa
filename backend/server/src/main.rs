@@ -75,7 +75,11 @@ async fn main() {
                 if name_str.starts_with("nuwa_") {
                     if let Ok(meta) = entry.metadata() {
                         if let Ok(mtime) = meta.modified() {
-                            if mtime.duration_since(std::time::UNIX_EPOCH).unwrap_or_default() < cutoff {
+                            if mtime
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                < cutoff
+                            {
                                 let _ = std::fs::remove_file(entry.path());
                             }
                         }
@@ -101,7 +105,11 @@ async fn main() {
                 if path.extension().map(|e| e == "wav").unwrap_or(false) {
                     if let Ok(meta) = entry.metadata() {
                         if let Ok(mtime) = meta.modified() {
-                            if mtime.duration_since(std::time::UNIX_EPOCH).unwrap_or_default() < cutoff {
+                            if mtime
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                < cutoff
+                            {
                                 cleaned_bytes += meta.len();
                                 if std::fs::remove_file(&path).is_ok() {
                                     cleaned += 1;
@@ -112,7 +120,11 @@ async fn main() {
                 }
             }
             if cleaned > 0 {
-                tracing::info!(cleaned, cleaned_mb = cleaned_bytes / 1_048_576, "Cleaned stale TTS output files");
+                tracing::info!(
+                    cleaned,
+                    cleaned_mb = cleaned_bytes / 1_048_576,
+                    "Cleaned stale TTS output files"
+                );
             }
         }
     }
@@ -139,30 +151,36 @@ async fn main() {
     // 校验所有已配置模型是否存在于扫描结果中（兼容带/不带类型前缀的 ID）
     let all_ids: Vec<String> = app_state.models.iter().map(|m| m.id.clone()).collect();
     for (model_type, model_id) in app_state.config.current_models.clone() {
-        let found = all_ids.iter().any(|id| {
-            id == &model_id || id == &format!("{}/{}", model_type, model_id)
-        });
+        let found = all_ids
+            .iter()
+            .any(|id| id == &model_id || id == &format!("{}/{}", model_type, model_id));
         if !found {
             tracing::warn!(%model_type, %model_id, "Configured model not found in scanned models, removing");
             app_state.config.current_models.remove(&model_type);
         }
     }
     if let Some(ref id) = app_state.config.current_llm_model.clone() {
-        let found = all_ids.iter().any(|m| m == id || m == &format!("llm/{}", id));
+        let found = all_ids
+            .iter()
+            .any(|m| m == id || m == &format!("llm/{}", id));
         if !found {
             tracing::warn!(%id, "current_llm_model not found, clearing");
             app_state.config.current_llm_model = None;
         }
     }
     if let Some(ref id) = app_state.config.current_asr_model.clone() {
-        let found = all_ids.iter().any(|m| m == id || m == &format!("asr/{}", id));
+        let found = all_ids
+            .iter()
+            .any(|m| m == id || m == &format!("asr/{}", id));
         if !found {
             tracing::warn!(%id, "current_asr_model not found, clearing");
             app_state.config.current_asr_model = None;
         }
     }
     if let Some(ref id) = app_state.config.current_tts_model.clone() {
-        let found = all_ids.iter().any(|m| m == id || m == &format!("tts/{}", id));
+        let found = all_ids
+            .iter()
+            .any(|m| m == id || m == &format!("tts/{}", id));
         if !found {
             tracing::warn!(%id, "current_tts_model not found, clearing");
             app_state.config.current_tts_model = None;
@@ -224,8 +242,12 @@ async fn main() {
         .unwrap_or_else(|| vec!["http://localhost:5173".to_string()]);
 
     let app = routes::create_router()
-        .layer(axum::middleware::from_fn(middleware::inject_security_headers))
-        .layer(tower_http::limit::RequestBodyLimitLayer::new(50 * 1024 * 1024))
+        .layer(axum::middleware::from_fn(
+            middleware::inject_security_headers,
+        ))
+        .layer(tower_http::limit::RequestBodyLimitLayer::new(
+            50 * 1024 * 1024,
+        ))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(middleware::cors(&allowed_origins))
         .with_state(state);

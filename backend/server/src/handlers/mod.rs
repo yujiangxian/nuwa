@@ -40,7 +40,10 @@ pub async fn health(
         Ok(resp) if resp.status().is_success() => true,
         _ => false,
     };
-    checks.insert("ollama".into(), json!(if ollama_ok { "ok" } else { "unreachable" }));
+    checks.insert(
+        "ollama".into(),
+        json!(if ollama_ok { "ok" } else { "unreachable" }),
+    );
 
     // Disk space check (output directory)
     let output_dir = crate::util::project_root().join("output");
@@ -51,7 +54,10 @@ pub async fn health(
             tokio::fs::create_dir_all(&output_dir).await.is_ok()
         }
     };
-    checks.insert("output_dir".into(), json!(if disk_ok { "ok" } else { "error" }));
+    checks.insert(
+        "output_dir".into(),
+        json!(if disk_ok { "ok" } else { "error" }),
+    );
 
     let all_healthy = ollama_ok && disk_ok;
     Json(json!({

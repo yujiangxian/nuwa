@@ -146,12 +146,8 @@ fn default_model() -> String {
 }
 
 /// Model_Selection 回退顺序：current_llm_model → 请求体 model。
-pub fn resolve_model(
-    current_llm_model: Option<String>,
-    request_model: &str,
-) -> String {
-    current_llm_model
-        .unwrap_or_else(|| request_model.to_string())
+pub fn resolve_model(current_llm_model: Option<String>, request_model: &str) -> String {
+    current_llm_model.unwrap_or_else(|| request_model.to_string())
 }
 
 /// 把内部模型 ID 规范化为 Ollama 实际模型名（Ollama_Model_Name）。
@@ -225,16 +221,14 @@ pub async fn chat(
         state.config.clone()
     };
 
-    let model = resolve_model(
-        config.current_llm_model,
-        &req.model,
-    );
+    let model = resolve_model(config.current_llm_model, &req.model);
     // 规范化为 Ollama 裸模型名（剥离内部 `llm/` 前缀），否则 Ollama 报 model not found。
     let model = ollama_model_name(&model).to_string();
 
     // 钳制生成参数（可信边界）→ 组装 options → 构造 Ollama 请求体（缺省无回归核心）。
     let options = params_to_options(&clamp_params(&req));
-    let ollama_req = build_ollama_body(&model, req.system.as_deref(), &req.messages, false, options);
+    let ollama_req =
+        build_ollama_body(&model, req.system.as_deref(), &req.messages, false, options);
 
     let client = reqwest::Client::new();
     let res = client
@@ -276,11 +270,12 @@ pub async fn chat(
                 done: true,
             }))
         }
-        Err(e) => {
-            Err(Json(ChatError {
-                error: format!("Failed to connect to Ollama: {}. 请确认 Ollama 已启动且模型已加载。", e),
-            }))
-        }
+        Err(e) => Err(Json(ChatError {
+            error: format!(
+                "Failed to connect to Ollama: {}. 请确认 Ollama 已启动且模型已加载。",
+                e
+            ),
+        })),
     }
 }
 
@@ -309,10 +304,7 @@ mod tests {
 
     #[test]
     fn resolve_model_prefers_llm_model() {
-        assert_eq!(
-            resolve_model(Some("a".into()), "c"),
-            "a"
-        );
+        assert_eq!(resolve_model(Some("a".into()), "c"), "a");
     }
 
     #[test]
@@ -498,30 +490,110 @@ mod tests {
     fn shared_clamp_vectors() -> Vec<ClampCase> {
         vec![
             // temperature [0, 2]
-            ClampCase { key: "temperature", raw: -5.0, expected: 0.0 },
-            ClampCase { key: "temperature", raw: 0.0, expected: 0.0 },
-            ClampCase { key: "temperature", raw: 1.3, expected: 1.3 },
-            ClampCase { key: "temperature", raw: 2.0, expected: 2.0 },
-            ClampCase { key: "temperature", raw: 9.0, expected: 2.0 },
+            ClampCase {
+                key: "temperature",
+                raw: -5.0,
+                expected: 0.0,
+            },
+            ClampCase {
+                key: "temperature",
+                raw: 0.0,
+                expected: 0.0,
+            },
+            ClampCase {
+                key: "temperature",
+                raw: 1.3,
+                expected: 1.3,
+            },
+            ClampCase {
+                key: "temperature",
+                raw: 2.0,
+                expected: 2.0,
+            },
+            ClampCase {
+                key: "temperature",
+                raw: 9.0,
+                expected: 2.0,
+            },
             // top_p [0, 1]
-            ClampCase { key: "topP", raw: -1.0, expected: 0.0 },
-            ClampCase { key: "topP", raw: 0.5, expected: 0.5 },
-            ClampCase { key: "topP", raw: 1.0, expected: 1.0 },
-            ClampCase { key: "topP", raw: 3.0, expected: 1.0 },
+            ClampCase {
+                key: "topP",
+                raw: -1.0,
+                expected: 0.0,
+            },
+            ClampCase {
+                key: "topP",
+                raw: 0.5,
+                expected: 0.5,
+            },
+            ClampCase {
+                key: "topP",
+                raw: 1.0,
+                expected: 1.0,
+            },
+            ClampCase {
+                key: "topP",
+                raw: 3.0,
+                expected: 1.0,
+            },
             // repeat_penalty [0, 2]
-            ClampCase { key: "repeatPenalty", raw: -2.0, expected: 0.0 },
-            ClampCase { key: "repeatPenalty", raw: 1.1, expected: 1.1 },
-            ClampCase { key: "repeatPenalty", raw: 5.0, expected: 2.0 },
+            ClampCase {
+                key: "repeatPenalty",
+                raw: -2.0,
+                expected: 0.0,
+            },
+            ClampCase {
+                key: "repeatPenalty",
+                raw: 1.1,
+                expected: 1.1,
+            },
+            ClampCase {
+                key: "repeatPenalty",
+                raw: 5.0,
+                expected: 2.0,
+            },
             // top_k [0, 100] 整型
-            ClampCase { key: "topK", raw: -10.0, expected: 0.0 },
-            ClampCase { key: "topK", raw: 3.7, expected: 4.0 },
-            ClampCase { key: "topK", raw: 40.0, expected: 40.0 },
-            ClampCase { key: "topK", raw: 250.0, expected: 100.0 },
+            ClampCase {
+                key: "topK",
+                raw: -10.0,
+                expected: 0.0,
+            },
+            ClampCase {
+                key: "topK",
+                raw: 3.7,
+                expected: 4.0,
+            },
+            ClampCase {
+                key: "topK",
+                raw: 40.0,
+                expected: 40.0,
+            },
+            ClampCase {
+                key: "topK",
+                raw: 250.0,
+                expected: 100.0,
+            },
             // num_predict: -1 逃逸 + [1, 8192] 整型
-            ClampCase { key: "numPredict", raw: -1.0, expected: -1.0 },
-            ClampCase { key: "numPredict", raw: 0.0, expected: 1.0 },
-            ClampCase { key: "numPredict", raw: 512.4, expected: 512.0 },
-            ClampCase { key: "numPredict", raw: 99999.0, expected: 8192.0 },
+            ClampCase {
+                key: "numPredict",
+                raw: -1.0,
+                expected: -1.0,
+            },
+            ClampCase {
+                key: "numPredict",
+                raw: 0.0,
+                expected: 1.0,
+            },
+            ClampCase {
+                key: "numPredict",
+                raw: 512.4,
+                expected: 512.0,
+            },
+            ClampCase {
+                key: "numPredict",
+                raw: 99999.0,
+                expected: 8192.0,
+            },
         ]
     }
 
@@ -638,8 +710,7 @@ mod tests {
         // 经 build_ollama_body 产出的 options 相同，仅 stream 取值不同。
         let req = req_with(Some(1.4), None, Some(512), Some(40), None);
         let options = params_to_options(&clamp_params(&req));
-        let non_stream =
-            build_ollama_body("m", None, &req.messages, false, options.clone());
+        let non_stream = build_ollama_body("m", None, &req.messages, false, options.clone());
         let stream = build_ollama_body("m", None, &req.messages, true, options);
         assert_eq!(non_stream["options"], stream["options"]);
         assert_eq!(non_stream["options"]["temperature"], 1.4);
