@@ -122,6 +122,12 @@ pub struct AgentScheduler {
     pub model_sem: RwLock<HashMap<String, Arc<Semaphore>>>,
 }
 
+impl Default for AgentScheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AgentScheduler {
     pub fn new() -> Self {
         Self {
@@ -243,7 +249,7 @@ impl AgentScheduler {
             .find(|p| p.id == req.pipeline)
             .ok_or_else(|| format!("未知流水线: {}", req.pipeline))?;
 
-        let task_id = format!("agent_{}", Uuid::new_v4().to_string()[..8].to_string());
+        let task_id = format!("agent_{}", &Uuid::new_v4().to_string()[..8]);
         let now = chrono::Utc::now().to_rfc3339();
 
         let (tx, _) = broadcast::channel::<TaskEvent>(32);
@@ -308,7 +314,7 @@ impl AgentScheduler {
             .find(|p| p.id == req.pipeline)
             .ok_or_else(|| format!("未知流水线: {}", req.pipeline))?;
 
-        let task_id = format!("agent_{}", Uuid::new_v4().to_string()[..8].to_string());
+        let task_id = format!("agent_{}", &Uuid::new_v4().to_string()[..8]);
         let now = chrono::Utc::now().to_rfc3339();
 
         let (tx, _) = broadcast::channel::<TaskEvent>(64);

@@ -300,8 +300,7 @@ fn detect_type_from_name(name: &str) -> String {
 /// 生成友好显示名称
 fn generate_friendly_name(raw: &str) -> String {
     let name = raw
-        .replace('_', " ")
-        .replace('-', " ")
+        .replace(['_', '-'], " ")
         .split_whitespace()
         .map(|w| {
             let mut c = w.chars();
