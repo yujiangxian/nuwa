@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types — example test for error location fields (R16.2–R16.4)
 
 import { describe, it, expect } from 'vitest';

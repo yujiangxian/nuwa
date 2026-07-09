@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 16: 失败处理与故障传播
 //
 // Validates: Requirements 14.1, 14.2, 14.3, 14.4, 14.5

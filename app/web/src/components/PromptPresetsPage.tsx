@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { useState, useRef } from 'react';
 import { useUIStore, type PromptPreset } from '@/store/uiStore';
 import { validatePreset, TITLE_MAX_LENGTH, CONTENT_MAX_LENGTH } from '@/lib/promptPreset';

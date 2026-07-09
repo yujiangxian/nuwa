@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 8: 校验错误排序稳定
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

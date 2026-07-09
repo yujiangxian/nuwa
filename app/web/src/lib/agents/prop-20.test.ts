@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 20: 反序列化拒斥畸形输入
 //
 // 对任意不符合 Registry_Json 结构的字符串 s（随机非 JSON、缺字段/错类型的对象、

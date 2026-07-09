@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // 共享类型定义 — 从 uiStore.ts 提取，供全项目引用。
 // 所有 lib/ 模块的类型导入应使用此文件而非 uiStore.ts，
 // 消除运行时依赖，仅保持类型级耦合。

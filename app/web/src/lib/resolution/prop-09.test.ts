@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 9: 工具节点——重复 argName 检测
 /**
  * Property 9 (Validates: Requirements 6.6):

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 15: 序列化往返恒等
 
 import { describe, it } from 'vitest';

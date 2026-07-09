@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { memo, useMemo } from 'react';
 import { Check, Clock, FileArchive, Info, Trash2 } from 'lucide-react';
 import { typeConfig } from '@/lib/modelTypeConfig';

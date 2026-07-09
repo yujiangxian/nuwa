@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! 配置持久化 — 读写 JSON 配置文件
 
 use crate::state::AppConfig;

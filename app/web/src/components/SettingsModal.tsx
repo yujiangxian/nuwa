@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { useUIStore } from '@/store/uiStore';
 import { useToastStore } from '@/store/toastStore';
 import { useI18n } from '@/hooks/useI18n';

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { Cpu } from 'lucide-react';
 import { formatSize } from '@/lib/modelFormat';
 import type { GpuInfo } from '@/lib/modelTypes';

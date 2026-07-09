@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: streaming-chat-output
 // 前端流消费纯逻辑层：NDJSON 分帧、单行块解析、增量累积，以及基于
 // fetch + ReadableStream 的流消费器 consumeChatStream。

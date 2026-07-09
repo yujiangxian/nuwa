@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: integration-roadmap, Property 9: Roadmap_State 序列化往返
 //
 // Property 9 verifies that serializeRoadmap / parseRoadmap form a round-trip

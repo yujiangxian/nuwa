@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 16: transform 表达式类型与未知输入检测
 //
 // Property 16, Validates: Requirements 5.4, 5.5, 14.5

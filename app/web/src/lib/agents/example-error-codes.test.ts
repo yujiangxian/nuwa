@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Example: AgentErrorCode 枚举的全部 10 个成员
 import { describe, it, expect } from 'vitest';
 import { AgentErrorCode } from './types';

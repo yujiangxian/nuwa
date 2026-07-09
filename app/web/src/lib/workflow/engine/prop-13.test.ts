@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 13: human_input 暂停与响应恢复
 //
 // Validates: Requirements 10.5, 12.1, 12.2, 12.3

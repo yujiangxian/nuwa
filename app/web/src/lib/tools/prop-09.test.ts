@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 9: validateTool 逐类违规检测
 /**
  * Property 9: per-category violation detection in validateTool.

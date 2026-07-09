@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 18: ExecutionState 序列化往返恒等
 //
 // Validates: Requirements 15.3, 15.4, 15.7

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 3: truncateHistory 不截断分支
 //
 // 对任意消息列表 ms 与整数 max >= ms.length，truncateHistory(ms, max) 逐元素等于 ms。

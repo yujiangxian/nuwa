@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 14: loop 数值范围与中止条件类型检测
 //
 // Property 14, Validates: Requirements 7.3, 7.5

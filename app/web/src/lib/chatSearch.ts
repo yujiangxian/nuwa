@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /**
  * Chat_Search 纯逻辑模块（chat-history-search）。
  *

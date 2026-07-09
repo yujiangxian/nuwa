@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 6: 悬空引用校验完整报告与确定性
 /**
  * Property 6 (Validates: Requirements 4.4):

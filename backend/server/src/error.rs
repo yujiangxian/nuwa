@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! 统一错误类型 — 使用 `thiserror` 定义 AppError 枚举，替换全项目中的
 //! `Result<_, String>` 和 `.map_err(|e| format!(...))` 模式。
 //!

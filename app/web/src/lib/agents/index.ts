@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry
 //
 // Barrel module: re-exports the full public API and type surface of the agent

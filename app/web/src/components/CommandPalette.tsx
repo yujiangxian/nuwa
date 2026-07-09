@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import type React from 'react';
 import { useEffect, useMemo, useRef } from 'react';
 import { useUIStore } from '@/store/uiStore';

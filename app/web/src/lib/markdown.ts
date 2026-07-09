@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: markdown-message-rendering
 // 纯逻辑层：Markdown 渲染所需的无副作用纯函数。
 // 抽成纯函数，供 MarkdownMessage / CodeBlock 组件与属性测试共用。

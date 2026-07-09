@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-graph-model, Property 8: 类型表示往返恒等
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

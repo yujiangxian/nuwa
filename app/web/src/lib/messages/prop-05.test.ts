@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 5: getMessage 命中与未命中
 
 import { describe, it } from 'vitest';

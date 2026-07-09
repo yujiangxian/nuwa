@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! 推理服务封装 — 通过子进程调用 Python 脚本进行 ASR/TTS 推理
 
 use std::path::{Path, PathBuf};

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 2: 追加重复 id 失败
 
 import { describe, it } from 'vitest';

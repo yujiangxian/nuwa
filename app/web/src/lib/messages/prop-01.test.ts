@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 1: 追加成功——数量加一、末尾、原记录不变
 
 import { describe, it } from 'vitest';

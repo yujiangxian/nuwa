@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 13: 合法输入校验通过
 //
 // 对任意 a 其 systemPrompt 长度不超过上界、与 options 不含 maxMessages 或其

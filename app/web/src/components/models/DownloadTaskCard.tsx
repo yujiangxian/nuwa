@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { memo } from 'react';
 import { AlertTriangle, Check, Gauge, RotateCcw, Trash2, X } from 'lucide-react';
 import { statusConfig } from '@/lib/modelTypeConfig';

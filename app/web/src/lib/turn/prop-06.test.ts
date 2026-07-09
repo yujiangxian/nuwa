@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 6: 施加模型输出不可变性与确定性
 
 import { describe, it, expect } from 'vitest';

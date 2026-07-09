@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly
 /**
  * Custom fast-check arbitraries (generators) for the agent-conversation-assembly

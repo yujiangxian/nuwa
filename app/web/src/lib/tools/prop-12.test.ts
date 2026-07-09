@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 12: validateRegistry 重复 id 检测
 /**
  * Property 12: duplicate-id detection in validateRegistry.

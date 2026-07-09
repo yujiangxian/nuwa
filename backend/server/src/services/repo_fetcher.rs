@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! 仓库文件列表获取 — 支持 HuggingFace / hf-mirror / ModelScope
 
 use serde::Deserialize;

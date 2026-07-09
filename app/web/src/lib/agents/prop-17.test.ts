@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 17: 规范化消解数值越界
 //
 // 对任意 AgentDefinition a，validateAgent(normalizeAgent(a)).errors 不含

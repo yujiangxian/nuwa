@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 7: 注册表一致性聚合
 /**
  * Property 7 (Validates: Requirements 5.2, 5.3, 5.4):

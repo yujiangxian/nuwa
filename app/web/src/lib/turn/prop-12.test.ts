@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 12: Transcript 单调增长（前缀保持）
 
 import fc from 'fast-check';

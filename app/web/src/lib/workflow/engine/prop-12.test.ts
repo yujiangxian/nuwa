@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 12: 终止性、步数有界与进展性
 //
 // Validates: Requirements 4.6, 11.1, 11.2, 11.3, 11.5

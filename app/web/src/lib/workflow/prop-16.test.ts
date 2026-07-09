@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-graph-model, Property 16: 入口节点与可达性检出
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol
 //
 // Custom fast-check arbitraries (generators) for the messages layer. These power

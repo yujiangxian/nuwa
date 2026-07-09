@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 7: 非 awaiting_tools 时施加工具结果失败
 //
 // 对任意 status 不为 `awaiting_tools` 的 TurnState s 与任意 outcomes，

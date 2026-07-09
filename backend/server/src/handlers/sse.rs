@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 use axum::response::sse::{Event, Sse};
 use futures::stream::Stream;
 use std::{convert::Infallible, time::Duration};

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 

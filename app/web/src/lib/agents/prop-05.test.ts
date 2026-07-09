@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 5: 更新保持 id 与键集合
 //
 // 对任意非空 AgentRegistry r、取自 r 的 Agent_Id id 与任意 AgentDefinition 内容 body，

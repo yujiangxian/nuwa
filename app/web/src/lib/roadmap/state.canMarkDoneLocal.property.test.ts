@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: integration-roadmap, Property 5: 完成判定仅依赖自身与上游
 //
 // Property 5 states that `canMarkDone(g, s, m)` depends ONLY on module m's own

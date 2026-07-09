@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /// 提示词预设独立 store — 从 uiStore 拆分。
 
 import { create } from 'zustand';

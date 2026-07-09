@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { create } from 'zustand';
 import { useSettingsStore } from './settingsStore';
 import { useCharacterStore, defaultCharacters, setCharacterDbForTesting } from './characterStore';

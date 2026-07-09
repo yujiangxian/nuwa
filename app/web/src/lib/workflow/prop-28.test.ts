@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-graph-model, Property 28: 变更不修改输入图
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

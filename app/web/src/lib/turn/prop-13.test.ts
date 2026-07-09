@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 13: 状态与待决集合一致
 
 import fc from 'fast-check';

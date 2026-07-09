@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 12: 校验结果 valid 当且仅当无错误且错误良构
 //
 // 对任意 a 与 options，validateAssembly(a, options).valid 为真当且仅当 errors 为空；

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 27: 未知输入引用产生 EXPRESSION_UNKNOWN_INPUT
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

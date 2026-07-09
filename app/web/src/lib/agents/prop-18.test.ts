@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 18: 序列化往返恒等
 //
 // 对任意 AgentRegistry r，deserializeRegistry(serializeRegistry(r)) 返回成功结果，

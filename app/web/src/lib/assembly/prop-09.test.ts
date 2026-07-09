@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 9: 装配历史均来自 transcript 且为后缀
 //
 // 对任意 a、t 与 options，assembleMessages 除首元素外的每条消息均为 t.messages

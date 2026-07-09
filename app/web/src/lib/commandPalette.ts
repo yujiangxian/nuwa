@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /**
  * 命令面板（Command_Palette）的纯逻辑层（command-palette）。
  *
