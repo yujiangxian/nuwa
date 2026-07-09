@@ -1,5 +1,8 @@
 # 女娲 Nuwa — 多模型 AI 助手平台
 
+[![Frontend CI](https://github.com/yujiangxian/nuwa/actions/workflows/frontend.yml/badge.svg)](https://github.com/yujiangxian/nuwa/actions/workflows/frontend.yml)
+[![Backend CI](https://github.com/yujiangxian/nuwa/actions/workflows/backend.yml/badge.svg)](https://github.com/yujiangxian/nuwa/actions/workflows/backend.yml)
+
 > 基于多模态大模型的本地智能交互终端，核心场景：用户输入 → LLM 回复 → TTS 用选定角色声音朗读
 
 ---
