@@ -9,7 +9,6 @@
 //! - 速度监控 + 慢速连接自动重建
 //! - 多源 fallback（HF / HF-Mirror / ModelScope / 直链）
 
-
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -112,8 +111,8 @@ impl Chunk {
 pub struct DownloadProgress {
     pub downloaded: u64,
     pub total: u64,
-    pub speed: f64,      // bytes/s
-    pub eta: f64,        // seconds
+    pub speed: f64, // bytes/s
+    pub eta: f64,   // seconds
     pub threads_active: usize,
 }
 
@@ -162,9 +161,18 @@ impl Default for SourceChain {
     fn default() -> Self {
         Self {
             sources: vec![
-                DownloadSource { name: "modelscope".into(), base_url: "https://www.modelscope.cn".into() },
-                DownloadSource { name: "hf-mirror".into(), base_url: "https://hf-mirror.com".into() },
-                DownloadSource { name: "huggingface".into(), base_url: "https://huggingface.co".into() },
+                DownloadSource {
+                    name: "modelscope".into(),
+                    base_url: "https://www.modelscope.cn".into(),
+                },
+                DownloadSource {
+                    name: "hf-mirror".into(),
+                    base_url: "https://hf-mirror.com".into(),
+                },
+                DownloadSource {
+                    name: "huggingface".into(),
+                    base_url: "https://huggingface.co".into(),
+                },
             ],
         }
     }
@@ -176,10 +184,13 @@ impl SourceChain {
     }
 
     pub fn add_mirror(&mut self, url: String) {
-        self.sources.insert(0, DownloadSource {
-            name: "custom".into(),
-            base_url: url.trim_end_matches('/').to_string(),
-        });
+        self.sources.insert(
+            0,
+            DownloadSource {
+                name: "custom".into(),
+                base_url: url.trim_end_matches('/').to_string(),
+            },
+        );
     }
 
     /// 按优先级生成所有可能的下载 URL
@@ -187,9 +198,14 @@ impl SourceChain {
         let mut urls = Vec::new();
 
         if url.starts_with("http://") || url.starts_with("https://") {
-            if let Some(path_and_query) = url.splitn(2, "://").nth(1).and_then(|s| s.splitn(2, '/').nth(1)) {
+            if let Some(path_and_query) = url
+                .splitn(2, "://")
+                .nth(1)
+                .and_then(|s| s.splitn(2, '/').nth(1))
+            {
                 for src in &self.sources {
-                    let mirror_url = format!("{}/{}", src.base_url.trim_end_matches('/'), path_and_query);
+                    let mirror_url =
+                        format!("{}/{}", src.base_url.trim_end_matches('/'), path_and_query);
                     urls.push(mirror_url);
                 }
             }
@@ -320,9 +336,17 @@ impl ChunkedDownloader {
         let total = *self.total_size.lock().await;
         let start = *self.start_time.lock().await;
         let elapsed = start.map(|s| s.elapsed().as_secs_f64()).unwrap_or(0.0);
-        let speed = if elapsed > 0.0 { downloaded as f64 / elapsed } else { 0.0 };
+        let speed = if elapsed > 0.0 {
+            downloaded as f64 / elapsed
+        } else {
+            0.0
+        };
         let remaining = total.saturating_sub(downloaded);
-        let eta = if speed > 0.0 { remaining as f64 / speed } else { 0.0 };
+        let eta = if speed > 0.0 {
+            remaining as f64 / speed
+        } else {
+            0.0
+        };
 
         let active = {
             let cs = self.chunks.lock().await;
@@ -347,7 +371,11 @@ impl ChunkedDownloader {
         let urls = self.source_chain.iter_urls(&self.url);
         let mut last_err = None;
 
-        tracing::info!("[downloader] probe starting, url={}, sources={:?}", self.url, urls);
+        tracing::info!(
+            "[downloader] probe starting, url={}, sources={:?}",
+            self.url,
+            urls
+        );
 
         for (i, url) in urls.iter().enumerate() {
             tracing::info!("[downloader] probing source {}: {}", i, url);
@@ -361,10 +389,12 @@ impl ChunkedDownloader {
 
                     if resp.status().is_success() {
                         let mut total = resp.content_length().unwrap_or(0);
-                        let accept_ranges = resp.headers()
+                        let accept_ranges = resp
+                            .headers()
                             .get("accept-ranges")
                             .and_then(|v| v.to_str().ok())
-                            .unwrap_or("none") != "none";
+                            .unwrap_or("none")
+                            != "none";
 
                         // 某些镜像（如 hf-mirror）HEAD 不返回 Content-Length，改用 GET + Range 探测
                         if total == 0 {
@@ -374,33 +404,55 @@ impl ChunkedDownloader {
                                     tracing::info!("[downloader] source {} GET+Range status={:?}, content-length={:?}, content-range={:?}",
                                         i, range_resp.status(), range_resp.content_length(),
                                         range_resp.headers().get("content-range").and_then(|v| v.to_str().ok()));
-                                    if range_resp.status().is_success() || range_resp.status().as_u16() == 206 {
+                                    if range_resp.status().is_success()
+                                        || range_resp.status().as_u16() == 206
+                                    {
                                         total = range_resp.content_length().unwrap_or(0);
                                         // 从 Content-Range 头解析总大小: bytes 0-0/total
                                         if total <= 1 {
-                                            if let Some(cr) = range_resp.headers().get("content-range").and_then(|v| v.to_str().ok()) {
+                                            if let Some(cr) = range_resp
+                                                .headers()
+                                                .get("content-range")
+                                                .and_then(|v| v.to_str().ok())
+                                            {
                                                 tracing::info!("[downloader] source {} parsing Content-Range: {}", i, cr);
                                                 if let Some(slash) = cr.rfind('/') {
                                                     let total_str = &cr[slash + 1..];
-                                                    tracing::info!("[downloader] source {} total_str='{}'", i, total_str);
+                                                    tracing::info!(
+                                                        "[downloader] source {} total_str='{}'",
+                                                        i,
+                                                        total_str
+                                                    );
                                                     if let Ok(t) = total_str.parse::<u64>() {
                                                         total = t;
                                                     }
                                                 }
                                             }
                                         }
-                                        tracing::info!("[downloader] source {} GET+Range final total={}", i, total);
+                                        tracing::info!(
+                                            "[downloader] source {} GET+Range final total={}",
+                                            i,
+                                            total
+                                        );
                                     }
                                 }
                                 Err(e) => {
-                                    tracing::warn!("[downloader] source {} GET+Range failed: {}", i, e);
+                                    tracing::warn!(
+                                        "[downloader] source {} GET+Range failed: {}",
+                                        i,
+                                        e
+                                    );
                                 }
                             }
                         }
 
                         *self.total_size.lock().await = total;
                         *self.accept_ranges.lock().await = accept_ranges && total > 0;
-                        tracing::info!("[downloader] probe success: total={}, accept_ranges={}", total, accept_ranges);
+                        tracing::info!(
+                            "[downloader] probe success: total={}, accept_ranges={}",
+                            total,
+                            accept_ranges
+                        );
                         return Ok(());
                     } else {
                         last_err = Some(format!("HTTP {}", resp.status()));
@@ -413,32 +465,43 @@ impl ChunkedDownloader {
             }
         }
 
-        Err(format!("无法探测文件信息: {}", last_err.unwrap_or_else(|| "所有源均不可用".to_string())))
+        Err(format!(
+            "无法探测文件信息: {}",
+            last_err.unwrap_or_else(|| "所有源均不可用".to_string())
+        ))
     }
 
     async fn prepare_file(&self) -> Result<(), String> {
         if let Some(parent) = self.dest.parent() {
-            tokio::fs::create_dir_all(parent).await
+            tokio::fs::create_dir_all(parent)
+                .await
                 .map_err(|e| format!("创建目录失败: {}", e))?;
         }
 
         let exists = tokio::fs::metadata(&self.dest).await.is_ok();
         if !exists {
-            let file = File::create(&self.dest).await
+            let file = File::create(&self.dest)
+                .await
                 .map_err(|e| format!("创建文件失败: {}", e))?;
             let total = *self.total_size.lock().await;
             if total > 0 {
-                file.set_len(total).await
+                file.set_len(total)
+                    .await
                     .map_err(|e| format!("预分配文件失败: {}", e))?;
             }
         } else {
-            let meta = tokio::fs::metadata(&self.dest).await
+            let meta = tokio::fs::metadata(&self.dest)
+                .await
                 .map_err(|e| format!("获取文件元数据失败: {}", e))?;
             let total = *self.total_size.lock().await;
             if total > 0 && meta.len() != total {
-                let file = OpenOptions::new().write(true).open(&self.dest).await
+                let file = OpenOptions::new()
+                    .write(true)
+                    .open(&self.dest)
+                    .await
                     .map_err(|e| format!("打开文件失败: {}", e))?;
-                file.set_len(total).await
+                file.set_len(total)
+                    .await
                     .map_err(|e| format!("调整文件大小失败: {}", e))?;
             }
         }
@@ -448,33 +511,32 @@ impl ChunkedDownloader {
 
     async fn load_or_create_chunks(&self) -> Result<(), String> {
         let meta_exists = match tokio::fs::metadata(&self.meta_path).await {
-        Ok(_) => true,
-        Err(_) => false,
-    };
+            Ok(_) => true,
+            Err(_) => false,
+        };
         if meta_exists {
             match tokio::fs::read_to_string(&self.meta_path).await {
-                Ok(content) => {
-                    match serde_json::from_str::<DownloadMetaData>(&content) {
-                        Ok(meta) => {
-                            let url_match = meta.url == self.url;
-                            let total = *self.total_size.lock().await;
-                            let size_match = meta.total_size == total;
-                            if url_match && size_match {
-                                let mut chunks: Vec<Chunk> = meta.chunks.into_iter().map(Chunk::from).collect();
-                                let downloaded: u64 = chunks.iter().map(|c| c.downloaded).sum();
-                                *self.downloaded_total.lock().await = downloaded;
-                                for c in &mut chunks {
-                                    if c.status == "downloading" {
-                                        c.status = "pending".to_string();
-                                    }
+                Ok(content) => match serde_json::from_str::<DownloadMetaData>(&content) {
+                    Ok(meta) => {
+                        let url_match = meta.url == self.url;
+                        let total = *self.total_size.lock().await;
+                        let size_match = meta.total_size == total;
+                        if url_match && size_match {
+                            let mut chunks: Vec<Chunk> =
+                                meta.chunks.into_iter().map(Chunk::from).collect();
+                            let downloaded: u64 = chunks.iter().map(|c| c.downloaded).sum();
+                            *self.downloaded_total.lock().await = downloaded;
+                            for c in &mut chunks {
+                                if c.status == "downloading" {
+                                    c.status = "pending".to_string();
                                 }
-                                *self.chunks.lock().await = chunks;
-                                return Ok(());
                             }
+                            *self.chunks.lock().await = chunks;
+                            return Ok(());
                         }
-                        Err(_) => {}
                     }
-                }
+                    Err(_) => {}
+                },
                 Err(_) => {}
             }
         }
@@ -534,9 +596,11 @@ impl ChunkedDownloader {
         let json = serde_json::to_string_pretty(&payload)
             .map_err(|e| format!("序列化元数据失败: {}", e))?;
         let tmp = self.meta_path.with_extension("download.tmp");
-        tokio::fs::write(&tmp, json).await
+        tokio::fs::write(&tmp, json)
+            .await
             .map_err(|e| format!("写入元数据失败: {}", e))?;
-        tokio::fs::rename(&tmp, &self.meta_path).await
+        tokio::fs::rename(&tmp, &self.meta_path)
+            .await
             .map_err(|e| format!("重命名元数据文件失败: {}", e))?;
         Ok(())
     }
@@ -614,7 +678,8 @@ impl ChunkedDownloader {
                         cancelled,
                         chunks.clone(),
                         downloaded_total,
-                    ).await;
+                    )
+                    .await;
 
                     let mut cs = chunks.lock().await;
                     if idx < cs.len() {
@@ -700,22 +765,24 @@ impl ChunkedDownloader {
             request = request.header("Range", format!("bytes={}-{}", range_start, range_end));
         }
 
-        let response = request.send().await
-            .map_err(|e| {
-                let msg = e.to_string();
-                if msg.contains("timeout") || msg.contains("timed out") {
-                    format!("连接超时: {}", msg)
-                } else if msg.contains("dns") || msg.contains("resolve") {
-                    format!("DNS 解析失败: {}", msg)
-                } else if msg.contains("connect") {
-                    format!("连接失败: {}", msg)
-                } else {
-                    format!("请求失败: {}", msg)
-                }
-            })?;
+        let response = request.send().await.map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("timeout") || msg.contains("timed out") {
+                format!("连接超时: {}", msg)
+            } else if msg.contains("dns") || msg.contains("resolve") {
+                format!("DNS 解析失败: {}", msg)
+            } else if msg.contains("connect") {
+                format!("连接失败: {}", msg)
+            } else {
+                format!("请求失败: {}", msg)
+            }
+        })?;
 
         if !response.status().is_success() {
-            return Err(format!("HTTP 错误 {}: 文件可能不存在或需要认证", response.status()));
+            return Err(format!(
+                "HTTP 错误 {}: 文件可能不存在或需要认证",
+                response.status()
+            ));
         }
 
         // 打开文件并定位
@@ -738,7 +805,8 @@ impl ChunkedDownloader {
             .await
             .map_err(|e| format!("打开文件失败: {}", e))?;
 
-        file.seek(tokio::io::SeekFrom::Start(seek_pos)).await
+        file.seek(tokio::io::SeekFrom::Start(seek_pos))
+            .await
             .map_err(|e| format!("Seek 失败: {}", e))?;
 
         let mut stream = response.bytes_stream();
@@ -757,7 +825,8 @@ impl ChunkedDownloader {
             }
 
             let data = item.map_err(|e| format!("下载中断: {}", e))?;
-            file.write_all(&data).await
+            file.write_all(&data)
+                .await
                 .map_err(|e| format!("写入失败: {}", e))?;
 
             let len = data.len() as u64;
@@ -769,7 +838,9 @@ impl ChunkedDownloader {
                     cs[chunk_idx].downloaded = local_downloaded;
 
                     let now = Instant::now();
-                    let delta = now.duration_since(cs[chunk_idx].last_update_time).as_secs_f64();
+                    let delta = now
+                        .duration_since(cs[chunk_idx].last_update_time)
+                        .as_secs_f64();
                     if delta >= 1.0 {
                         let bytes_delta = local_downloaded - cs[chunk_idx].last_update_bytes;
                         cs[chunk_idx].last_speed = bytes_delta as f64 / delta;

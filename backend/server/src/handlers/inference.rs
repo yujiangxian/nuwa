@@ -24,7 +24,10 @@ impl ModelGuard {
             let mut s = state.write().await;
             s.active_inference_models.insert(model_id.clone());
         }
-        Self { state, model_id: Some(model_id) }
+        Self {
+            state,
+            model_id: Some(model_id),
+        }
     }
 }
 
@@ -73,14 +76,15 @@ pub async fn transcribe(
         Some(id) => id,
         None => {
             let state = state.read().await;
-            state.config.current_asr_model.clone()
-                .unwrap_or_else(|| {
-                    // 自动 fallback 到第一个可用 ASR 模型
-                    state.models.iter()
-                        .find(|m| m.model_type == "asr" && inference::resolve_asr_model(&m.id).is_ok())
-                        .map(|m| m.id.clone())
-                        .unwrap_or_default()
-                })
+            state.config.current_asr_model.clone().unwrap_or_else(|| {
+                // 自动 fallback 到第一个可用 ASR 模型
+                state
+                    .models
+                    .iter()
+                    .find(|m| m.model_type == "asr" && inference::resolve_asr_model(&m.id).is_ok())
+                    .map(|m| m.id.clone())
+                    .unwrap_or_default()
+            })
         }
     };
 
@@ -132,7 +136,12 @@ pub async fn transcribe(
                 .as_secs();
             {
                 let mut state = state.write().await;
-                state.config.model_meta.entry(model_id.clone()).or_default().last_used = Some(now);
+                state
+                    .config
+                    .model_meta
+                    .entry(model_id.clone())
+                    .or_default()
+                    .last_used = Some(now);
                 if let Err(e) = config_persist::save_config(&state.config) {
                     tracing::warn!("更新模型最后使用时间失败: {}", e);
                 }
@@ -189,20 +198,25 @@ pub async fn synthesize(
     let (model_id, output_dir) = {
         let state = state.read().await;
         let model_id = req.model_id.clone().unwrap_or_else(|| {
-            state.config.current_tts_model.clone()
-                .unwrap_or_else(|| {
-                    state.models.iter()
-                        .find(|m| m.model_type == "tts" && inference::resolve_tts_model(&m.id).is_ok())
-                        .map(|m| m.id.clone())
-                        .unwrap_or_default()
-                })
+            state.config.current_tts_model.clone().unwrap_or_else(|| {
+                state
+                    .models
+                    .iter()
+                    .find(|m| m.model_type == "tts" && inference::resolve_tts_model(&m.id).is_ok())
+                    .map(|m| m.id.clone())
+                    .unwrap_or_default()
+            })
         });
         let od = state.config.output_dir.clone();
         let od = if od.is_empty() {
             crate::util::project_root().join("output")
         } else {
             let p = std::path::PathBuf::from(&od);
-            if p.is_relative() { crate::util::project_root().join(p) } else { p }
+            if p.is_relative() {
+                crate::util::project_root().join(p)
+            } else {
+                p
+            }
         };
         (model_id, od)
     };
@@ -240,7 +254,8 @@ pub async fn synthesize(
     let ref_audio = if req.ref_audio.is_empty() {
         PathBuf::from(DEFAULT_REF_AUDIO)
     } else {
-        match crate::util::safe_resolve(&crate::util::project_root().join("assets"), &req.ref_audio) {
+        match crate::util::safe_resolve(&crate::util::project_root().join("assets"), &req.ref_audio)
+        {
             Ok(p) => p,
             Err(_) => {
                 return Json(TtsResponse {
@@ -266,7 +281,15 @@ pub async fn synthesize(
     // RAII guard removes model on drop (even on panic)
     let _guard = ModelGuard::acquire(state.clone(), model_id.clone()).await;
 
-    let result = match inference::synthesize(&req.text, &model_id, &ref_audio, &ref_text, &output_path).await {
+    let result = match inference::synthesize(
+        &req.text,
+        &model_id,
+        &ref_audio,
+        &ref_text,
+        &output_path,
+    )
+    .await
+    {
         Ok(()) => {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -274,7 +297,12 @@ pub async fn synthesize(
                 .as_secs();
             {
                 let mut state = state.write().await;
-                state.config.model_meta.entry(model_id.clone()).or_default().last_used = Some(now);
+                state
+                    .config
+                    .model_meta
+                    .entry(model_id.clone())
+                    .or_default()
+                    .last_used = Some(now);
                 if let Err(e) = config_persist::save_config(&state.config) {
                     tracing::warn!("更新模型最后使用时间失败: {}", e);
                 }
@@ -328,34 +356,43 @@ pub async fn synthesize_script(
     let (model_id, output_dir) = {
         let state = state.read().await;
         let mid = req.model_id.clone().unwrap_or_else(|| {
-            state.config.current_tts_model.clone()
-                .unwrap_or_else(|| {
-                    state.models.iter()
-                        .find(|m| m.model_type == "tts" && inference::resolve_tts_model(&m.id).is_ok())
-                        .map(|m| m.id.clone())
-                        .unwrap_or_default()
-                })
+            state.config.current_tts_model.clone().unwrap_or_else(|| {
+                state
+                    .models
+                    .iter()
+                    .find(|m| m.model_type == "tts" && inference::resolve_tts_model(&m.id).is_ok())
+                    .map(|m| m.id.clone())
+                    .unwrap_or_default()
+            })
         });
         let od = state.config.output_dir.clone();
         let od = if od.is_empty() {
             crate::util::project_root().join("output")
         } else {
             let p = std::path::PathBuf::from(&od);
-            if p.is_relative() { crate::util::project_root().join(p) } else { p }
+            if p.is_relative() {
+                crate::util::project_root().join(p)
+            } else {
+                p
+            }
         };
         (mid, od)
     };
 
     if model_id.is_empty() {
         return Json(TtsScriptResponse {
-            success: false, output_path: None, duration_sec: None,
+            success: false,
+            output_path: None,
+            duration_sec: None,
             error: Some("未选择 TTS 模型".to_string()),
         });
     }
 
     if !inference::is_model_supported(&model_id) {
         return Json(TtsScriptResponse {
-            success: false, output_path: None, duration_sec: None,
+            success: false,
+            output_path: None,
+            duration_sec: None,
             error: Some(format!("模型 {} 不支持 TTS 推理", model_id)),
         });
     }
@@ -364,18 +401,20 @@ pub async fn synthesize_script(
         "" => PathBuf::from(DEFAULT_REF_AUDIO),
         p => match crate::util::safe_resolve(&crate::util::project_root().join("assets"), p) {
             Ok(path) => path,
-            Err(_) => return Json(TtsScriptResponse {
-                success: false, output_path: None, duration_sec: None,
-                error: Some("参考音频路径不合法".to_string()),
-            }),
+            Err(_) => {
+                return Json(TtsScriptResponse {
+                    success: false,
+                    output_path: None,
+                    duration_sec: None,
+                    error: Some("参考音频路径不合法".to_string()),
+                })
+            }
         },
     };
     let ref_audio = ref_audio_path;
-    let ref_text = req.ref_text.as_deref()
-        .unwrap_or(DEFAULT_REF_TEXT);
+    let ref_text = req.ref_text.as_deref().unwrap_or(DEFAULT_REF_TEXT);
 
-    let segments_json = serde_json::to_string(&req.segments)
-        .unwrap_or_else(|_| "[]".to_string());
+    let segments_json = serde_json::to_string(&req.segments).unwrap_or_else(|_| "[]".to_string());
 
     let output_filename = format!("tts_script_{}.wav", uuid::Uuid::new_v4());
     let output_path = output_dir.join(&output_filename);
@@ -383,10 +422,14 @@ pub async fn synthesize_script(
     let _guard = ModelGuard::acquire(state.clone(), model_id.clone()).await;
 
     let result = match inference::synthesize_script(
-        &segments_json, &model_id,
-        &std::path::PathBuf::from(ref_audio), ref_text,
+        &segments_json,
+        &model_id,
+        &std::path::PathBuf::from(ref_audio),
+        ref_text,
         &output_path,
-    ).await {
+    )
+    .await
+    {
         Ok(()) => {
             let _now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -407,7 +450,9 @@ pub async fn synthesize_script(
                 let mut state = state.write().await;
             }
             Json(TtsScriptResponse {
-                success: false, output_path: None, duration_sec: None,
+                success: false,
+                output_path: None,
+                duration_sec: None,
                 error: Some(e),
             })
         }
@@ -443,34 +488,30 @@ pub async fn transcribe_upload(
     while let Ok(Some(field)) = multipart.next_field().await {
         let name = field.name().unwrap_or("").to_string();
         match name.as_str() {
-            "audio" => {
-                match field.bytes().await {
-                    Ok(bytes) => audio_data = Some(bytes.to_vec()),
-                    Err(e) => {
-                        return Json(AsrUploadResponse {
-                            success: false,
-                            text: String::new(),
-                            error: Some(format!("读取音频文件失败: {}", e)),
-                            model: String::new(),
-                            elapsed_ms: started.elapsed().as_millis() as u64,
-                        });
-                    }
+            "audio" => match field.bytes().await {
+                Ok(bytes) => audio_data = Some(bytes.to_vec()),
+                Err(e) => {
+                    return Json(AsrUploadResponse {
+                        success: false,
+                        text: String::new(),
+                        error: Some(format!("读取音频文件失败: {}", e)),
+                        model: String::new(),
+                        elapsed_ms: started.elapsed().as_millis() as u64,
+                    });
                 }
-            }
-            "model_id" => {
-                match field.text().await {
-                    Ok(text) => model_id_opt = Some(text),
-                    Err(e) => {
-                        return Json(AsrUploadResponse {
-                            success: false,
-                            text: String::new(),
-                            error: Some(format!("读取模型ID失败: {}", e)),
-                            model: String::new(),
-                            elapsed_ms: started.elapsed().as_millis() as u64,
-                        });
-                    }
+            },
+            "model_id" => match field.text().await {
+                Ok(text) => model_id_opt = Some(text),
+                Err(e) => {
+                    return Json(AsrUploadResponse {
+                        success: false,
+                        text: String::new(),
+                        error: Some(format!("读取模型ID失败: {}", e)),
+                        model: String::new(),
+                        elapsed_ms: started.elapsed().as_millis() as u64,
+                    });
                 }
-            }
+            },
             _ => {}
         }
     }
@@ -493,13 +534,14 @@ pub async fn transcribe_upload(
         Some(id) => id,
         None => {
             let state = state.read().await;
-            state.config.current_asr_model.clone()
-                .unwrap_or_else(|| {
-                    state.models.iter()
-                        .find(|m| m.model_type == "asr" && inference::resolve_asr_model(&m.id).is_ok())
-                        .map(|m| m.id.clone())
-                        .unwrap_or_default()
-                })
+            state.config.current_asr_model.clone().unwrap_or_else(|| {
+                state
+                    .models
+                    .iter()
+                    .find(|m| m.model_type == "asr" && inference::resolve_asr_model(&m.id).is_ok())
+                    .map(|m| m.id.clone())
+                    .unwrap_or_default()
+            })
         }
     };
 
@@ -548,7 +590,12 @@ pub async fn transcribe_upload(
                 .as_secs();
             {
                 let mut state = state.write().await;
-                state.config.model_meta.entry(model_id.clone()).or_default().last_used = Some(now);
+                state
+                    .config
+                    .model_meta
+                    .entry(model_id.clone())
+                    .or_default()
+                    .last_used = Some(now);
                 if let Err(e) = config_persist::save_config(&state.config) {
                     tracing::warn!("更新模型最后使用时间失败: {}", e);
                 }

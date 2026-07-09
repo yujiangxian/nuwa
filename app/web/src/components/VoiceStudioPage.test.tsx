@@ -64,6 +64,7 @@ vi.mock('@/hooks/useApi', () => ({
   useSynthesize: () => ({ mutateAsync: h.spies.synthMutate, isPending: false }),
   useUploadVoice: () => ({ mutateAsync: h.spies.uploadMutate, isPending: false }),
   useDeleteVoice: () => ({ mutateAsync: h.spies.deleteMutate, isPending: false }),
+  useModels: () => ({ data: [] }),
   // 真实实现，确保 handlePreview 产生正确的试听 URL。
   voiceAudioUrl: (id: string) => `/api/voices/${id}/audio`,
 }));

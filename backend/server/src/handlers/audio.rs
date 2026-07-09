@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 yujiangxian
 
+use crate::util;
 use axum::{
     body::Body,
     extract::Path,
     http::{header, HeaderValue, StatusCode},
     response::IntoResponse,
 };
-use crate::util;
 
 /// Serve a TTS output WAV file with streaming, caching, and range support.
 ///
@@ -38,7 +38,9 @@ pub async fn serve_audio(Path(filename): Path<String>) -> impl IntoResponse {
     // Open the file for streaming
     let file = match tokio::fs::File::open(&path).await {
         Ok(f) => f,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to open audio").into_response(),
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to open audio").into_response()
+        }
     };
 
     // Stream in 8KB chunks — never loads the entire file into memory
@@ -48,9 +50,15 @@ pub async fn serve_audio(Path(filename): Path<String>) -> impl IntoResponse {
     let mut response = axum::response::Response::builder()
         .header(header::CONTENT_TYPE, HeaderValue::from_static("audio/wav"))
         .header(header::CONTENT_LENGTH, HeaderValue::from(file_size))
-        .header(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=86400"))
+        .header(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=86400"),
+        )
         .header(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"))
-        .header(header::CONTENT_DISPOSITION, HeaderValue::from_static("inline"))
+        .header(
+            header::CONTENT_DISPOSITION,
+            HeaderValue::from_static("inline"),
+        )
         .body(body)
         .unwrap();
 
