@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 17: 错误码跨层互斥
 /**
  * Property 17: Every ResolutionErrorCode value is disjoint from each of the

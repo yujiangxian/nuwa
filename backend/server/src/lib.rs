@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! nuwa-server 库根 — Nuwa AI 助手后端服务。
 //!
 //! 暴露各模块以便集成测试（`tests/`）访问内部 handler / 纯函数 / 路由。

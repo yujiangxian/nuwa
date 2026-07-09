@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 24: 完成完备性与活性
 //
 // Validates: Requirements 11.4, 16.5

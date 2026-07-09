@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine — example/edge test: human_input pause & resume.
 // Validates: Requirements 12.1, 12.2, 13.1
 //

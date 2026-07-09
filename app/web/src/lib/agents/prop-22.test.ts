@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 22: 绑定结果满足 Llm_Config 数值约束
 /**
  * Property 22 — Bound result satisfies LlmConfig numeric constraints.

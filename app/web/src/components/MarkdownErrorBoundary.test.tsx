@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: markdown-message-rendering, Property 9: 渲染失败回退保留原文与空白
 //
 // 任务 3.2 属性测试：当 Markdown 渲染失败（Render_Failure）触发回退时，

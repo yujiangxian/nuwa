@@ -46,6 +46,9 @@ test-results/
 e2e/
 fix*.py
 
+# ---------- Claude Code ----------
+.claude/settings.local.json
+
 # ---------- 模型权重文件扩展名（兜底） ----------
 *.pth
 *.ckpt

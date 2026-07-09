@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Example: 空注册表的 size/listTools/getTool 行为
 /**
  * Example & boundary test (R4.2, R8.1): an empty registry has size 0, an empty

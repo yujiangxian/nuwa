@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /**
  * model-management：模型管理领域的集中类型、枚举与状态集合常量。
  *

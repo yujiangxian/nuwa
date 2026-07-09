@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { useUIStore, type ChatMessage } from '@/store/uiStore';
 import { useToastStore } from '@/store/toastStore';

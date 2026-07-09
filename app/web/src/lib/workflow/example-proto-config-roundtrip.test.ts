@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-graph-model, Regression: config 含 "__proto__" 等危险键的序列化往返
 //
 // Guards against a prototype-pollution-style serialization bug: canonicalizeJson

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 11: 节点执行次数受循环上界约束
 //
 // Over a run, a node belonging to a LoopScope body is invoked at most maxIterations

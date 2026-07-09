@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 23: 运行状态机一致性不变量
 //
 // Validates: Requirements 4.2, 17.2, 17.3, 17.4, 17.5, 17.6

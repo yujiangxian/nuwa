@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 11: 校验逐类违规检测
 //
 // 对任意 a 与 options：当 a.systemPrompt 长度超过 SYSTEM_PROMPT_MAX_LENGTH 时，

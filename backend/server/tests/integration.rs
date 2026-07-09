@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! Integration tests for nuwa-server REST endpoints.
 //!
 //! Uses the `oneshot` pattern to send synthetic requests to the Axum router

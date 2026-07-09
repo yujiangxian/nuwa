@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 1: 初始状态形状与确定性
 
 import { describe, it, expect } from 'vitest';

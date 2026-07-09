@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Example: 工具节点实参解析四种代表性例
 /**
  * Example tests for resolveToolNodeArguments covering four representative

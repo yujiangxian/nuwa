@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Example: 错误码成员与字符串值
 
 import { describe, it, expect } from 'vitest';

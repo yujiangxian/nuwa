@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 3: 解析稳定排序与去重
 /**
  * Property 3: the resolved toolId sequence is strictly ascending (sorted and

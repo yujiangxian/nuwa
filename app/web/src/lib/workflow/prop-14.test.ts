@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-graph-model, Property 14: 输入端口入边数量约束
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 10: 循环计数有界单调
 //
 // For a Valid_Graph with a LoopScope, the LoopCounter starts at 0, is monotonically

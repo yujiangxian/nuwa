@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-graph-model, Property 11: 重复 id 必被检出
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

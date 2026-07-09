@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**

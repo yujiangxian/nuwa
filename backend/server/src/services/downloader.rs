@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! 多线程分片下载器 — 参考 Python ChunkedDownloader 的 Rust 实现
 //!
 //! 核心特性：

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { Box, Database, Layers } from 'lucide-react';
 import { formatSize } from '@/lib/modelFormat';
 import { totalInstalledSizeMb } from '@/lib/systemResource';

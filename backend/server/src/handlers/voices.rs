@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 use axum::{
     extract::{Multipart, Path, State},
     http::StatusCode,

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 1: 系统消息形状与确定性
 //
 // 对任意 AgentDefinition a，systemMessageOf(a) 的 role 为 'system'、parts 恰含

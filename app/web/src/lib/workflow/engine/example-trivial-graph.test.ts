@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine — example/edge test: empty & single-node graphs.
 // Validates: Requirements 2.5, 4.1, 10.3, 16.5
 //

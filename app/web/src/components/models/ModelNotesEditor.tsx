@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { useState, useEffect } from 'react';
 import { MessageSquare } from 'lucide-react';
 

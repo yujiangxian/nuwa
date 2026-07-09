@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 14: clampGenerationParams 幂等、区间内不变与收敛后落区间
 //
 // 对任意 Generation_Params p（含越界取值），clampGenerationParams(clampGenerationParams(p))

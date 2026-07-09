@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 22: 桥接确定且不变
 import fc from 'fast-check';
 import { describe, it, expect } from 'vitest';

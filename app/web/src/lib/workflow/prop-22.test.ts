@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-graph-model, Property 22: 拓扑序覆盖且尊重边
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

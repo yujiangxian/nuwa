@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 20: 反序列化非法输入返回错误
 //
 // Validates: Requirements 15.6

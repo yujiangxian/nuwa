@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 11: validateTranscript 重复 Call_Id 检测
 
 import { describe, it } from 'vitest';

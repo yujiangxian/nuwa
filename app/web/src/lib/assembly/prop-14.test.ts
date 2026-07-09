@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 14: 错误码跨层互斥
 //
 // 对任意 AssemblyErrorCode 取值 c，c 不出现于 ErrorCode、ConfigErrorCode、

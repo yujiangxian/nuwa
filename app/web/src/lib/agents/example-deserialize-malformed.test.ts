@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Example: 反序列化拒斥典型畸形串
 import { describe, it, expect } from 'vitest';
 import { deserializeRegistry } from './serialize';

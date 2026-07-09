@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: markdown-message-rendering
 //
 // 任务 3.3 单元测试：错误隔离。

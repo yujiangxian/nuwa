@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 19: 规范字符串往返与规范输出唯一
 //
 // 对任意 AgentRegistry r，令 j = serializeRegistry(r)：

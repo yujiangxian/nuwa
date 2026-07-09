@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Example: 非法转换与未知 callId
 
 import { describe, it, expect } from 'vitest';

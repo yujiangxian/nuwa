@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 21: 端口契约一致则无端口错误
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

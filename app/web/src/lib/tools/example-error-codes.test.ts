@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Example: ToolErrorCode 含全部 11 个成员
 /**
  * Example & boundary test (R11.1): ToolErrorCode declares exactly the 11

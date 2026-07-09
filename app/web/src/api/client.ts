@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import axios from 'axios';
 
 const isDev = typeof window !== 'undefined' && window.location?.hostname === 'localhost';

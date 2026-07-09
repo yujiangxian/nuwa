@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 9: 全部待决结算后转移到 awaiting_model
 //
 // 对任意 awaiting_tools 的 s（pending 非空）与恰覆盖其全部 Pending_Call_Ids 的

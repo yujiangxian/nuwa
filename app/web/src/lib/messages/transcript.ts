@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol
 //
 // Immutable transcript operations (R4, R5, R6). Every write returns a new

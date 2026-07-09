@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: command-palette — Keybinding_Engine 集成测试（任务 6.2，Req 1.1, 1.4, 1.6, 6.1-6.5）
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/react';

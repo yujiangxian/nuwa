@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { describe, it, expect, beforeEach } from 'vitest';
 // fake-indexeddb/auto installs the global IndexedDB constructors (indexedDB,
 // IDBKeyRange, ...) that jsdom lacks. Each test injects a fresh IDBFactory-backed

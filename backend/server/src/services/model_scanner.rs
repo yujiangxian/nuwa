@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! 模型扫描服务 — 扫描 models/ 目录下的二级子目录作为独立模型
 //!
 //! 扫描规则:

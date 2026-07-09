@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 2: 解析忠实于注册表
 /**
  * Property 2: every ResolvedToolBinding carries the ToolDefinition returned by

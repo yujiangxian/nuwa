@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: integration-roadmap, Property 2: 相位严格单调（含同相位无边）
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

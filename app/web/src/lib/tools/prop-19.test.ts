@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 19: validateArguments 缺必需/未知/类型不匹配检测
 import fc from 'fast-check';
 import { describe, it, expect } from 'vitest';

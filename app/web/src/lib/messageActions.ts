@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: chat-message-actions
 // 纯函数层：根据消息序列、下标与生成状态推导单条消息上各操作的可用性。
 // 抽成无副作用的纯函数，供 ChatPage 渲染操作入口与属性测试共用。

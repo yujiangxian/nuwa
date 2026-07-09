@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: integration-roadmap, Property 1: 依赖图无环
 //
 // Property 1 states: for any valid dependency graph (including randomly

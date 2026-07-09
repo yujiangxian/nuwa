@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 2: 添加重复 id 失败
 //
 // 对任意非空 AgentRegistry r 与一个 Agent_Id 取自 r 已有键的 AgentDefinition a，

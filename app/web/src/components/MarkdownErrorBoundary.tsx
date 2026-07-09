@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: markdown-message-rendering
 // 每条消息独立的 Markdown 渲染错误边界（Req 8.1, 8.2, 8.3）。
 //

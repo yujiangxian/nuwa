@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-graph-model — example test for parsePortType malformed strings (R3.11)
 import { describe, it, expect } from 'vitest';
 

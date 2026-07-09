@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 11: 工具结果施加不可变性与确定性
 //
 // 对任意 s 与 outcomes，applyToolResults 两次调用返回相等结果；调用不改变 s 与

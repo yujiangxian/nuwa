@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 15: condition 端口契约与表达式类型检测
 //
 // Property 15, Validates: Requirements 3.3, 3.4, 3.6

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 24: 规范化与图序列化器往返一致
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

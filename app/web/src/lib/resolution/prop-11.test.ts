@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 11: 工具节点校验完整报告、确定与稳定排序
 /**
  * Property 11 (Validates: Requirements 6.7):

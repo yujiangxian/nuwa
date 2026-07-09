@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 23: 标签索引与按工具/按标签查找的一致与精确
 /**
  * Property 23 — Tag index & tool/tag lookups are consistent and exact.

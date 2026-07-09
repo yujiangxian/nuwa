@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! Shared utilities — paths, formatting, helpers that are used across multiple modules.
 
 use std::path::PathBuf;

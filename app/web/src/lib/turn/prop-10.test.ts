@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 10: 部分结算保持 awaiting_tools
 //
 // 对任意 awaiting_tools 的 s（pending 长度 ≥ 2）与仅覆盖其 Pending 真子集（非空）

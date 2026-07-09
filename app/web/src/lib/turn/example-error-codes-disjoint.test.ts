@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Example: 九层错误码取值两两不相交
 
 import { describe, it, expect } from 'vitest';

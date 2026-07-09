@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 10: validateAgent 完整报告、确定与稳定排序
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

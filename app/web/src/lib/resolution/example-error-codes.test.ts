@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Example: ResolutionErrorCode 含全部 4 个成员
 /**
  * Example test pinning the four ResolutionErrorCode members and their exact
