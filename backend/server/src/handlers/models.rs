@@ -106,7 +106,7 @@ pub async fn scan_models(
         }
         .await;
 
-        if let Err(_) = result {
+        if result.is_err() {
             tracing::error!("扫描任务异常终止");
         }
 

@@ -156,7 +156,7 @@ pub async fn transcribe(
         }
         Err(e) => {
             {
-                let mut state = state.write().await;
+                let state = state.write().await;
             }
             Json(AsrResponse {
                 success: false,
@@ -317,7 +317,7 @@ pub async fn synthesize(
         }
         Err(e) => {
             {
-                let mut state = state.write().await;
+                let state = state.write().await;
             }
             Json(TtsResponse {
                 success: false,
@@ -424,7 +424,7 @@ pub async fn synthesize_script(
     let result = match inference::synthesize_script(
         &segments_json,
         &model_id,
-        &std::path::PathBuf::from(ref_audio),
+        &ref_audio,
         ref_text,
         &output_path,
     )
@@ -436,7 +436,7 @@ pub async fn synthesize_script(
                 .unwrap_or_default()
                 .as_secs();
             {
-                let mut state = state.write().await;
+                let state = state.write().await;
             }
             Json(TtsScriptResponse {
                 success: true,
@@ -447,7 +447,7 @@ pub async fn synthesize_script(
         }
         Err(e) => {
             {
-                let mut state = state.write().await;
+                let state = state.write().await;
             }
             Json(TtsScriptResponse {
                 success: false,
@@ -610,7 +610,7 @@ pub async fn transcribe_upload(
         }
         Err(e) => {
             {
-                let mut state = state.write().await;
+                let state = state.write().await;
             }
             Json(AsrUploadResponse {
                 success: false,

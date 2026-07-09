@@ -127,45 +127,9 @@ function makeFakeChatDb(): ChatDb {
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-/** A stream whose chunks are all enqueued up-front and then closed. */
-function fullStream(objs: unknown[]): ReadableStream<Uint8Array> {
-  const enc = new TextEncoder();
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (const o of objs) controller.enqueue(enc.encode(JSON.stringify(o) + '\n'));
-      controller.close();
-    },
-  });
-}
 
 /** A manually driven stream: tests push chunks / close / abort on demand. */
-function controllableStream() {
-  let controller!: ReadableStreamDefaultController<Uint8Array>;
-  const enc = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({ start(c) { controller = c; } });
-  return {
-    stream,
-    push: (obj: unknown) => controller.enqueue(enc.encode(JSON.stringify(obj) + '\n')),
-    close: () => { try { controller.close(); } catch { /* already closed */ } },
-    // Simulate the connection closing on AbortController.abort().
-    errorAbort: () => {
-      try {
-        controller.error(Object.assign(new Error('aborted'), { name: 'AbortError' }));
-      } catch { /* already settled */ }
-    },
-  };
-}
 
-/** Make `fetch` resolve to a streamed 200 response, wiring abort → stream error. */
-function mockStreamResponse(body: ReadableStream<Uint8Array>) {
-  mocks.fetch.mockImplementation((_url: string, init?: RequestInit) => {
-    const ctl = (body as any).__ctl as ReturnType<typeof controllableStream> | undefined;
-    if (ctl && init?.signal) {
-      init.signal.addEventListener('abort', () => ctl.errorAbort());
-    }
-    return Promise.resolve({ ok: true, body } as unknown as Response);
-  });
-}
 
 /** Controlled agent stream: push SSE events manually, then call done(). */
 function agentStreamController() {
@@ -200,7 +164,7 @@ function agentStreamController() {
         constructor() { instRef = this; }
         close() {}
       };
-      mocks.apiPost.mockImplementation((url: string, body: any) => {
+      mocks.apiPost.mockImplementation((url: string, _body: any) => {
         if (url === '/api/agents/run-stream') {
           return Promise.resolve({ data: { success: true, task_id: 'agent_test' } });
         }
@@ -271,7 +235,7 @@ beforeEach(() => {
   });
   // Default: apiPost handles agent run-stream (success) and fallback /api/chat (降级回复)
   // Individual tests override with agentStreamController for controlled event timing
-  mocks.apiPost.mockImplementation((url: string, body: any) => {
+  mocks.apiPost.mockImplementation((url: string, _body: any) => {
     if (url === '/api/agents/run-stream') {
       return Promise.resolve({ data: { success: true, task_id: 'agent_default' } });
     }

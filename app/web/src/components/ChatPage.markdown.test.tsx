@@ -2,7 +2,7 @@
 // Copyright (c) 2025-2026 yujiangxian
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import {
   useUIStore,
   defaultCharacters,
@@ -95,34 +95,9 @@ function makeFakeChatDb(): ChatDb {
   };
 }
 
-const tick = () => new Promise((r) => setTimeout(r, 0));
 
 /** 手动驱动的流：测试按需 push 增量 / close。 */
-function controllableStream() {
-  let controller!: ReadableStreamDefaultController<Uint8Array>;
-  const enc = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({ start(c) { controller = c; } });
-  return {
-    stream,
-    push: (obj: unknown) => controller.enqueue(enc.encode(JSON.stringify(obj) + '\n')),
-    close: () => { try { controller.close(); } catch { /* already closed */ } },
-    errorAbort: () => {
-      try {
-        controller.error(Object.assign(new Error('aborted'), { name: 'AbortError' }));
-      } catch { /* already settled */ }
-    },
-  };
-}
 
-function mockStreamResponse(body: ReadableStream<Uint8Array>) {
-  mocks.fetch.mockImplementation((_url: string, init?: RequestInit) => {
-    const ctl = (body as any).__ctl as ReturnType<typeof controllableStream> | undefined;
-    if (ctl && init?.signal) {
-      init.signal.addEventListener('abort', () => ctl.errorAbort());
-    }
-    return Promise.resolve({ ok: true, body } as unknown as Response);
-  });
-}
 
 function sendText(text: string) {
   const ta = screen.getByPlaceholderText('输入消息...');

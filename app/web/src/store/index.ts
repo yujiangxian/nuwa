@@ -19,6 +19,7 @@ export interface Model {
   size_mb?: number;
   description?: string;
   source?: string;
+  context_length?: number;
 }
 
 export interface Voice {
@@ -67,6 +68,8 @@ const defaultConfig: AppConfig = {
   voices_dir: 'assets/datasets/voices',
   backend: 'cpu',
   threads: 8,
+  default_cfg: 1.0,
+  default_timesteps: 20,
   current_llm_model: null,
   current_asr_model: null,
   current_tts_model: null,

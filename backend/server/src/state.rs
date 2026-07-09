@@ -19,6 +19,7 @@ pub struct ScanProgress {
 
 /// 共享应用状态（被 Axum State 提取器使用）。
 #[derive(Debug)]
+#[derive(Default)]
 pub struct AppState {
     /// 应用配置
     pub config: AppConfig,
@@ -36,21 +37,9 @@ pub struct AppState {
     pub active_inference_models: HashSet<String>,
 }
 
-impl Default for AppState {
-    fn default() -> Self {
-        Self {
-            config: AppConfig::default(),
-            models: Vec::new(),
-            voices: Vec::new(),
-            download_tasks: HashMap::new(),
-            downloaders: HashMap::new(),
-            scan_progress: None,
-            active_inference_models: HashSet::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ModelMeta {
     #[serde(default)]
     pub notes: String,
@@ -60,15 +49,6 @@ pub struct ModelMeta {
     pub last_used: Option<u64>,
 }
 
-impl Default for ModelMeta {
-    fn default() -> Self {
-        Self {
-            notes: String::new(),
-            tags: Vec::new(),
-            last_used: None,
-        }
-    }
-}
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
