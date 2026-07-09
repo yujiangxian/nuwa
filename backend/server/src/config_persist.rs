@@ -35,11 +35,21 @@ pub fn load_config() -> Option<AppConfig> {
     if let Ok(raw) = serde_json::from_str::<serde_json::Value>(&content) {
         if let Some(obj) = raw.as_object() {
             let known = std::collections::HashSet::from([
-                "models_dir", "output_dir", "voices_dir",
-                "backend", "threads", "default_cfg", "default_timesteps",
-                "current_llm_model", "current_asr_model", "current_tts_model",
-                "current_models", "current_mode", "current_voice_id",
-                "theme", "model_meta",
+                "models_dir",
+                "output_dir",
+                "voices_dir",
+                "backend",
+                "threads",
+                "default_cfg",
+                "default_timesteps",
+                "current_llm_model",
+                "current_asr_model",
+                "current_tts_model",
+                "current_models",
+                "current_mode",
+                "current_voice_id",
+                "theme",
+                "model_meta",
             ]);
             for key in obj.keys() {
                 if !known.contains(key.as_str()) {
@@ -75,8 +85,8 @@ pub fn load_config() -> Option<AppConfig> {
 /// 保存配置到文件（原子写入：先写临时文件，再 rename）。
 pub fn save_config(config: &AppConfig) -> Result<(), String> {
     let path = config_path();
-    let content = serde_json::to_string_pretty(config)
-        .map_err(|e| format!("序列化配置失败: {}", e))?;
+    let content =
+        serde_json::to_string_pretty(config).map_err(|e| format!("序列化配置失败: {}", e))?;
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, &content)
         .map_err(|e| format!("写入临时配置文件失败 ({}): {}", tmp.display(), e))?;

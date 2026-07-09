@@ -105,7 +105,8 @@ fn presets() -> Vec<PresetModel> {
             description: "阿里达摩院 FunASR，中文语音识别最稳定，显存占用最低".to_string(),
             size_mb: 848.0,
             source: "modelscope".to_string(),
-            repo_id: "damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch".to_string(),
+            repo_id: "damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
+                .to_string(),
             dest_dir: "models/asr/paraformer-large".to_string(),
             note: Some("⭐ 生产环境推荐".to_string()),
             is_downloaded: false,
@@ -658,7 +659,8 @@ fn presets() -> Vec<PresetModel> {
             id: "zonos-transformer".to_string(),
             name: "Zonos Transformer".to_string(),
             model_type: "tts".to_string(),
-            description: "Zyphra 1.6B Transformer TTS，20 万小时训练，情感/语速/音高可控".to_string(),
+            description: "Zyphra 1.6B Transformer TTS，20 万小时训练，情感/语速/音高可控"
+                .to_string(),
             size_mb: 3200.0,
             source: "hf-mirror".to_string(),
             repo_id: "Zyphra/Zonos-v0.1-transformer".to_string(),
@@ -817,7 +819,11 @@ fn project_root() -> std::path::PathBuf {
         .unwrap_or_else(|| {
             std::env::current_dir()
                 .ok()
-                .and_then(|cd| cd.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()))
+                .and_then(|cd| {
+                    cd.parent()
+                        .and_then(|p| p.parent())
+                        .map(|p| p.to_path_buf())
+                })
                 .unwrap_or_else(|| std::path::PathBuf::from("."))
         })
 }
@@ -859,9 +865,7 @@ async fn refresh_models(state: &Arc<RwLock<AppState>>) {
     tracing::info!("模型扫描完成，发现 {} 个模型", count);
 }
 
-pub async fn list_presets(
-    State(state): State<Arc<RwLock<AppState>>>,
-) -> Json<Vec<PresetModel>> {
+pub async fn list_presets(State(state): State<Arc<RwLock<AppState>>>) -> Json<Vec<PresetModel>> {
     let state = state.read().await;
     let models = &state.models;
 
@@ -904,10 +908,13 @@ pub struct RepoFileResponse {
 pub async fn list_repo_files(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<RepoFileResponse>>, Json<serde_json::Value>> {
-    let repo_id = params.get("repo_id").ok_or_else(|| {
-        Json(serde_json::json!({"error": "缺少 repo_id 参数"}))
-    })?;
-    let source = params.get("source").unwrap_or(&"hf-mirror".to_string()).clone();
+    let repo_id = params
+        .get("repo_id")
+        .ok_or_else(|| Json(serde_json::json!({"error": "缺少 repo_id 参数"})))?;
+    let source = params
+        .get("source")
+        .unwrap_or(&"hf-mirror".to_string())
+        .clone();
 
     match repo_fetcher::list_repo_files(repo_id, &source).await {
         Ok(files) => {
@@ -1164,7 +1171,11 @@ pub async fn start_batch_download(
             let completed = total_files as usize - failed_files.len();
             let is_partial = completed > 0;
             if let Some(t) = state.download_tasks.get_mut(&task_id_inner) {
-                t.status = if is_partial { TaskStatus::PartialFailed } else { TaskStatus::Failed };
+                t.status = if is_partial {
+                    TaskStatus::PartialFailed
+                } else {
+                    TaskStatus::Failed
+                };
                 t.failed_files = failed_files.clone();
                 t.speed_mbps = 0.0;
                 t.current_file = None;
@@ -1213,7 +1224,9 @@ pub async fn start_download(
     {
         let mut state = state.write().await;
         state.download_tasks.insert(task_id.clone(), task.clone());
-        state.downloaders.insert(task_id.clone(), Arc::clone(&downloader));
+        state
+            .downloaders
+            .insert(task_id.clone(), Arc::clone(&downloader));
     }
 
     let state_clone = Arc::clone(&state);
@@ -1285,9 +1298,7 @@ pub async fn start_download(
     Json(task)
 }
 
-pub async fn list_downloads(
-    State(state): State<Arc<RwLock<AppState>>>,
-) -> Json<Vec<DownloadTask>> {
+pub async fn list_downloads(State(state): State<Arc<RwLock<AppState>>>) -> Json<Vec<DownloadTask>> {
     let state = state.read().await;
     let tasks: Vec<_> = state.download_tasks.values().cloned().collect();
     Json(tasks)
@@ -1312,7 +1323,12 @@ pub async fn cancel_download(
     }
     // 批量下载：取消所有子下载器
     let batch_prefix = format!("{}/", id);
-    let batch_keys: Vec<String> = state.downloaders.keys().filter(|k| k.starts_with(&batch_prefix)).cloned().collect();
+    let batch_keys: Vec<String> = state
+        .downloaders
+        .keys()
+        .filter(|k| k.starts_with(&batch_prefix))
+        .cloned()
+        .collect();
     for key in batch_keys {
         if let Some(dl) = state.downloaders.get(&key) {
             dl.cancel();
@@ -1332,9 +1348,12 @@ pub async fn delete_download(
     let mut state = state.write().await;
     // 先取消正在进行的下载
     let batch_prefix = format!("{}/", id);
-    let keys_to_remove: Vec<String> = state.downloaders.keys()
+    let keys_to_remove: Vec<String> = state
+        .downloaders
+        .keys()
         .filter(|k| k == &&id || k.starts_with(&batch_prefix))
-        .cloned().collect();
+        .cloned()
+        .collect();
     for key in &keys_to_remove {
         if let Some(dl) = state.downloaders.get(key) {
             dl.cancel();
@@ -1396,9 +1415,12 @@ pub async fn retry_download(
     let batch_prefix = format!("{}/", id);
     {
         let mut state = state.write().await;
-        let keys: Vec<String> = state.downloaders.keys()
+        let keys: Vec<String> = state
+            .downloaders
+            .keys()
             .filter(|k| k.starts_with(&batch_prefix))
-            .cloned().collect();
+            .cloned()
+            .collect();
         for key in keys {
             if let Some(dl) = state.downloaders.get(&key) {
                 dl.cancel();

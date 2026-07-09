@@ -167,8 +167,8 @@ async fn chat_with_valid_body_returns_well_formed_response() {
     });
     let (_status, body_bytes) = post_json("/api/chat", body).await;
 
-    let v: serde_json::Value = serde_json::from_slice(&body_bytes)
-        .expect("response must be valid JSON");
+    let v: serde_json::Value =
+        serde_json::from_slice(&body_bytes).expect("response must be valid JSON");
 
     let has_error = v.get("error").is_some();
     let has_success_shape = v.get("role").is_some()

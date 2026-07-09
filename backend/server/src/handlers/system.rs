@@ -36,9 +36,7 @@ pub struct GpuInfo {
     pub usage_percent: f64,
 }
 
-pub async fn get_disk_info(
-    State(state): State<Arc<RwLock<AppState>>>,
-) -> Json<DiskInfo> {
+pub async fn get_disk_info(State(state): State<Arc<RwLock<AppState>>>) -> Json<DiskInfo> {
     let state = state.read().await;
     let project_root = crate::util::project_root();
 
@@ -69,13 +67,21 @@ pub async fn get_disk_info(
         project_root.join("output")
     } else {
         let p = std::path::PathBuf::from(&state.config.output_dir);
-        if p.is_relative() { project_root.join(p) } else { p }
+        if p.is_relative() {
+            project_root.join(p)
+        } else {
+            p
+        }
     };
     let voices_dir = if state.config.voices_dir.is_empty() {
         project_root.join("assets/datasets/voices")
     } else {
         let p = std::path::PathBuf::from(&state.config.voices_dir);
-        if p.is_relative() { project_root.join(p) } else { p }
+        if p.is_relative() {
+            project_root.join(p)
+        } else {
+            p
+        }
     };
 
     disk_info.directories = vec![
@@ -160,7 +166,11 @@ async fn query_rocm_smi() -> Option<GpuInfo> {
                 total_vram_mb: total_mb,
                 used_vram_mb: used_mb,
                 free_vram_mb: total_mb.saturating_sub(used_mb),
-                usage_percent: if total > 0 { (used as f64 / total as f64) * 100.0 } else { 0.0 },
+                usage_percent: if total > 0 {
+                    (used as f64 / total as f64) * 100.0
+                } else {
+                    0.0
+                },
             });
         }
     }
@@ -169,7 +179,10 @@ async fn query_rocm_smi() -> Option<GpuInfo> {
 
 async fn query_nvidia_smi() -> Option<GpuInfo> {
     let output = tokio::process::Command::new("nvidia-smi")
-        .args(["--query-gpu=name,memory.total,memory.used", "--format=csv,noheader,nounits"])
+        .args([
+            "--query-gpu=name,memory.total,memory.used",
+            "--format=csv,noheader,nounits",
+        ])
         .output()
         .await
         .ok()?;
@@ -189,7 +202,11 @@ async fn query_nvidia_smi() -> Option<GpuInfo> {
             total_vram_mb: total,
             used_vram_mb: used,
             free_vram_mb: total.saturating_sub(used),
-            usage_percent: if total > 0 { (used as f64 / total as f64) * 100.0 } else { 0.0 },
+            usage_percent: if total > 0 {
+                (used as f64 / total as f64) * 100.0
+            } else {
+                0.0
+            },
         });
     }
     None
@@ -226,9 +243,7 @@ pub struct CleanupResult {
 }
 
 /// Manual cleanup endpoint: remove stale TTS output files and temp files.
-pub async fn cleanup(
-    State(state): State<Arc<RwLock<AppState>>>,
-) -> Json<CleanupResult> {
+pub async fn cleanup(State(state): State<Arc<RwLock<AppState>>>) -> Json<CleanupResult> {
     let state = state.read().await;
     let project_root = crate::util::project_root();
     let output_dir = state.config.output_dir.clone();
@@ -236,7 +251,11 @@ pub async fn cleanup(
         project_root.join("output")
     } else {
         let p = std::path::PathBuf::from(&output_dir);
-        if p.is_relative() { project_root.join(p) } else { p }
+        if p.is_relative() {
+            project_root.join(p)
+        } else {
+            p
+        }
     };
 
     let mut total_removed = 0u64;
@@ -255,7 +274,11 @@ pub async fn cleanup(
             if path.extension().map(|e| e == "wav").unwrap_or(false) {
                 if let Ok(meta) = entry.metadata() {
                     if let Ok(mtime) = meta.modified() {
-                        if mtime.duration_since(std::time::UNIX_EPOCH).unwrap_or_default() < cutoff {
+                        if mtime
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            < cutoff
+                        {
                             total_bytes += meta.len();
                             if std::fs::remove_file(&path).is_ok() {
                                 total_removed += 1;
@@ -291,7 +314,10 @@ pub async fn cleanup(
 
 fn format_size(bytes: u64) -> String {
     if bytes >= 1024 * 1024 * 1024 * 1024 {
-        format!("{:.1} TB", bytes as f64 / (1024.0 * 1024.0 * 1024.0 * 1024.0))
+        format!(
+            "{:.1} TB",
+            bytes as f64 / (1024.0 * 1024.0 * 1024.0 * 1024.0)
+        )
     } else if bytes >= 1024 * 1024 * 1024 {
         format!("{:.1} GB", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
     } else if bytes >= 1024 * 1024 {

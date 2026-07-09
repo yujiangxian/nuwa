@@ -29,7 +29,11 @@ fn project_root() -> PathBuf {
         .unwrap_or_else(|| {
             std::env::current_dir()
                 .ok()
-                .and_then(|cd| cd.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf()))
+                .and_then(|cd| {
+                    cd.parent()
+                        .and_then(|p| p.parent())
+                        .map(|p| p.to_path_buf())
+                })
                 .unwrap_or_else(|| PathBuf::from("."))
         })
 }
@@ -66,9 +70,7 @@ fn resolve_voice_path_abs(path: &str) -> PathBuf {
 }
 
 /// GET /api/voices — 返回含 duration_seconds 的列表（不变）。
-pub async fn list_voices(
-    State(state): State<Arc<RwLock<AppState>>>,
-) -> Json<Vec<VoiceInfo>> {
+pub async fn list_voices(State(state): State<Arc<RwLock<AppState>>>) -> Json<Vec<VoiceInfo>> {
     let state = state.read().await;
     Json(state.voices.clone())
 }
@@ -151,7 +153,10 @@ pub async fn upload_voice(
     }
 
     if audio_bytes.len() > voice_library::MAX_UPLOAD_SIZE {
-        return Err(err_resp(StatusCode::PAYLOAD_TOO_LARGE, "文件过大，最大 20MB"));
+        return Err(err_resp(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "文件过大，最大 20MB",
+        ));
     }
 
     let name = match name {
@@ -229,7 +234,11 @@ pub async fn serve_voice_audio(
     // 按 id 查条目。
     let voice_path = {
         let state = state.read().await;
-        state.voices.iter().find(|v| v.id == id).map(|v| v.path.clone())
+        state
+            .voices
+            .iter()
+            .find(|v| v.id == id)
+            .map(|v| v.path.clone())
     };
     let voice_path = match voice_path {
         Some(p) => p,

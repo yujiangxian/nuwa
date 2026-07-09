@@ -27,7 +27,8 @@ pub fn wav_duration_secs(path: &Path) -> Option<f64> {
     let mut pos = 12;
     while pos + 8 <= data.len() {
         let tag = &data[pos..pos + 4];
-        let size = u32::from_le_bytes([data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]]) as usize;
+        let size = u32::from_le_bytes([data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]])
+            as usize;
         if tag == b"data" {
             return Some(size as f64 / byte_rate);
         }
@@ -139,16 +140,22 @@ pub async fn transcribe(audio_path: &Path, model_id: &str) -> Result<String, Str
     // 清理临时文件
     let _ = tokio::fs::remove_file(&output_json).await;
 
-    let result: serde_json::Value = serde_json::from_str(&result_text)
-        .map_err(|e| format!("解析 ASR 结果失败: {}", e))?;
+    let result: serde_json::Value =
+        serde_json::from_str(&result_text).map_err(|e| format!("解析 ASR 结果失败: {}", e))?;
 
     if result.get("success").and_then(|v| v.as_bool()) == Some(true) {
         let text = result.get("text").and_then(|v| v.as_str()).unwrap_or("");
-        let time_sec = result.get("inference_time_sec").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let time_sec = result
+            .get("inference_time_sec")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         tracing::info!("ASR 完成: {} ({}s)", text, time_sec);
         Ok(text.to_string())
     } else {
-        let error = result.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误");
+        let error = result
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("未知错误");
         Err(format!("ASR 推理错误: {}", error))
     }
 }
@@ -223,8 +230,8 @@ pub async fn synthesize(
 
     let _ = tokio::fs::remove_file(&output_json).await;
 
-    let result: serde_json::Value = serde_json::from_str(&result_text)
-        .map_err(|e| format!("解析 TTS 结果失败: {}", e))?;
+    let result: serde_json::Value =
+        serde_json::from_str(&result_text).map_err(|e| format!("解析 TTS 结果失败: {}", e))?;
 
     if result.get("success").and_then(|v| v.as_bool()) == Some(true) {
         // 验证输出文件确实存在
@@ -234,11 +241,17 @@ pub async fn synthesize(
                 output_path.display()
             ));
         }
-        let time_sec = result.get("inference_time_sec").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let time_sec = result
+            .get("inference_time_sec")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         tracing::info!("TTS 完成: {} ({}s)", output_path.display(), time_sec);
         Ok(())
     } else {
-        let error = result.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误");
+        let error = result
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("未知错误");
         Err(format!("TTS 推理错误: {}", error))
     }
 }
@@ -256,7 +269,8 @@ pub async fn synthesize_script(
     let output_path = util::resolve_path(output_path);
     let (_script, model_path) = resolve_tts_model(model_id)?;
     let script_path = util::project_root().join("scripts/inference_tts_glm_script.py");
-    let output_json = std::env::temp_dir().join(format!("nuwa_tts_script_{}.json", uuid::Uuid::new_v4()));
+    let output_json =
+        std::env::temp_dir().join(format!("nuwa_tts_script_{}.json", uuid::Uuid::new_v4()));
 
     if let Some(parent) = output_path.parent() {
         let _ = tokio::fs::create_dir_all(parent).await;
@@ -321,12 +335,26 @@ pub async fn synthesize_script(
                 output_path.display()
             ));
         }
-        let time_sec = result.get("inference_time_sec").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let dur = result.get("duration_sec").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        tracing::info!("TTS 多段合成完成: {} ({}s, 推理 {}s)", output_path.display(), dur, time_sec);
+        let time_sec = result
+            .get("inference_time_sec")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let dur = result
+            .get("duration_sec")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        tracing::info!(
+            "TTS 多段合成完成: {} ({}s, 推理 {}s)",
+            output_path.display(),
+            dur,
+            time_sec
+        );
         Ok(())
     } else {
-        let error = result.get("error").and_then(|v| v.as_str()).unwrap_or("未知错误");
+        let error = result
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("未知错误");
         Err(format!("TTS 多段合成错误: {}", error))
     }
 }

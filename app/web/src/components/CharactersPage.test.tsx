@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/hooks/useApi', () => ({
   useVoices: () => mocks.voices,
+  useModels: () => ({ data: [] }),
 }));
 
 vi.mock('@/store/toastStore', () => {

@@ -10,9 +10,9 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock, Semaphore};
 use uuid::Uuid;
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 /// 全局单例：Agent 注册表 + 任务仓库 + 并发控制
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicUsize, Ordering};
 static SCHEDULER: OnceLock<Arc<AgentScheduler>> = OnceLock::new();
 
 /// Consecutive Ollama failures for auto-recovery
@@ -165,9 +165,18 @@ impl AgentScheduler {
                     id: "voice_reply".into(),
                     name: "语音回复".into(),
                     steps: vec![
-                        PipelineStep { label: "语音识别".into(), agent_id: "asr".into() },
-                        PipelineStep { label: "AI 思考".into(), agent_id: "llm".into() },
-                        PipelineStep { label: "语音合成".into(), agent_id: "tts".into() },
+                        PipelineStep {
+                            label: "语音识别".into(),
+                            agent_id: "asr".into(),
+                        },
+                        PipelineStep {
+                            label: "AI 思考".into(),
+                            agent_id: "llm".into(),
+                        },
+                        PipelineStep {
+                            label: "语音合成".into(),
+                            agent_id: "tts".into(),
+                        },
                     ],
                     description: "音频输入 → ASR 转文本 → LLM 回复 → TTS 合成语音".into(),
                 },
@@ -175,33 +184,42 @@ impl AgentScheduler {
                     id: "text_chat".into(),
                     name: "文本对话".into(),
                     steps: vec![
-                        PipelineStep { label: "AI 思考".into(), agent_id: "llm".into() },
-                        PipelineStep { label: "语音合成".into(), agent_id: "tts".into() },
+                        PipelineStep {
+                            label: "AI 思考".into(),
+                            agent_id: "llm".into(),
+                        },
+                        PipelineStep {
+                            label: "语音合成".into(),
+                            agent_id: "tts".into(),
+                        },
                     ],
                     description: "文本输入 → LLM 回复 → TTS 合成语音".into(),
                 },
                 PipelineDef {
                     id: "text_chat_stream".into(),
                     name: "文本对话（流式）".into(),
-                    steps: vec![
-                        PipelineStep { label: "AI 思考".into(), agent_id: "llm".into() },
-                    ],
+                    steps: vec![PipelineStep {
+                        label: "AI 思考".into(),
+                        agent_id: "llm".into(),
+                    }],
                     description: "文本输入 → LLM 流式回复（无 TTS，前端自行合成语音）".into(),
                 },
                 PipelineDef {
                     id: "transcribe".into(),
                     name: "语音转文字".into(),
-                    steps: vec![
-                        PipelineStep { label: "语音识别".into(), agent_id: "asr".into() },
-                    ],
+                    steps: vec![PipelineStep {
+                        label: "语音识别".into(),
+                        agent_id: "asr".into(),
+                    }],
                     description: "音频输入 → ASR 转文本".into(),
                 },
                 PipelineDef {
                     id: "synthesize".into(),
                     name: "文字转语音".into(),
-                    steps: vec![
-                        PipelineStep { label: "语音合成".into(), agent_id: "tts".into() },
-                    ],
+                    steps: vec![PipelineStep {
+                        label: "语音合成".into(),
+                        agent_id: "tts".into(),
+                    }],
                     description: "文本输入 → TTS 合成语音".into(),
                 },
             ],
@@ -328,41 +346,42 @@ impl AgentScheduler {
         });
 
         tokio::spawn(async move {
-            let send_messages = if let Some(msgs) = input.get("messages").and_then(|v| v.as_array()) {
-            msgs.iter()
-                .filter_map(|m| {
-                    let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("user");
-                    let content = m.get("content").and_then(|v| v.as_str()).unwrap_or("");
-                    Some(serde_json::json!({"role": role, "content": content}))
-                })
-                .collect::<Vec<_>>()
-        } else {
-            let prompt = input
-                .get("text")
-                .or_else(|| input.get("prompt"))
+            let send_messages = if let Some(msgs) = input.get("messages").and_then(|v| v.as_array())
+            {
+                msgs.iter()
+                    .filter_map(|m| {
+                        let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("user");
+                        let content = m.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                        Some(serde_json::json!({"role": role, "content": content}))
+                    })
+                    .collect::<Vec<_>>()
+            } else {
+                let prompt = input
+                    .get("text")
+                    .or_else(|| input.get("prompt"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("你好");
+                vec![serde_json::json!({"role": "user", "content": prompt})]
+            };
+            let model_id = input
+                .get("model_id")
                 .and_then(|v| v.as_str())
-                .unwrap_or("你好");
-            vec![serde_json::json!({"role": "user", "content": prompt})]
-        };
-        let model_id = input
-            .get("model_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("gemma4:e4b");
-        let system_prompt = input.get("system").and_then(|v| v.as_str());
+                .unwrap_or("gemma4:e4b");
+            let system_prompt = input.get("system").and_then(|v| v.as_str());
 
-        let mut ollama_msgs = Vec::new();
-        if let Some(sys) = system_prompt {
-            if !sys.is_empty() {
-                ollama_msgs.push(serde_json::json!({"role": "system", "content": sys}));
+            let mut ollama_msgs = Vec::new();
+            if let Some(sys) = system_prompt {
+                if !sys.is_empty() {
+                    ollama_msgs.push(serde_json::json!({"role": "system", "content": sys}));
+                }
             }
-        }
-        ollama_msgs.extend(send_messages);
+            ollama_msgs.extend(send_messages);
 
-        let ollama_body = serde_json::json!({
-            "model": model_id,
-            "messages": ollama_msgs,
-            "stream": true,
-        });
+            let ollama_body = serde_json::json!({
+                "model": model_id,
+                "messages": ollama_msgs,
+                "stream": true,
+            });
 
             // Ollama auto-recovery: add delay if recent failures
             let failures = OLLAMA_FAILURES.load(Ordering::SeqCst);
@@ -399,7 +418,9 @@ impl AgentScheduler {
                         while let Some(pos) = buffer.find('\n') {
                             let line = buffer[..pos].to_string();
                             buffer = buffer[pos + 1..].to_string();
-                            if line.is_empty() { continue; }
+                            if line.is_empty() {
+                                continue;
+                            }
                             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
                                 let done = val["done"].as_bool() == Some(true);
                                 if let Some(delta) = val["message"]["content"].as_str() {
@@ -410,15 +431,20 @@ impl AgentScheduler {
                                         let mut i = 0usize;
                                         let mut chunk_buf = String::new();
                                         while i < chars.len() {
-                                            if !think_active && i + 7 <= chars.len()
-                                                && chars[i..i+7].iter().collect::<String>() == "<think>"
+                                            if !think_active
+                                                && i + 7 <= chars.len()
+                                                && chars[i..i + 7].iter().collect::<String>()
+                                                    == "<think>"
                                             {
                                                 if !chunk_buf.is_empty() {
                                                     let _ = tx.send(TaskEvent {
-                                                        task_id: tid.clone(), status: TaskStatus::Running,
+                                                        task_id: tid.clone(),
+                                                        status: TaskStatus::Running,
                                                         step: Some("AI 回答".into()),
-                                                        progress: None, message: None,
-                                                        delta: Some(chunk_buf.clone()), thinking: None,
+                                                        progress: None,
+                                                        message: None,
+                                                        delta: Some(chunk_buf.clone()),
+                                                        thinking: None,
                                                     });
                                                     chunk_buf.clear();
                                                 }
@@ -426,15 +452,20 @@ impl AgentScheduler {
                                                 i += 7;
                                                 continue;
                                             }
-                                            if think_active && i + 8 <= chars.len()
-                                                && chars[i..i+8].iter().collect::<String>() == "</think>"
+                                            if think_active
+                                                && i + 8 <= chars.len()
+                                                && chars[i..i + 8].iter().collect::<String>()
+                                                    == "</think>"
                                             {
                                                 if !chunk_buf.is_empty() {
                                                     let _ = tx.send(TaskEvent {
-                                                        task_id: tid.clone(), status: TaskStatus::Running,
+                                                        task_id: tid.clone(),
+                                                        status: TaskStatus::Running,
                                                         step: Some("深度思考".into()),
-                                                        progress: None, message: None,
-                                                        delta: None, thinking: Some(chunk_buf.clone()),
+                                                        progress: None,
+                                                        message: None,
+                                                        delta: None,
+                                                        thinking: Some(chunk_buf.clone()),
                                                     });
                                                     chunk_buf.clear();
                                                 }
@@ -448,17 +479,23 @@ impl AgentScheduler {
                                         if !chunk_buf.is_empty() {
                                             if think_active {
                                                 let _ = tx.send(TaskEvent {
-                                                    task_id: tid.clone(), status: TaskStatus::Running,
+                                                    task_id: tid.clone(),
+                                                    status: TaskStatus::Running,
                                                     step: Some("深度思考".into()),
-                                                    progress: None, message: None,
-                                                    delta: None, thinking: Some(chunk_buf),
+                                                    progress: None,
+                                                    message: None,
+                                                    delta: None,
+                                                    thinking: Some(chunk_buf),
                                                 });
                                             } else {
                                                 let _ = tx.send(TaskEvent {
-                                                    task_id: tid.clone(), status: TaskStatus::Running,
+                                                    task_id: tid.clone(),
+                                                    status: TaskStatus::Running,
                                                     step: Some("AI 回答".into()),
-                                                    progress: None, message: None,
-                                                    delta: Some(chunk_buf), thinking: None,
+                                                    progress: None,
+                                                    message: None,
+                                                    delta: Some(chunk_buf),
+                                                    thinking: None,
                                                 });
                                             }
                                         }
@@ -472,9 +509,7 @@ impl AgentScheduler {
                         }
                     }
                     // Final text without thinking tags
-                    let final_text = accumulated
-                        .replace("<think>", "")
-                        .replace("</think>", "");
+                    let final_text = accumulated.replace("<think>", "").replace("</think>", "");
 
                     let sched = scheduler();
                     {
@@ -496,7 +531,8 @@ impl AgentScheduler {
                 }
                 Err(e) => {
                     let failures = OLLAMA_FAILURES.fetch_add(1, Ordering::SeqCst) + 1;
-                    let error_msg = format!("Ollama 请求失败 (consecutive failure #{}): {}", failures, e);
+                    let error_msg =
+                        format!("Ollama 请求失败 (consecutive failure #{}): {}", failures, e);
                     let sched = scheduler();
                     {
                         let mut tasks = sched.tasks.write().await;
@@ -529,15 +565,18 @@ impl AgentScheduler {
         project_root: &PathBuf,
         tx: &broadcast::Sender<TaskEvent>,
     ) -> Result<(), ()> {
-        self.send_event(tx, TaskEvent {
-            task_id: task_id.to_string(),
-            status: TaskStatus::Running,
-            step: None,
-            progress: Some(0.0),
-            message: Some("流水线启动".into()),
-            delta: None,
-            thinking: None,
-        });
+        self.send_event(
+            tx,
+            TaskEvent {
+                task_id: task_id.to_string(),
+                status: TaskStatus::Running,
+                step: None,
+                progress: Some(0.0),
+                message: Some("流水线启动".into()),
+                delta: None,
+                thinking: None,
+            },
+        );
 
         let mut current_value: serde_json::Value = input.clone();
         let total = steps.len() as f64;
@@ -551,23 +590,31 @@ impl AgentScheduler {
                 }
             }
 
-            self.send_event(tx, TaskEvent {
-                task_id: task_id.to_string(),
-                status: TaskStatus::Running,
-                step: Some(step.label.clone()),
-                progress: Some((i as f64) / total),
-                message: Some(format!("正在执行: {}", step.label)),
-                delta: None,
-                thinking: None,
-            });
+            self.send_event(
+                tx,
+                TaskEvent {
+                    task_id: task_id.to_string(),
+                    status: TaskStatus::Running,
+                    step: Some(step.label.clone()),
+                    progress: Some((i as f64) / total),
+                    message: Some(format!("正在执行: {}", step.label)),
+                    delta: None,
+                    thinking: None,
+                },
+            );
 
             // 获取该 agent 对应的 model 信号量（保证独占）
             let registry = self.registry();
-            let agent = registry.agents.iter().find(|a| a.id == step.agent_id).cloned();
+            let agent = registry
+                .agents
+                .iter()
+                .find(|a| a.id == step.agent_id)
+                .cloned();
             let sem = match &agent {
                 Some(a) => self.model_semaphore(&a.model_id).await,
                 None => {
-                    self.fail_task(task_id, format!("未知能力: {}", step.agent_id)).await;
+                    self.fail_task(task_id, format!("未知能力: {}", step.agent_id))
+                        .await;
                     return Err(());
                 }
             };
@@ -587,13 +634,10 @@ impl AgentScheduler {
                         .and_then(|v| v.as_str())
                         .unwrap_or("asr/paraformer-large");
 
-                    crate::services::inference::transcribe(
-                        &PathBuf::from(audio_path),
-                        model_id,
-                    )
-                    .await
-                    .map(|text| serde_json::json!({ "text": text }))
-                    .map_err(|e| e.to_string())
+                    crate::services::inference::transcribe(&PathBuf::from(audio_path), model_id)
+                        .await
+                        .map(|text| serde_json::json!({ "text": text }))
+                        .map_err(|e| e.to_string())
                 }
                 "tts" => {
                     let text = current_value
@@ -615,8 +659,7 @@ impl AgentScheduler {
 
                     let output_dir = project_root.join("output");
                     let _ = tokio::fs::create_dir_all(&output_dir).await;
-                    let output_path =
-                        output_dir.join(format!("agent_tts_{}.wav", &task_id[..8]));
+                    let output_path = output_dir.join(format!("agent_tts_{}.wav", &task_id[..8]));
 
                     crate::services::inference::synthesize(
                         text,
@@ -655,15 +698,16 @@ impl AgentScheduler {
                         .send()
                         .await
                     {
-                        Ok(resp) => {
-                            match resp.json::<serde_json::Value>().await {
-                                Ok(body) => {
-                                    let content = body["message"]["content"].as_str().unwrap_or("").to_string();
-                                    Ok(serde_json::json!({ "text": content, "role": "assistant" }))
-                                }
-                                Err(e) => Err(format!("解析 Ollama 响应失败: {}", e)),
+                        Ok(resp) => match resp.json::<serde_json::Value>().await {
+                            Ok(body) => {
+                                let content = body["message"]["content"]
+                                    .as_str()
+                                    .unwrap_or("")
+                                    .to_string();
+                                Ok(serde_json::json!({ "text": content, "role": "assistant" }))
                             }
-                        }
+                            Err(e) => Err(format!("解析 Ollama 响应失败: {}", e)),
+                        },
                         Err(e) => Err(format!("Ollama 请求失败: {}", e)),
                     }
                 }
@@ -673,18 +717,22 @@ impl AgentScheduler {
             match result {
                 Ok(value) => {
                     current_value = value;
-                    self.send_event(tx, TaskEvent {
-                        task_id: task_id.to_string(),
-                        status: TaskStatus::Running,
-                        step: Some(step.label.clone()),
-                        progress: Some((i as f64 + 1.0) / total),
-                        message: Some(format!("完成: {}", step.label)),
-                    delta: None,
-                    thinking: None,
-                    });
+                    self.send_event(
+                        tx,
+                        TaskEvent {
+                            task_id: task_id.to_string(),
+                            status: TaskStatus::Running,
+                            step: Some(step.label.clone()),
+                            progress: Some((i as f64 + 1.0) / total),
+                            message: Some(format!("完成: {}", step.label)),
+                            delta: None,
+                            thinking: None,
+                        },
+                    );
                 }
                 Err(e) => {
-                    self.fail_task(task_id, format!("步骤 [{}] 失败: {}", step.label, e)).await;
+                    self.fail_task(task_id, format!("步骤 [{}] 失败: {}", step.label, e))
+                        .await;
                     return Err(());
                 }
             }
@@ -698,15 +746,18 @@ impl AgentScheduler {
                 t.result = Some(serde_json::to_string(&current_value).unwrap_or_default());
             }
         }
-        self.send_event(tx, TaskEvent {
-            task_id: task_id.to_string(),
-            status: TaskStatus::Completed,
-            step: None,
-            progress: Some(1.0),
-            message: Some("流水线执行完成".into()),
-            delta: None,
-            thinking: None,
-        });
+        self.send_event(
+            tx,
+            TaskEvent {
+                task_id: task_id.to_string(),
+                status: TaskStatus::Completed,
+                step: None,
+                progress: Some(1.0),
+                message: Some("流水线执行完成".into()),
+                delta: None,
+                thinking: None,
+            },
+        );
 
         Ok(())
     }

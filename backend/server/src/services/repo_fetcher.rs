@@ -37,7 +37,10 @@ pub fn build_download_url(repo_id: &str, source: &str, file_path: &str) -> Strin
             "https://modelscope.cn/models/{}/resolve/master/{}",
             repo_id, file_path
         ),
-        _ => format!("https://hf-mirror.com/{}/resolve/main/{}", repo_id, file_path),
+        _ => format!(
+            "https://hf-mirror.com/{}/resolve/main/{}",
+            repo_id, file_path
+        ),
     }
 }
 
@@ -94,7 +97,10 @@ async fn list_hf_files(repo_id: &str, source: &str) -> Result<Vec<RepoFile>, Str
         .filter(|item| !should_skip_file(&item.path))
         .map(|item| RepoFile {
             path: item.path.clone(),
-            size: item.size.or_else(|| item.lfs.as_ref().and_then(|l| l.size)).unwrap_or(0),
+            size: item
+                .size
+                .or_else(|| item.lfs.as_ref().and_then(|l| l.size))
+                .unwrap_or(0),
             is_lfs: item.lfs.is_some(),
         })
         .collect();
