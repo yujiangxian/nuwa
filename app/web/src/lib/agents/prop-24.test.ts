@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 24: 错误码跨层互斥
 /**
  * Property 24 — Cross-layer error-code disjointness.

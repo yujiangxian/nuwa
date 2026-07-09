@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 15: 空绑定的平凡解析
 /**
  * Property 15: For any agent with an empty Tool_Binding_List and any

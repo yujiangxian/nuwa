@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: command-palette — Palette_Store 切片状态迁移测试（任务 3.2）
 //
 // 直接调用 actions 断言状态迁移（Req 1.2, 1.3, 4.1, 4.2, 4.3）。

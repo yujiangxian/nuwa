@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-graph-model, Property 25: 可达/不可达分区
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

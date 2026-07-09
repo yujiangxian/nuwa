@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Example: 空绑定智能体的平凡解析
 /**
  * Example/edge test for an agent with no tool bindings (tools: []) against an

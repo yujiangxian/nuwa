@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 32: 错误码集合不相交
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

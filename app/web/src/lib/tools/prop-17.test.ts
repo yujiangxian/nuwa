@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 17: 规范字符串往返与规范输出唯一
 import fc from 'fast-check';
 import { describe, it, expect } from 'vitest';

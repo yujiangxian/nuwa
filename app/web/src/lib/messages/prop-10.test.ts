@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 10: validateTranscript 未配对工具结果检测
 //
 // 对任意含一个 Tool_Result_Part 而其 Call_Id 不等于任何更早 Tool_Call_Part 的 Call_Id 的

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 4: 非法图被拒绝执行
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 2: truncateHistory 长度与后缀
 //
 // 对任意消息列表 ms 与整数 max >= 1，truncateHistory(ms, max) 的长度等于

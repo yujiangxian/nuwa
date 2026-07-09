@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 16: 错误码跨层互斥
 
 import { describe, it, expect } from 'vitest';

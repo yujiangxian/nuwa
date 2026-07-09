@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Example: validateArguments 四种代表性情形
 /**
  * Example & boundary test (R14.2–R14.5): on a concrete tool with one required

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 //! 共享常量 — 全项目公用的 URL、默认路径等。
 
 /// Ollama `/api/chat` 端点地址。可通过环境变量 `OLLAMA_CHAT_URL` 覆盖。

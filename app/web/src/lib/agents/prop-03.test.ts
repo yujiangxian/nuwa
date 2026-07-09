@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 3: 移除不存在的智能体失败
 //
 // 对任意 AgentRegistry r 与不存在于 r 的 Agent_Id id，removeAgent(r, id) 返回失败

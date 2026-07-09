@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Example: 具体 agent 的系统消息 role/text/id 形状
 //
 // Validates: Requirements 2.2, 2.3

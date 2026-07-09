@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /**
  * 按键组合（Key_Combo）的纯逻辑层（command-palette）。
  *

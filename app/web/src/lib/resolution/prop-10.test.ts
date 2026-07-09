@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 10: 工具节点——实参校验镜像 validateArguments
 /**
  * Property 10 (Validates: Requirements 6.3, 6.4, 6.5):

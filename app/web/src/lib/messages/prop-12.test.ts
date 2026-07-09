@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 12: 良构 Transcript 校验通过
 
 import { describe, it } from 'vitest';

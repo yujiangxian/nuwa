@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 15: normalizeTool 语义等价唯一且保持关键字段
 import fc from 'fast-check';
 import { describe, it, expect } from 'vitest';

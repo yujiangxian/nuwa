@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution
 /**
  * Custom fast-check arbitraries for the agent-tool-resolution test suite.

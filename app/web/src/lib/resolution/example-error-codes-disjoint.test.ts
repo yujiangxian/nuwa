@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Example: 六层错误码取值两两不相交
 /**
  * Example test asserting that the ResolutionErrorCode value set is disjoint

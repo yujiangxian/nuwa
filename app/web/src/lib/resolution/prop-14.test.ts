@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 14: 能力索引确定性与不变性
 /**
  * Property 14: Two calls to buildCapabilityIndex on the same inputs return

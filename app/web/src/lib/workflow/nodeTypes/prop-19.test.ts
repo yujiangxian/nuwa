@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 19: 端口推导——每类型基数与键集合
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 17: 反序列化拒斥畸形输入
 
 import { describe, it, expect } from 'vitest';

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 5: 更新保持 id 与键集合
 import fc from 'fast-check';
 import { describe, it, expect } from 'vitest';

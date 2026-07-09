@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 15: normalizeAgent 幂等与不动点
 //
 // 对任意 AgentDefinition a，normalizeAgent(normalizeAgent(a)) 与 normalizeAgent(a)

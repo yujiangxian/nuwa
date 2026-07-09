@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /**
  * Session_Organize 纯逻辑模块（chat-session-organization）。
  *

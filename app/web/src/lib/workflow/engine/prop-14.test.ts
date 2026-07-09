@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 14: 恢复等价性与幂等性
 //
 // Validates: Requirements 12.4, 13.1, 13.2, 13.4

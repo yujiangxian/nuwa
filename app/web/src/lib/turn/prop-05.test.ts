@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 5: 无工具调用转移到 completed
 
 import { describe, it, expect } from 'vitest';

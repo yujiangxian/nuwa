@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 5: 无上限装配等于系统消息后接全部历史
 //
 // 对任意 a 与 t，assembleMessages(a, t, undefined)（或 options 不含 maxMessages）逐元素

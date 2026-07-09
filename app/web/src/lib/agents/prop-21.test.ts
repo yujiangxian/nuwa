@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 21: 模型绑定解析与节点绑定
 /**
  * Property 21 — Model binding resolution & node binding.

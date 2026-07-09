@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /// 角色管理独立 store — 从 uiStore 拆分。
 /// 管理 characters 数组、currentCharacterId、CRUD 操作与 IndexedDB 持久化。
 

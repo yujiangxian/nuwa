@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 17: 数值收敛幂等且区间内保持
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

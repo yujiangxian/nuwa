@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 16: normalizeAgent 语义等价唯一且保持关键字段
 //
 // 对任意 AgentDefinition base 与其语义等价重排版本 a'（仅 tags/tools 顺序不同），

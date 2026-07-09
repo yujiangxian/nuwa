@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 11: llm 必需字段与数值范围检测
 //
 // Property 11, Validates: Requirements 2.4, 2.5, 2.6

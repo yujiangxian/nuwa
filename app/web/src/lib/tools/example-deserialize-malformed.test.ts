@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Example: deserializeRegistry 拒斥典型畸形输入
 /**
  * Example & boundary test (R13.6): representative malformed Registry_Json

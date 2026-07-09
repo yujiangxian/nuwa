@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 12: validateRegistry 重复 id 检测
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

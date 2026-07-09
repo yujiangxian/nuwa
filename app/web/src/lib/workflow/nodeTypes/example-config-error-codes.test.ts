@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types — example test for ConfigErrorCode existence (R8.7)
 
 import { describe, it, expect } from 'vitest';

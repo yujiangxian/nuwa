@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 import { useMemo } from 'react';
 import { useUIStore } from '@/store/uiStore';
 import { resolveLocale, translate, type LocaleCode, type TranslationKey } from '@/lib/i18n';

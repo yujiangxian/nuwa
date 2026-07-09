@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 use axum::http::HeaderValue;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 

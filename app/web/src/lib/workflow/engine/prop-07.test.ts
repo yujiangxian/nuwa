@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-execution-engine, Property 7: ValueStore 完整性
 //
 // Stepping a run from its initial state, the ValueStore only grows monotonically

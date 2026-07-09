@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 1: 添加成功——size 加一且原注册表不变
 import fc from 'fast-check';
 import { describe, it, expect } from 'vitest';

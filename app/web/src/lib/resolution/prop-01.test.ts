@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 1: 解析划分完备且不相交
 /**
  * Property 1: resolveAgentTools partitions the agent's (de-duplicated) bound

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Example: 八层错误码取值两两不相交
 //
 // Validates: Requirements 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8

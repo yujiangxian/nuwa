@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 24: 错误码跨层互斥
 /**
  * Property 24 (R11.2–R11.5): the `ToolErrorCode` value set must be disjoint

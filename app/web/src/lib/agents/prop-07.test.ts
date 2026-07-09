@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-definition-registry, Property 7: getAgent 命中与未命中
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

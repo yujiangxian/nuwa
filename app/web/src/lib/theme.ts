@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /**
  * 外观主题应用引擎（appearance-theme-mode）的纯逻辑层。
  *

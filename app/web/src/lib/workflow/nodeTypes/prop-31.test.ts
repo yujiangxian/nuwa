@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 31: 跨层集成——默认入口节点通过图校验
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';

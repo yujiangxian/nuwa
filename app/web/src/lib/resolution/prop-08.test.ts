@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-resolution, Property 8: 工具节点——工具缺失短路
 /**
  * Property 8 (Validates: Requirements 6.2):

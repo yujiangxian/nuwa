@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 12: tool 配置错误检测
 //
 // Property 12, Validates: Requirements 4.4, 4.5, 4.6

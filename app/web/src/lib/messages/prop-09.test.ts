@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-message-protocol, Property 9: validateTranscript 重复 Message_Id 检测
 //
 // 对任意含两条或更多相同 Message_Id 的 Transcript，validateTranscript 含一条

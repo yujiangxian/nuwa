@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-tool-system, Property 23: 标签索引与按标签查找的一致与精确
 import fc from 'fast-check';
 import { describe, it, expect } from 'vitest';

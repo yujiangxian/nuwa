@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: workflow-node-types, Property 3: 默认配置判别标签匹配类型
 import { describe, it } from 'vitest';
 import fc from 'fast-check';

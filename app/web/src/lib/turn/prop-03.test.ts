@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-turn-reducer, Property 3: 重复 Message_Id 施加模型输出失败
 
 import { describe, it, expect } from 'vitest';

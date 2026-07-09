@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 // Feature: agent-conversation-assembly, Property 7: 上限为 1 仅系统消息
 //
 // 对任意 a 与 t，assembleMessages(a, t, { maxMessages: 1 }) 恰为单元素列表

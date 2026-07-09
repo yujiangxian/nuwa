@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025-2026 yujiangxian
+
 /**
  * integration-roadmap: fixed 18-node dependency graph and core data models.
  *
