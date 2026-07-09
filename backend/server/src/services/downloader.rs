@@ -198,10 +198,8 @@ impl SourceChain {
         let mut urls = Vec::new();
 
         if url.starts_with("http://") || url.starts_with("https://") {
-            if let Some(path_and_query) = url
-                .splitn(2, "://")
-                .nth(1)
-                .and_then(|s| s.splitn(2, '/').nth(1))
+            if let Some(path_and_query) = url.split_once("://").map(|x| x.1)
+                .and_then(|s| s.split_once('/').map(|x| x.1))
             {
                 for src in &self.sources {
                     let mirror_url =
@@ -510,35 +508,26 @@ impl ChunkedDownloader {
     }
 
     async fn load_or_create_chunks(&self) -> Result<(), String> {
-        let meta_exists = match tokio::fs::metadata(&self.meta_path).await {
-            Ok(_) => true,
-            Err(_) => false,
-        };
+        let meta_exists = (tokio::fs::metadata(&self.meta_path).await).is_ok();
         if meta_exists {
-            match tokio::fs::read_to_string(&self.meta_path).await {
-                Ok(content) => match serde_json::from_str::<DownloadMetaData>(&content) {
-                    Ok(meta) => {
-                        let url_match = meta.url == self.url;
-                        let total = *self.total_size.lock().await;
-                        let size_match = meta.total_size == total;
-                        if url_match && size_match {
-                            let mut chunks: Vec<Chunk> =
-                                meta.chunks.into_iter().map(Chunk::from).collect();
-                            let downloaded: u64 = chunks.iter().map(|c| c.downloaded).sum();
-                            *self.downloaded_total.lock().await = downloaded;
-                            for c in &mut chunks {
-                                if c.status == "downloading" {
-                                    c.status = "pending".to_string();
-                                }
-                            }
-                            *self.chunks.lock().await = chunks;
-                            return Ok(());
+            if let Ok(content) = tokio::fs::read_to_string(&self.meta_path).await { if let Ok(meta) = serde_json::from_str::<DownloadMetaData>(&content) {
+                let url_match = meta.url == self.url;
+                let total = *self.total_size.lock().await;
+                let size_match = meta.total_size == total;
+                if url_match && size_match {
+                    let mut chunks: Vec<Chunk> =
+                        meta.chunks.into_iter().map(Chunk::from).collect();
+                    let downloaded: u64 = chunks.iter().map(|c| c.downloaded).sum();
+                    *self.downloaded_total.lock().await = downloaded;
+                    for c in &mut chunks {
+                        if c.status == "downloading" {
+                            c.status = "pending".to_string();
                         }
                     }
-                    Err(_) => {}
-                },
-                Err(_) => {}
-            }
+                    *self.chunks.lock().await = chunks;
+                    return Ok(());
+                }
+            } }
         }
 
         // 新建分片

@@ -29,7 +29,7 @@ import SlashCommandMenu from '@/components/SlashCommandMenu';
 import MarkdownMessage from '@/components/MarkdownMessage';
 import { computeBudget } from '@/lib/contextBudget';
 import { extractNewSentences } from '@/lib/sentenceSplit';
-import { ArrowLeft, Settings, Plus, Play, Mic, Send, MessageSquare, User, Square, Monitor, Loader2, Trash2, Check, X, Copy, RotateCcw, Pencil, Search, Pin, PinOff, Code, ThumbsUp, ThumbsDown, ChevronDown, Brain } from 'lucide-react';
+import { ArrowLeft, Settings, Plus, Play, Mic, Send, MessageSquare, User, Square, Monitor, Loader2, Trash2, Check, X, Copy, RotateCcw, Pencil, Search, Pin, PinOff, Code, ThumbsUp, ThumbsDown, ChevronDown } from 'lucide-react';
 
 const DRAFT_KEY = 'nuwa_chat_draft';
 

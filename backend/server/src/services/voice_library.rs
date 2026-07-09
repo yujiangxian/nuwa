@@ -832,7 +832,7 @@ mod tests {
         let exactly_max = MAX_UPLOAD_SIZE;
         let over_max = MAX_UPLOAD_SIZE + 1;
         assert!(
-            !(exactly_max > MAX_UPLOAD_SIZE),
+            (exactly_max <= MAX_UPLOAD_SIZE),
             "exactly 20MB must be accepted"
         );
         assert!(over_max > MAX_UPLOAD_SIZE, "20MB + 1 must be rejected");
@@ -845,7 +845,7 @@ mod tests {
     // ========================================================================
     #[test]
     fn serve_lookup_missing_id_returns_none() {
-        let voices = vec![VoiceInfo {
+        let voices = [VoiceInfo {
             id: "exists-1".to_string(),
             name: "a".to_string(),
             path: "assets/datasets/voices/a.wav".to_string(),
@@ -854,8 +854,8 @@ mod tests {
             duration_seconds: None,
         }];
         // Mirrors the handler lookup: voices.iter().find(|v| v.id == id).
-        assert!(voices.iter().find(|v| v.id == "does-not-exist").is_none());
-        assert!(voices.iter().find(|v| v.id == "exists-1").is_some());
+        assert!(!voices.iter().any(|v| v.id == "does-not-exist"));
+        assert!(voices.iter().any(|v| v.id == "exists-1"));
     }
 
     // ========================================================================

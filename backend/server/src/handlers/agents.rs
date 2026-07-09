@@ -80,10 +80,7 @@ pub async fn task_events(
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let sched = scheduler();
     let events = sched.events.read().await;
-    let rx = events.get(&task_id).and_then(|tx| {
-        // subscribe() returns a new receiver that starts from the next event
-        Some(tx.subscribe())
-    });
+    let rx = events.get(&task_id).map(|tx| tx.subscribe());
 
     let stream = async_stream::stream! {
         if let Some(rx) = rx {
