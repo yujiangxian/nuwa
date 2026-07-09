@@ -1,0 +1,109 @@
+#!/bin/bash
+# ── Nuwa pre-push hook: 推送前安全扫描 ──────────────────────────
+# 扫描即将推送的 commit 中是否包含密钥/Token/私钥等凭证。
+# 检测到则拒绝推送并报告给用户。
+#
+# 安装: 钩子已放在 .git/hooks/pre-push，无需额外配置。
+# 跳过: git push --no-verify 可绕过（仅在确认为误报时使用）。
+# ────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+FOUND=0
+
+# ─── 读取 stdin 获取推送的 ref 范围 ───
+# stdin 格式: <local ref> <local sha> <remote ref> <remote sha>
+while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
+  # 如果 remote sha 为 40 个 0 = 远程分支不存在（新分支）
+  if [[ "$REMOTE_SHA" == "0000000000000000000000000000000000000000" ]]; then
+    RANGE="$LOCAL_SHA"
+  else
+    RANGE="$REMOTE_SHA..$LOCAL_SHA"
+  fi
+
+  # 获取本次推送中所有 commit 的 diff
+  DIFF=$(git log "$RANGE" -p --no-color 2>/dev/null || true)
+
+  check() {
+    local NAME="$1"
+    local PATTERN="$2"
+    local HITS
+    HITS=$(echo "$DIFF" | grep -nE "$PATTERN" 2>/dev/null || true)
+    if [[ -n "$HITS" ]]; then
+      echo -e "${RED}[SECURITY BLOCK] $NAME${NC}"
+      echo "$HITS" | head -10
+      echo ""
+      FOUND=1
+    fi
+  }
+
+  # ─── 凭证格式检测 ────────────────────────────────────────────
+
+  # AWS Access Key
+  check "AWS Access Key ID (AKIA.../ASIA...)" "(AKIA|ASIA)[0-9A-Z]{16}"
+
+  # Google API Key
+  check "Google API Key"                                 "AIza[0-9A-Za-z_-]{35}"
+
+  # Generic API keys
+  check "Generic API Key (sk-...)"                       "sk-[a-zA-Z0-9]{32,}"
+
+  # GitHub Personal Access Token
+  check "GitHub PAT"                                     "(ghp_|gho_|ghu_|ghs_|github_pat_)[0-9a-zA-Z]{36,}"
+
+  # GitLab PAT
+  check "GitLab PAT"                                     "glpat-[0-9a-zA-Z_-]{20,}"
+
+  # Slack Webhook
+  check "Slack Webhook URL"                              "hooks\.slack\.com/services/[A-Z0-9]+/[A-Z0-9]+/[a-zA-Z0-9]+"
+
+  # Discord Webhook
+  check "Discord Webhook URL"                            "discord\.com/api/webhooks/[0-9]+/[a-zA-Z0-9_-]+"
+
+  # Telegram Bot Token
+  check "Telegram Bot Token"                             "[0-9]+:AA[0-9A-Za-z_-]{32}"
+
+  # SSH 私钥
+  check "SSH Private Key"                                "BEGIN (RSA|EC|OPENSSH|DSA) PRIVATE KEY"
+
+  # 数据库连接串（含密码）
+  check "Database URL with credentials"                  "(mongodb|mysql|postgres|postgresql|redis)://[^ :]+:[^ @]+@"
+
+  # 硬编码密码
+  check "Hardcoded password assignment"                  "(password|passwd|pwd)\s*[=:]\s*\"[^\"]{3,}\""
+
+  # JWT Secret / Session Secret
+  check "JWT/Session Secret"                             "(SECRET|JWT_SECRET|SESSION_SECRET)\s*[=:]\s*\"[^\"]{16,}\""
+
+  # Bearer Token 硬编码
+  check "Hardcoded Bearer Token"                         "Authorization.*Bearer [a-zA-Z0-9_\.\-]{30,}"
+
+  # .env 文件不应提交
+  check ".env file committed"                            '^(diff.*\.env$|new file mode.*\.env)'
+
+  # 凭证文件
+  check "Credential file"                                '^(diff.*\.pem$|diff.*id_rsa|diff.*id_ed25519|diff.*\.key$)'
+
+
+  if [[ "$FOUND" -eq 1 ]]; then
+    echo ""
+    echo -e "${RED}══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${RED}  推送已阻止：检测到可能的密钥/凭证泄露${NC}"
+    echo -e "${RED}══════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo -e "${YELLOW}如果你确认这是误报，可以使用:${NC}"
+    echo "  git push --no-verify"
+    echo ""
+    echo -e "${YELLOW}如果确认为真实密钥泄露:${NC}"
+    echo "  1. 立即吊销该密钥（AWS IAM / GitHub Settings / 对应平台）"
+    echo "  2. git commit --amend 清除敏感信息"
+    echo "  3. 重新推送"
+    exit 1
+  fi
+done
+
+exit 0
