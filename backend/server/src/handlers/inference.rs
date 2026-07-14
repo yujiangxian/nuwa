@@ -156,7 +156,7 @@ pub async fn transcribe(
         }
         Err(e) => {
             {
-                let state = state.write().await;
+                let _state = state.write().await;
             }
             Json(AsrResponse {
                 success: false,
@@ -317,7 +317,7 @@ pub async fn synthesize(
         }
         Err(e) => {
             {
-                let state = state.write().await;
+                let _state = state.write().await;
             }
             Json(TtsResponse {
                 success: false,
@@ -436,7 +436,7 @@ pub async fn synthesize_script(
                 .unwrap_or_default()
                 .as_secs();
             {
-                let state = state.write().await;
+                let _state = state.write().await;
             }
             Json(TtsScriptResponse {
                 success: true,
@@ -447,7 +447,7 @@ pub async fn synthesize_script(
         }
         Err(e) => {
             {
-                let state = state.write().await;
+                let _state = state.write().await;
             }
             Json(TtsScriptResponse {
                 success: false,
@@ -610,7 +610,7 @@ pub async fn transcribe_upload(
         }
         Err(e) => {
             {
-                let state = state.write().await;
+                let _state = state.write().await;
             }
             Json(AsrUploadResponse {
                 success: false,

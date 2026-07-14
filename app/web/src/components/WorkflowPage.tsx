@@ -239,7 +239,11 @@ export default function WorkflowPage() {
       console.warn('Failed to fetch agent pipelines', err);
       addToast({ message: '获取流水线列表失败，请检查后端是否运行', type: 'error' });
     }).finally(() => setPipelinesLoading(false));
-  }, []);
+    // Intentionally mount-only fetch; `agentPipeline` is only read to validate the
+    // current selection against the freshly-fetched list and must stay at its
+    // initial value here — re-running this fetch on every pipeline change is not desired.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addToast]);
 
   const runAgent = useCallback(async () => {
     // Cleanup previous EventSource and poll timer
@@ -297,7 +301,7 @@ export default function WorkflowPage() {
       setAgentError('Agent 执行失败');
       setAgentStatus('failed');
     }
-  }, [agentPipeline, agentInput]);
+  }, [agentPipeline, agentInput, addToast]);
 
   const resetAgent = () => {
     setAgentTaskId(null);

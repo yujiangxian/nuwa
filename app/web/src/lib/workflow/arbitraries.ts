@@ -674,7 +674,17 @@ function arbitraryShuffledJson(value: JsonValue): fc.Arbitrary<JsonValue> {
       keys.forEach((key, i) => byKey.set(key, values[i] as JsonValue));
       const out: { [key: string]: JsonValue } = {};
       for (const key of order) {
-        out[key] = byKey.get(key) as JsonValue;
+        // Use defineProperty rather than `out[key] = …` so that an own property is
+        // created even for the special key "__proto__" — a plain assignment would
+        // invoke Object.prototype's __proto__ setter instead of storing a data
+        // property, silently dropping the key (see serialize.ts's canonicalizeJson,
+        // which guards against the same trap).
+        Object.defineProperty(out, key, {
+          value: byKey.get(key) as JsonValue,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
       }
       return out;
     });

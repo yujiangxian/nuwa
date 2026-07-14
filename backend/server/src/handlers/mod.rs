@@ -31,15 +31,14 @@ pub async fn health(
     let mut checks = serde_json::Map::new();
 
     // Ollama connectivity
-    let ollama_ok = match reqwest::Client::new()
-        .head("http://localhost:11434/api/tags")
-        .timeout(std::time::Duration::from_secs(5))
-        .send()
-        .await
-    {
-        Ok(resp) if resp.status().is_success() => true,
-        _ => false,
-    };
+    let ollama_ok = matches!(
+        reqwest::Client::new()
+            .head("http://localhost:11434/api/tags")
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await,
+        Ok(resp) if resp.status().is_success()
+    );
     checks.insert(
         "ollama".into(),
         json!(if ollama_ok { "ok" } else { "unreachable" }),

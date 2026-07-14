@@ -366,11 +366,7 @@ fn detect_quant(main_files: &[String]) -> String {
 /// 检测采样率（根据模型类型推断）
 fn detect_sample_rate(name: &str) -> i32 {
     let n = name.to_lowercase();
-    if n.contains("whisper") {
-        16000
-    } else if n.contains("glm-asr") {
-        16000
-    } else if n.contains("paraformer") {
+    if n.contains("whisper") || n.contains("glm-asr") || n.contains("paraformer") {
         16000
     } else if n.contains("cosyvoice") || n.contains("glm-tts") || n.contains("qwen3-tts") {
         24000

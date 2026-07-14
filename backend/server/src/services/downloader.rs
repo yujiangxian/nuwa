@@ -512,9 +512,10 @@ impl ChunkedDownloader {
         if meta_exists {
             if let Ok(content) = tokio::fs::read_to_string(&self.meta_path).await { if let Ok(meta) = serde_json::from_str::<DownloadMetaData>(&content) {
                 let url_match = meta.url == self.url;
+                let dest_match = std::path::Path::new(&meta.dest) == self.dest.as_path();
                 let total = *self.total_size.lock().await;
                 let size_match = meta.total_size == total;
-                if url_match && size_match {
+                if url_match && dest_match && size_match {
                     let mut chunks: Vec<Chunk> =
                         meta.chunks.into_iter().map(Chunk::from).collect();
                     let downloaded: u64 = chunks.iter().map(|c| c.downloaded).sum();
@@ -726,6 +727,9 @@ impl ChunkedDownloader {
         Ok(())
     }
 
+    // 私有关联函数，仅在本文件内以固定参数集调用一次；拆分成参数结构体收益不大，
+    // 显式 allow 优于为此单一调用点引入额外抽象。
+    #[allow(clippy::too_many_arguments)]
     async fn download_chunk(
         chunk_idx: usize,
         url: &str,

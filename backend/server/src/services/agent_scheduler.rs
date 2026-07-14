@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock, Semaphore};
 use uuid::Uuid;
@@ -241,7 +241,7 @@ impl AgentScheduler {
     }
 
     /// 发起一次流水线执行（异步，返回 task_id 立即返回）
-    pub async fn submit(&self, req: RunRequest, project_root: &PathBuf) -> Result<String, String> {
+    pub async fn submit(&self, req: RunRequest, project_root: &Path) -> Result<String, String> {
         let registry = self.registry();
         let pipeline = registry
             .pipelines
@@ -276,7 +276,7 @@ impl AgentScheduler {
         // 异步执行
         let steps = pipeline.steps.clone();
         let input = req.input.clone();
-        let root = project_root.clone();
+        let root = project_root.to_path_buf();
         let tid = task_id.clone();
 
         // 立即标记为 Running
@@ -305,7 +305,7 @@ impl AgentScheduler {
     pub async fn submit_stream(
         &self,
         req: RunRequest,
-        _project_root: &PathBuf,
+        _project_root: &Path,
     ) -> Result<String, String> {
         let registry = self.registry();
         let _pipeline = registry
@@ -355,10 +355,10 @@ impl AgentScheduler {
             let send_messages = if let Some(msgs) = input.get("messages").and_then(|v| v.as_array())
             {
                 msgs.iter()
-                    .filter_map(|m| {
+                    .map(|m| {
                         let role = m.get("role").and_then(|v| v.as_str()).unwrap_or("user");
                         let content = m.get("content").and_then(|v| v.as_str()).unwrap_or("");
-                        Some(serde_json::json!({"role": role, "content": content}))
+                        serde_json::json!({"role": role, "content": content})
                     })
                     .collect::<Vec<_>>()
             } else {
@@ -568,7 +568,7 @@ impl AgentScheduler {
         task_id: &str,
         steps: &[PipelineStep],
         input: &serde_json::Value,
-        project_root: &PathBuf,
+        project_root: &Path,
         tx: &broadcast::Sender<TaskEvent>,
     ) -> Result<(), ()> {
         self.send_event(

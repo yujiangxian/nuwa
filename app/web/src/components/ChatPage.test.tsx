@@ -161,6 +161,7 @@ function agentStreamController() {
       win.EventSource = class {
         onmessage: ((e: { data: string }) => void) | null = null;
         onerror: (() => void) | null = null;
+        // eslint-disable-next-line @typescript-eslint/no-this-alias -- exposes the instance to the enclosing push/done/error closures
         constructor() { instRef = this; }
         close() {}
       };
@@ -249,6 +250,7 @@ beforeEach(() => {
       onerror: (() => void) | null = null;
       constructor(url: string) {
         if (url.includes('/events')) {
+          // eslint-disable-next-line @typescript-eslint/no-this-alias -- exposes the instance for the array-push below and later setTimeout closures
           const inst = this;
           (window as any).__agentEventHandlers.push(inst);
           // Fire default delta then completed after a brief delay
@@ -421,6 +423,9 @@ describe('ChatPage streaming render & finalize', () => {
 
     render(<ChatPage />);
     sendText('在吗');
+    await screen.findByText('正在思考...');
+
+    await act(async () => { ag.push({ delta: '你好呀，我能帮你什么？' }); await tick(); ag.done(); await tick(); });
 
     await waitFor(() =>
       expect(appendSpy).toHaveBeenCalledWith(expect.objectContaining({ role: 'user', content: '在吗' }))
@@ -483,6 +488,7 @@ describe('ChatPage TTS integration', () => {
 
     render(<ChatPage />);
     sendText('你好，这是测试。');
+    await screen.findByText('正在思考...');
 
     await act(async () => { ag.push({ delta: '你好，这是测试。' }); await tick(); ag.done(); await tick(); });
 
@@ -513,6 +519,7 @@ describe('ChatPage TTS integration', () => {
 
     render(<ChatPage />);
     sendText('你好');
+    await screen.findByText('正在思考...');
 
     await act(async () => { ag.push({ delta: '你好呀。' }); await tick(); ag.done(); await tick(); });
     await screen.findByText('你好呀。');
@@ -548,7 +555,7 @@ describe('ChatPage error handling & fallback', () => {
 
     await waitFor(() =>
       expect(mocks.addToast).toHaveBeenCalledWith(
-        expect.objectContaining({ message: 'Ollama 未启动或模型未加载，请先启动 Ollama。', type: 'error' })
+        expect.objectContaining({ message: '对话请求失败，请检查网络', type: 'error' })
       )
     );
     // No content → placeholder removed, no assistant Final_Message.
@@ -722,7 +729,9 @@ describe('ChatPage Regenerate_Action (Req 2.1/2.2/2.3/2.6)', () => {
     ag.install(window);
 
     render(<ChatPage />);
+    // "重新生成" 按钮先打开温度选项菜单，需再点击菜单项才会真正触发生成。
     fireEvent.click(screen.getByLabelText('重新生成'));
+    fireEvent.click(screen.getByText('默认重新生成'));
 
     await screen.findByText('正在思考...');
     expect(screen.getByRole('button', { name: /停止/ })).toBeInTheDocument();
@@ -741,7 +750,9 @@ describe('ChatPage Regenerate_Action (Req 2.1/2.2/2.3/2.6)', () => {
     const before = useUIStore.getState().sessions.find((s) => s.id === 's2')!.updatedAt;
 
     render(<ChatPage />);
+    // "重新生成" 按钮先打开温度选项菜单，需再点击菜单项才会真正触发生成。
     fireEvent.click(screen.getByLabelText('重新生成'));
+    fireEvent.click(screen.getByText('默认重新生成'));
 
     await waitFor(() =>
       expect(appendSpy).toHaveBeenCalledWith(expect.objectContaining({ role: 'assistant' })),
@@ -1143,6 +1154,7 @@ describe('ChatPage prompt-preset no-regression (Req 8.6)', () => {
 
     render(<ChatPage />);
     sendText('在吗');
+    await screen.findByText('正在思考...');
 
     await act(async () => { ag.push({ delta: '流式' }); await tick(); ag.push({ delta: '回复' }); await tick(); ag.done(); await tick(); });
 

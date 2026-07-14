@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 yujiangxian
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useUIStore } from '@/store/uiStore';
 import { useToastStore } from '@/store/toastStore';
 import { apiClient } from '@/api/client';
@@ -122,7 +122,7 @@ export default function VoiceStudioPage() {
   const player = useAudioPlayer();
   const uploadVoice = useUploadVoice();
   const deleteVoice = useDeleteVoice();
-  const voices = voicesQuery.data ?? [];
+  const voices = useMemo(() => voicesQuery.data ?? [], [voicesQuery.data]);
   const currentTtsModel = readCurrentTtsModel(config);
 
   // Synth tab states

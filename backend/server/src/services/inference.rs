@@ -38,7 +38,6 @@ pub fn wav_duration_secs(path: &Path) -> Option<f64> {
 }
 
 /// 清理所有 `util::project_root()` / `util::python_exe()` / `util::resolve_path()` 调用，统一走 `util` 模块。
-
 /// 解析模型 ID 到实际路径和脚本
 pub fn resolve_asr_model(model_id: &str) -> Result<(&'static str, PathBuf), String> {
     match model_id {
@@ -97,7 +96,7 @@ pub fn resolve_tts_model(model_id: &str) -> Result<(&'static str, PathBuf), Stri
 
 /// ASR 语音识别
 pub async fn transcribe(audio_path: &Path, model_id: &str) -> Result<String, String> {
-    let started = std::time::Instant::now();
+    let _started = std::time::Instant::now();
     let audio_path = util::resolve_path(audio_path);
     let (script, model_path) = resolve_asr_model(model_id)?;
     let script_path = util::project_root().join(script);
