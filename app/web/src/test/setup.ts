@@ -55,6 +55,7 @@ export function installMockMediaRecorder(options?: {
 
     constructor(_stream?: unknown, opts?: { mimeType?: string }) {
       this.mimeType = opts?.mimeType ?? 'audio/webm';
+      // eslint-disable-next-line @typescript-eslint/no-this-alias -- exposes the instance via getLastInstance() for tests
       lastInstance = this;
     }
 

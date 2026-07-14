@@ -29,6 +29,14 @@ npm run dev
 # → http://localhost:5173 (proxies /api → :8080)
 ```
 
+`npm install` also configures git to use the repo's version-controlled hooks
+(`.githooks/`), which run a credential-leak scan before every `push`. If you
+don't run `npm install`, enable it manually once with:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ### Running Tests
 
 ```bash

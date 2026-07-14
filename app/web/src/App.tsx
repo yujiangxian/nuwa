@@ -76,6 +76,10 @@ function App() {
     window.addEventListener('popstate', onPop);
 
     return () => window.removeEventListener('popstate', onPop);
+    // Intentionally mount-only: this initializes from the URL once and registers a
+    // single popstate listener. `currentPage`/`setPage` are read via closure and are
+    // safe to omit — re-running on every `currentPage` change would defeat the "once" intent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Update URL when page changes (with transition)

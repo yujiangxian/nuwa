@@ -190,6 +190,7 @@ pub fn build_ollama_messages(
 /// - options 为 None 时，产出的 JSON **不含 `options` 键**（缺省无回归，Req 6.1/6.2），
 ///   即仅含 `model`/`messages`/`stream`，与本特性引入前逐字段等价。
 /// - options 为 Some(map) 时，置入 `options` 字段，其键恰为调用方提供的参数集合。
+///
 /// 被 `chat`（非流式）与 `chat_stream`（流式）复用，区别仅 `stream` 取值（Req 5.5）。
 pub fn build_ollama_body(
     model: &str,

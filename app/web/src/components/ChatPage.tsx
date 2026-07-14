@@ -166,6 +166,8 @@ export default function ChatPage() {
   // 以及 Escape/选中后临时关闭菜单的标志（输入变化即重置以便重新弹出）。
   const [slashHighlight, setSlashHighlight] = useState(0);
   const [slashDismissed, setSlashDismissed] = useState(false);
+  // 供全局 Escape 处理器同步读取当前菜单可见性，避免闭包过期（见下方 keydown effect）。
+  const slashMenuVisibleRef = useRef(false);
 
   // System prompt visibility and temporary edit state
   const [tempSystemPrompt, setTempSystemPrompt] = useState<string | null>(null);
@@ -485,9 +487,9 @@ export default function ChatPage() {
             useUIStore.getState().updateMessageAudio(finalMsg.id, collectedPaths.join(','));
           }
           // Fallback: short replies don't trigger sentence-level TTS (min 3 chars).
-          // Synthesize the full text once so audio is cached for instant replay.
-          // Set ttsLoadingId to prevent race: user clicking "play" before TTS completes.
-          if (ttsSentenceCount === 0 && accRef.current.trim().length > 0 && !ctrl.signal.aborted) {
+          // Synthesize the full text once so audio is cached for instant replay —
+          // but only when autoPlay is on (Req 5.3: autoPlay OFF must not call TTS at all).
+          if (autoPlay && ttsSentenceCount === 0 && accRef.current.trim().length > 0 && !ctrl.signal.aborted) {
             setTtsLoadingId(finalMsg.id);
             const ref = resolveVoiceRef(currentCharacter?.voiceId, voices);
             synthesize.mutateAsync({
@@ -526,11 +528,14 @@ export default function ChatPage() {
         sentBoundaryRef.current = 0;
       }
     },
-    [currentCharacter, currentVoice, addToast, autoPlay, synthesize, currentTtsModel, voices, appendMessage, setLastTrimmedCount, activeModelContextLength, tempSystemPrompt],
+    [currentCharacter, currentVoice, addToast, autoPlay, synthesize, currentTtsModel, voices, appendMessage, setLastTrimmedCount, activeModelContextLength, tempSystemPrompt, player, ttsSynthCount, ttsSynthDone],
   );
 
   useEffect(() => {
     if (!isStreaming) return;
+    // 仅当 LLM 流本身已结束（streamLlmDoneRef，由 onDone 设置）时，才允许"TTS 追上进度"
+    // 这一条件收尾流式气泡；否则 TTS 合成过快会在 LLM 仍在输出文本时提前清空气泡。
+    if (!streamLlmDoneRef.current) return;
     if (ttsSynthCount > 0 && ttsSynthDone >= ttsSynthCount) {
       setIsStreaming(false);
       setStreamingContent('');
@@ -560,15 +565,15 @@ export default function ChatPage() {
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
     const payloadMessages = [...history, { role: 'user', content: userMsg.content }];
     await runAssistantStream(payloadMessages);
-  }, [inputText, isTyping, messages, setInputText, appendMessage, runAssistantStream]);
+  }, [inputText, isTyping, messages, setInputText, appendMessage, runAssistantStream, currentSessionId]);
 
   // Stop_Action：中断 fetch/consume + 清空音频队列；已接收增量在 finalize 中保留并定型。
-  const handleStop = () => {
+  const handleStop = useCallback(() => {
     abortController?.abort();
     sendingRef.current = false;
     abortedTtsRef.current = true;
     player.clear();
-  };
+  }, [abortController, player]);
 
   // Keyboard shortcuts: Ctrl+K for palette, Ctrl+N for new session, Escape for stop/clear
   useEffect(() => {
@@ -593,10 +598,11 @@ export default function ChatPage() {
           e.preventDefault();
           handleStop();
         } else if (isInput) {
-          // clear input — handled by textarea's own Escape key for slash menu;
-          // for plain Escape (no slash menu active), clear inputText
+          // 斜杠菜单打开时，Escape 已被 textarea 自身的 onKeyDown 消费用于关闭菜单
+          // （见下方 slashMenuVisible 相关 handler），此处不应再清空输入文本。
+          // 仅当菜单未激活时，Escape 才清空 inputText。
           const ta = e.target as HTMLTextAreaElement;
-          if (ta.value) {
+          if (ta.value && !slashMenuVisibleRef.current) {
             setInputText('');
           }
         }
@@ -604,7 +610,7 @@ export default function ChatPage() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isTyping, currentCharacterId, openPalette, createSession]);
+  }, [isTyping, currentCharacterId, openPalette, createSession, handleStop, setInputText]);
 
   // Copy_Action：Clipboard API → execCommand 两级回退，确保非安全上下文也可用。
   const handleCopy = useCallback(async (content: string) => {
@@ -858,7 +864,7 @@ export default function ChatPage() {
       return;
     }
     void speakMessage(msg);
-  }, [player, ttsLoadingId, speakMessage]);
+  }, [player, ttsLoadingId, ttsPendingMsgId, speakMessage]);
 
   // 进入内联重命名编辑态，预填当前标题。
   const startRename = useCallback((id: string, title: string) => {
@@ -885,6 +891,10 @@ export default function ChatPage() {
   const slashMenuVisible = slashFiltered.length > 0;
   // 规整后的合法高亮下标（空列表为 -1）（Req 4.3）。
   const slashHl = clampHighlightIndex(slashHighlight, slashFiltered.length);
+
+  useEffect(() => {
+    slashMenuVisibleRef.current = slashMenuVisible;
+  }, [slashMenuVisible]);
 
   // 关闭斜杠菜单但保留 Input_Field 文本（Escape/选中后用）（Req 4.8）。
   const closeSlashMenu = useCallback(() => {

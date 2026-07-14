@@ -132,8 +132,6 @@ struct MsData {
 struct MsFile {
     #[serde(rename = "Path", default)]
     path: String,
-    #[serde(rename = "Name", default)]
-    name: String,
     #[serde(rename = "Size", default)]
     size: Option<u64>,
     #[serde(rename = "Type", default)]

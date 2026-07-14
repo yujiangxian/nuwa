@@ -47,7 +47,7 @@ pub async fn serve_audio(Path(filename): Path<String>) -> impl IntoResponse {
     let stream = tokio_util::io::ReaderStream::with_capacity(file, 8192);
     let body = Body::from_stream(stream);
 
-    let mut response = axum::response::Response::builder()
+    let response = axum::response::Response::builder()
         .header(header::CONTENT_TYPE, HeaderValue::from_static("audio/wav"))
         .header(header::CONTENT_LENGTH, HeaderValue::from(file_size))
         .header(
@@ -59,9 +59,16 @@ pub async fn serve_audio(Path(filename): Path<String>) -> impl IntoResponse {
             header::CONTENT_DISPOSITION,
             HeaderValue::from_static("inline"),
         )
-        .body(body)
-        .unwrap();
+        .body(body);
+
+    let mut response = match response {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to build audio response");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response();
+        }
+    };
 
     response.extensions_mut().insert(file_size);
-    response
+    response.into_response()
 }
