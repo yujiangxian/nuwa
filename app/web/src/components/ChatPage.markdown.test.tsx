@@ -130,14 +130,13 @@ beforeEach(() => {
     onmessage: ((e: any) => void) | null = null;
     onerror: (() => void) | null = null;
     constructor() {
-      const inst = this;
       setTimeout(() => {
-        if (inst.onmessage) {
-          inst.onmessage({ data: JSON.stringify({ delta: '默认回复', status: 'running' }) });
+        if (this.onmessage) {
+          this.onmessage({ data: JSON.stringify({ delta: '默认回复', status: 'running' }) });
         }
         setTimeout(() => {
-          if (inst.onmessage) {
-            inst.onmessage({ data: JSON.stringify({ status: 'completed' }) });
+          if (this.onmessage) {
+            this.onmessage({ data: JSON.stringify({ status: 'completed' }) });
           }
         }, 50);
       }, 50);

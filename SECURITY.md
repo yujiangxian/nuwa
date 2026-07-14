@@ -19,14 +19,15 @@
 - 所有 API 请求都有 50MB 大小限制
 - 敏感配置文件 (`config.json`, `.env`) 已被 `.gitignore` 排除
 - 源代码不包含硬编码密钥、密码或 token
-- 每个推送前运行 pre-push hook 自动扫描凭证泄露
-- CI 流水线包含 TypeScript 类型检查、cargo check 和测试
+- 推送前自动运行 `.githooks/pre-push` 扫描凭证泄露（受版本控制，clone 后 `npm install` 自动启用，见 [CONTRIBUTING.md](CONTRIBUTING.md)）
+- CI 流水线包含 TypeScript 类型检查、ESLint、`cargo check`/`cargo clippy`、单元测试
 
 ## 依赖项
 
-- 前端: `npm audit` 零漏洞 (axios ^1.18, react-router ^7.18)
-- 后端: `cargo update` 保持依赖版本最新
+- 前端: `npm audit` 门禁已接入 CI（`frontend.yml` 的 `audit` job），当前零漏洞 (axios ^1.18, react-router ^7.18)
+- 后端: `cargo audit` 门禁已接入 CI（`backend.yml` 的 `audit` job），对照 RustSec 公告库扫描
 - GitHub Dependabot 已启用，自动扫描并提醒漏洞
+- 第三方 GitHub Action 均锁定到 40 位 commit SHA，降低供应链投毒风险
 
 ## 披露流程
 

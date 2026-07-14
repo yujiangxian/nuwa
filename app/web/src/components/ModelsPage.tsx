@@ -140,7 +140,7 @@ export default function ModelsPage() {
   }, [presets, searchQuery, storeFilter, sortBy]);
 
   // Fetch my models
-  const fetchModels = async () => {
+  const fetchModels = useCallback(async () => {
     try {
       setLoadingMy(true);
       const { data: modelsData } = await apiClient.get<ModelItem[]>('/api/models');
@@ -150,7 +150,7 @@ export default function ModelsPage() {
     } finally {
       setLoadingMy(false);
     }
-  };
+  }, [addToast]);
 
   // 从 useConfig 缓存中同步 model_meta，避免重复请求 /api/config
   useEffect(() => {
@@ -160,7 +160,7 @@ export default function ModelsPage() {
   }, [configData?.model_meta]);
 
   // Fetch presets
-  const fetchPresets = async () => {
+  const fetchPresets = useCallback(async () => {
     try {
       setLoadingStore(true);
       const { data } = await apiClient.get<PresetModel[]>('/api/downloads/presets');
@@ -170,7 +170,7 @@ export default function ModelsPage() {
     } finally {
       setLoadingStore(false);
     }
-  };
+  }, [addToast]);
 
   const handleRefreshPresets = async () => {
     try {
@@ -199,13 +199,13 @@ export default function ModelsPage() {
     } catch {
       // silent
     }
-  }, [addToast]);
+  }, [addToast, fetchModels]);
 
   useEffect(() => {
     fetchModels();
     fetchPresets();
     fetchDownloads();
-  }, []);
+  }, [fetchModels, fetchPresets, fetchDownloads]);
 
   // Poll download progress (global)
   useEffect(() => {

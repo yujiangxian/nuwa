@@ -29,6 +29,7 @@ export function isSafeHref(href: unknown): boolean {
   if (typeof href !== 'string') return false;
   try {
     // 移除所有空白与 C0/C1 控制字符，避免 `java\tscript:` 之类的协议拆分绕过。
+    // eslint-disable-next-line no-control-regex -- intentional: matching control chars IS the security check
     const normalized = href.replace(/[\u0000-\u0020\u007F-\u009F\s]/g, '');
     if (normalized === '') return true; // 空串视为相对地址，放行
     // 协议段：以字母开头，后接字母/数字/+/-/. ，直到第一个冒号。
