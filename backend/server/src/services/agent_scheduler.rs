@@ -11,8 +11,11 @@ use tokio::sync::{broadcast, RwLock, Semaphore};
 use uuid::Uuid;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-/// 全局单例：Agent 注册表 + 任务仓库 + 并发控制
 use std::sync::OnceLock;
+
+use crate::constants::ollama_chat_url;
+
+/// 全局单例：Agent 注册表 + 任务仓库 + 并发控制
 static SCHEDULER: OnceLock<Arc<AgentScheduler>> = OnceLock::new();
 
 /// Consecutive Ollama failures for auto-recovery
@@ -401,7 +404,7 @@ impl AgentScheduler {
 
             let client = reqwest::Client::new();
             match client
-                .post("http://localhost:11434/api/chat")
+                .post(ollama_chat_url())
                 .json(&ollama_body)
                 .timeout(std::time::Duration::from_secs(300))
                 .send()
@@ -698,7 +701,7 @@ impl AgentScheduler {
 
                     let client = reqwest::Client::new();
                     match client
-                        .post("http://localhost:11434/api/chat")
+                        .post(ollama_chat_url())
                         .json(&ollama_body)
                         .timeout(std::time::Duration::from_secs(120))
                         .send()

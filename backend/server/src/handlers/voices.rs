@@ -7,36 +7,13 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use std::path::PathBuf;
+use std::path::{Path as StdPath, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::services::voice_library;
 use crate::state::{AppState, VoiceInfo};
-
-/// 解析项目根目录（基于 exe 路径推断，与 `handlers/audio.rs`/`main.rs` 一致）。
-fn project_root() -> PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| {
-            exe.parent()
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .map(|p| p.to_path_buf())
-        })
-        .unwrap_or_else(|| {
-            std::env::current_dir()
-                .ok()
-                .and_then(|cd| {
-                    cd.parent()
-                        .and_then(|p| p.parent())
-                        .map(|p| p.to_path_buf())
-                })
-                .unwrap_or_else(|| PathBuf::from("."))
-        })
-}
+use crate::util::{project_root, safe_resolve};
 
 /// 取 config.voices_dir 的相对形式（空则回退默认 `assets/datasets/voices`）。
 fn voices_dir_relative(config_voices_dir: &str) -> String {
@@ -59,14 +36,49 @@ fn resolve_voices_dir_abs(config_voices_dir: &str) -> PathBuf {
     }
 }
 
-/// 将 VoiceInfo.path（可能相对项目根）解析为绝对路径，用于读/删磁盘文件。
-fn resolve_voice_path_abs(path: &str) -> PathBuf {
-    let p = PathBuf::from(path);
-    if p.is_relative() {
-        project_root().join(p)
+/// Confine a voice file path to voices_dir (rejects absolute escapes and `..`).
+fn confine_voice_file(voices_dir: &StdPath, path: &str) -> Result<PathBuf, String> {
+    std::fs::create_dir_all(voices_dir).map_err(|e| format!("无法创建音色目录: {e}"))?;
+    let base = std::fs::canonicalize(voices_dir).map_err(|e| format!("无法解析音色目录: {e}"))?;
+
+    let p = StdPath::new(path);
+    let candidate = if p.is_absolute() {
+        p.to_path_buf()
     } else {
-        p
+        project_root().join(p)
+    };
+
+    if candidate.exists() {
+        let canon =
+            std::fs::canonicalize(&candidate).map_err(|e| format!("无法解析音色路径: {e}"))?;
+        if !canon.starts_with(&base) {
+            return Err("音色路径必须位于 voices 目录内".to_string());
+        }
+        return Ok(canon);
     }
+
+    // File may not exist yet — require it resolves under voices_dir via filename only
+    let name = p
+        .file_name()
+        .ok_or_else(|| "音色路径无效".to_string())?
+        .to_string_lossy();
+    safe_resolve(&base, &name).or_else(|_| {
+        // Or relative path under voices_dir (e.g. subdir/file.wav stored as project-relative)
+        if let Ok(rel) = candidate.strip_prefix(&base) {
+            let mut out = base.clone();
+            for c in rel.components() {
+                match c {
+                    std::path::Component::Normal(s) => out.push(s),
+                    std::path::Component::CurDir => {}
+                    _ => return Err("音色路径包含非法组件".to_string()),
+                }
+            }
+            if out.starts_with(&base) {
+                return Ok(out);
+            }
+        }
+        Err("音色路径必须位于 voices 目录内".to_string())
+    })
 }
 
 /// GET /api/voices — 返回含 duration_seconds 的列表（不变）。
@@ -76,13 +88,36 @@ pub async fn list_voices(State(state): State<Arc<RwLock<AppState>>>) -> Json<Vec
 }
 
 /// POST /api/voices — 旧 JSON 登记接口（保留以兼容）。
+/// 校验 path 必须落在 voices_dir 内，并持久化到音色库。
 pub async fn add_voice(
     State(state): State<Arc<RwLock<AppState>>>,
-    Json(voice): Json<VoiceInfo>,
-) -> Json<VoiceInfo> {
+    Json(mut voice): Json<VoiceInfo>,
+) -> Result<Json<VoiceInfo>, (StatusCode, Json<serde_json::Value>)> {
+    let voices_dir_abs = {
+        let state = state.read().await;
+        resolve_voices_dir_abs(&state.config.voices_dir)
+    };
+
+    let confined = confine_voice_file(&voices_dir_abs, &voice.path).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e })),
+        )
+    })?;
+
+    // Store project-relative path when possible for portability
+    if let Ok(rel) = confined.strip_prefix(project_root()) {
+        voice.path = rel.to_string_lossy().replace('\\', "/");
+    } else {
+        voice.path = confined.to_string_lossy().to_string();
+    }
+
     let mut state = state.write().await;
     state.voices.push(voice.clone());
-    Json(voice)
+    if let Err(e) = voice_library::save_library(&voices_dir_abs, &state.voices) {
+        tracing::warn!("写入音色库失败: {}", e);
+    }
+    Ok(Json(voice))
 }
 
 /// 构造统一的错误响应。
@@ -96,7 +131,6 @@ pub async fn upload_voice(
     State(state): State<Arc<RwLock<AppState>>>,
     mut multipart: Multipart,
 ) -> Result<Json<VoiceInfo>, (StatusCode, Json<serde_json::Value>)> {
-    // 1. 收集 multipart 字段。
     let mut audio_bytes: Option<Vec<u8>> = None;
     let mut audio_filename: Option<String> = None;
     let mut name: Option<String> = None;
@@ -106,7 +140,6 @@ pub async fn upload_voice(
         let field_name = field.name().unwrap_or("").to_string();
         match field_name.as_str() {
             "audio" => {
-                // 原始文件名用于提取扩展名。
                 audio_filename = field.file_name().map(|s| s.to_string());
                 match field.bytes().await {
                     Ok(bytes) => audio_bytes = Some(bytes.to_vec()),
@@ -132,7 +165,6 @@ pub async fn upload_voice(
         }
     }
 
-    // 2. 校验。
     let audio_bytes = match audio_bytes {
         Some(b) => b,
         None => return Err(err_resp(StatusCode::BAD_REQUEST, "需要音频文件")),
@@ -140,7 +172,6 @@ pub async fn upload_voice(
     let filename = audio_filename.unwrap_or_default();
 
     if !voice_library::is_supported_extension(&filename) {
-        // 提取扩展名用于提示。
         let ext = filename
             .rfind('.')
             .map(|i| &filename[i..])
@@ -165,17 +196,14 @@ pub async fn upload_voice(
     };
     let transcript = transcript.unwrap_or_default();
 
-    // 3. 探测采样率与时长。
     let (sample_rate, duration_seconds) = voice_library::probe_audio(&audio_bytes, &filename);
 
-    // 4. 分配 id 并写文件。
     let (config_voices_dir, voice_id) = {
         let state = state.read().await;
         let id = voice_library::allocate_id(&state.voices);
         (state.config.voices_dir.clone(), id)
     };
 
-    // 目标文件名：<id> + 原扩展名（小写）。
     let ext = filename
         .rfind('.')
         .map(|i| filename[i..].to_lowercase())
@@ -197,7 +225,6 @@ pub async fn upload_voice(
         ));
     }
 
-    // 5. 构造 VoiceInfo（path 为相对项目根形式，引擎可读）。
     let rel_dir = voices_dir_relative(&config_voices_dir)
         .replace('\\', "/")
         .trim_end_matches('/')
@@ -213,7 +240,6 @@ pub async fn upload_voice(
         duration_seconds,
     };
 
-    // 6. 登记并落盘（落盘失败仅 warn，不阻断成功）。
     {
         let mut state = state.write().await;
         state.voices.push(voice.clone());
@@ -231,21 +257,24 @@ pub async fn serve_voice_audio(
     State(state): State<Arc<RwLock<AppState>>>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    // 按 id 查条目。
-    let voice_path = {
+    let (voice_path, voices_dir) = {
         let state = state.read().await;
-        state
+        let path = state
             .voices
             .iter()
             .find(|v| v.id == id)
-            .map(|v| v.path.clone())
+            .map(|v| v.path.clone());
+        (path, resolve_voices_dir_abs(&state.config.voices_dir))
     };
     let voice_path = match voice_path {
         Some(p) => p,
         None => return (StatusCode::NOT_FOUND, "Voice not found").into_response(),
     };
 
-    let abs_path = resolve_voice_path_abs(&voice_path);
+    let abs_path = match confine_voice_file(&voices_dir, &voice_path) {
+        Ok(p) => p,
+        Err(_) => return (StatusCode::NOT_FOUND, "Voice path rejected").into_response(),
+    };
     let mime = voice_library::mime_for_extension(&voice_path);
 
     match tokio::fs::read(&abs_path).await {
@@ -269,24 +298,24 @@ pub async fn delete_voice(
 ) -> Json<serde_json::Value> {
     let mut state = state.write().await;
 
-    // 查条目：不存在 → 幂等返回，库不变。
     let entry = state.voices.iter().find(|v| v.id == id).cloned();
     let entry = match entry {
         Some(e) => e,
         None => return Json(serde_json::json!({ "success": true })),
     };
 
-    // 删除磁盘文件（忽略文件不存在错误）。
-    let abs_path = resolve_voice_path_abs(&entry.path);
-    if let Err(e) = std::fs::remove_file(&abs_path) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            tracing::warn!("删除音色文件失败: {}", e);
+    let voices_dir_abs = resolve_voices_dir_abs(&state.config.voices_dir);
+    if let Ok(abs_path) = confine_voice_file(&voices_dir_abs, &entry.path) {
+        if let Err(e) = std::fs::remove_file(&abs_path) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                tracing::warn!("删除音色文件失败: {}", e);
+            }
         }
+    } else {
+        tracing::warn!(path = %entry.path, "拒绝删除 voices 目录外的音色文件");
     }
 
-    // 从内存移除并落盘。
     state.voices.retain(|v| v.id != id);
-    let voices_dir_abs = resolve_voices_dir_abs(&state.config.voices_dir);
     if let Err(e) = voice_library::save_library(&voices_dir_abs, &state.voices) {
         tracing::warn!("写入音色库失败: {}", e);
     }

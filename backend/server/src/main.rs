@@ -242,6 +242,7 @@ async fn main() {
         .unwrap_or_else(|| vec!["http://localhost:5173".to_string()]);
 
     let app = routes::create_router()
+        .layer(axum::middleware::from_fn(middleware::require_api_key))
         .layer(axum::middleware::from_fn(
             middleware::inject_security_headers,
         ))
@@ -252,12 +253,24 @@ async fn main() {
         .layer(middleware::cors(&allowed_origins))
         .with_state(state);
 
+    let host = std::env::var("NUWA_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let port: u16 = std::env::var("NUWA_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(8080);
 
-    let addr = format!("0.0.0.0:{}", port);
+    let is_loopback = host == "127.0.0.1" || host == "localhost" || host == "::1";
+    let api_key_set = std::env::var("NUWA_API_KEY")
+        .map(|k| !k.is_empty())
+        .unwrap_or(false);
+    if !is_loopback && !api_key_set {
+        tracing::error!(
+            host = %host,
+            "NUWA_HOST is not loopback but NUWA_API_KEY is unset — LAN clients can call mutating APIs unauthenticated. Set NUWA_API_KEY or bind to 127.0.0.1."
+        );
+    }
+
+    let addr = format!("{}:{}", host, port);
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .unwrap_or_else(|e| {

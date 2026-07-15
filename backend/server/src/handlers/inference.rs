@@ -1,15 +1,40 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 yujiangxian
 
-use axum::{extract::State, Json};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::{OwnedSemaphorePermit, RwLock, Semaphore};
 
 use crate::config_persist;
 use crate::constants::{DEFAULT_REF_AUDIO, DEFAULT_REF_TEXT};
 use crate::services::inference;
 use crate::state::AppState;
+
+/// Global inference concurrency limiter (default 2). Override with `NUWA_INFERENCE_CONCURRENCY`.
+fn inference_limiter() -> &'static Arc<Semaphore> {
+    static SEM: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    SEM.get_or_init(|| {
+        let n = std::env::var("NUWA_INFERENCE_CONCURRENCY")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(2)
+            .max(1);
+        Arc::new(Semaphore::new(n))
+    })
+}
+
+async fn try_acquire_inference_slot(
+) -> Result<OwnedSemaphorePermit, (StatusCode, Json<serde_json::Value>)> {
+    inference_limiter().clone().try_acquire_owned().map_err(|_| {
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({
+                "error": "推理任务繁忙，请稍后重试"
+            })),
+        )
+    })
+}
 
 /// RAII guard: inserts a model into `active_inference_models` on acquire,
 /// and removes it on drop — even if the handler panics.
@@ -67,7 +92,11 @@ pub struct AsrResponse {
 pub async fn transcribe(
     State(state): State<Arc<RwLock<AppState>>>,
     Json(req): Json<AsrRequest>,
-) -> Json<AsrResponse> {
+) -> axum::response::Response {
+    let _permit = match try_acquire_inference_slot().await {
+        Ok(p) => p,
+        Err(resp) => return resp.into_response(),
+    };
     // 测量墙钟耗时
     let started = std::time::Instant::now();
 
@@ -95,7 +124,8 @@ pub async fn transcribe(
             error: Some("未选择模型，请先在我的模型中选择一个 ASR 模型".to_string()),
             model: String::new(),
             elapsed_ms: started.elapsed().as_millis() as u64,
-        });
+        })
+        .into_response();
     }
 
     // 检查模型是否支持 ASR
@@ -106,7 +136,8 @@ pub async fn transcribe(
             error: Some(format!("模型 {} 不支持 ASR 推理", model_id)),
             model: model_id.clone(),
             elapsed_ms: started.elapsed().as_millis() as u64,
-        });
+        })
+        .into_response();
     }
 
     let audio_path = match crate::util::safe_resolve(
@@ -121,7 +152,8 @@ pub async fn transcribe(
                 error: Some("音频路径不合法".to_string()),
                 model: model_id.clone(),
                 elapsed_ms: started.elapsed().as_millis() as u64,
-            });
+            })
+            .into_response();
         }
     };
 
@@ -168,7 +200,7 @@ pub async fn transcribe(
         }
     };
 
-    result
+    result.into_response()
 }
 
 // ========== TTS ==========
@@ -193,7 +225,11 @@ pub struct TtsResponse {
 pub async fn synthesize(
     State(state): State<Arc<RwLock<AppState>>>,
     Json(req): Json<TtsRequest>,
-) -> Json<TtsResponse> {
+) -> axum::response::Response {
+    let _permit = match try_acquire_inference_slot().await {
+        Ok(p) => p,
+        Err(resp) => return resp.into_response(),
+    };
     // 确定模型 ID 和输出目录
     let (model_id, output_dir) = {
         let state = state.read().await;
@@ -227,7 +263,7 @@ pub async fn synthesize(
             output_path: None,
             duration_sec: None,
             error: Some("未选择模型，请先在我的模型中选择一个 TTS 模型".to_string()),
-        });
+        }).into_response();
     }
 
     // 检查模型是否支持 TTS
@@ -237,7 +273,7 @@ pub async fn synthesize(
             output_path: None,
             duration_sec: None,
             error: Some(format!("模型 {} 不支持 TTS 推理", model_id)),
-        });
+        }).into_response();
     }
 
     // Validate text length before processing
@@ -248,7 +284,7 @@ pub async fn synthesize(
             output_path: None,
             duration_sec: None,
             error: Some(format!("文本过长 (>{MAX_TTS_TEXT_LEN} 字符)")),
-        });
+        }).into_response();
     }
 
     let ref_audio = if req.ref_audio.is_empty() {
@@ -263,7 +299,7 @@ pub async fn synthesize(
                     output_path: None,
                     duration_sec: None,
                     error: Some("参考音频路径不合法".to_string()),
-                });
+                }).into_response();
             }
         }
     };
@@ -328,7 +364,7 @@ pub async fn synthesize(
         }
     };
 
-    result
+    result.into_response()
 }
 
 // ========== TTS 多段合成（脚本模式）==========
@@ -352,7 +388,11 @@ pub struct TtsScriptResponse {
 pub async fn synthesize_script(
     State(state): State<Arc<RwLock<AppState>>>,
     Json(req): Json<TtsScriptRequest>,
-) -> Json<TtsScriptResponse> {
+) -> axum::response::Response {
+    let _permit = match try_acquire_inference_slot().await {
+        Ok(p) => p,
+        Err(resp) => return resp.into_response(),
+    };
     let (model_id, output_dir) = {
         let state = state.read().await;
         let mid = req.model_id.clone().unwrap_or_else(|| {
@@ -385,7 +425,7 @@ pub async fn synthesize_script(
             output_path: None,
             duration_sec: None,
             error: Some("未选择 TTS 模型".to_string()),
-        });
+        }).into_response();
     }
 
     if !inference::is_model_supported(&model_id) {
@@ -394,7 +434,7 @@ pub async fn synthesize_script(
             output_path: None,
             duration_sec: None,
             error: Some(format!("模型 {} 不支持 TTS 推理", model_id)),
-        });
+        }).into_response();
     }
 
     let ref_audio_path = match req.ref_audio.as_deref().unwrap_or(DEFAULT_REF_AUDIO) {
@@ -408,6 +448,7 @@ pub async fn synthesize_script(
                     duration_sec: None,
                     error: Some("参考音频路径不合法".to_string()),
                 })
+                .into_response();
             }
         },
     };
@@ -458,7 +499,7 @@ pub async fn synthesize_script(
         }
     };
 
-    result
+    result.into_response()
 }
 
 // ========== ASR 文件上传 ==========
@@ -477,7 +518,11 @@ pub struct AsrUploadResponse {
 pub async fn transcribe_upload(
     State(state): State<Arc<RwLock<AppState>>>,
     mut multipart: axum::extract::Multipart,
-) -> Json<AsrUploadResponse> {
+) -> axum::response::Response {
+    let _permit = match try_acquire_inference_slot().await {
+        Ok(p) => p,
+        Err(resp) => return resp.into_response(),
+    };
     // 测量墙钟耗时
     let started = std::time::Instant::now();
 
@@ -497,7 +542,7 @@ pub async fn transcribe_upload(
                         error: Some(format!("读取音频文件失败: {}", e)),
                         model: String::new(),
                         elapsed_ms: started.elapsed().as_millis() as u64,
-                    });
+                    }).into_response();
                 }
             },
             "model_id" => match field.text().await {
@@ -509,7 +554,7 @@ pub async fn transcribe_upload(
                         error: Some(format!("读取模型ID失败: {}", e)),
                         model: String::new(),
                         elapsed_ms: started.elapsed().as_millis() as u64,
-                    });
+                    }).into_response();
                 }
             },
             _ => {}
@@ -525,7 +570,7 @@ pub async fn transcribe_upload(
                 error: Some("未找到音频文件字段（请使用 'audio' 字段上传）".to_string()),
                 model: String::new(),
                 elapsed_ms: started.elapsed().as_millis() as u64,
-            });
+            }).into_response();
         }
     };
 
@@ -552,7 +597,7 @@ pub async fn transcribe_upload(
             error: Some("未选择模型，请先在我的模型中选择一个 ASR 模型".to_string()),
             model: String::new(),
             elapsed_ms: started.elapsed().as_millis() as u64,
-        });
+        }).into_response();
     }
 
     // 检查模型是否支持 ASR
@@ -563,7 +608,7 @@ pub async fn transcribe_upload(
             error: Some(format!("模型 {} 不支持 ASR 推理", model_id)),
             model: model_id.clone(),
             elapsed_ms: started.elapsed().as_millis() as u64,
-        });
+        }).into_response();
     }
 
     // 保存到临时文件
@@ -576,7 +621,7 @@ pub async fn transcribe_upload(
             error: Some(format!("保存临时音频文件失败: {}", e)),
             model: model_id.clone(),
             elapsed_ms: started.elapsed().as_millis() as u64,
-        });
+        }).into_response();
     }
 
     let _guard = ModelGuard::acquire(state.clone(), model_id.clone()).await;
@@ -625,5 +670,5 @@ pub async fn transcribe_upload(
     // 清理临时文件
     let _ = tokio::fs::remove_file(&temp_path).await;
 
-    result
+    result.into_response()
 }

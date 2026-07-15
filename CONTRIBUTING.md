@@ -17,10 +17,10 @@ Be respectful. Be constructive. Assume good intent.
 ### Quick Start
 
 ```bash
-# Backend
+# Backend (defaults to 127.0.0.1:8080)
 cd backend/server
 cargo run
-# → http://localhost:8080
+# → http://127.0.0.1:8080
 
 # Frontend
 cd app/web
@@ -28,6 +28,18 @@ npm install
 npm run dev
 # → http://localhost:5173 (proxies /api → :8080)
 ```
+
+Optional auth for LAN / shared machines — set the same key on both sides:
+
+```bash
+# shell (backend)
+export NUWA_API_KEY=dev-secret
+
+# app/web/.env.local
+VITE_NUWA_API_KEY=dev-secret
+```
+
+See [docs/setup.md](docs/setup.md) and [.env.example](.env.example) for all `NUWA_*` variables.
 
 `npm install` also configures git to use the repo's version-controlled hooks
 (`.githooks/`), which run a credential-leak scan before every `push`. If you

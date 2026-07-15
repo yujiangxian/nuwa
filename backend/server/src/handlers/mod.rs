@@ -33,7 +33,7 @@ pub async fn health(
     // Ollama connectivity
     let ollama_ok = matches!(
         reqwest::Client::new()
-            .head("http://localhost:11434/api/tags")
+            .head(crate::constants::ollama_tags_url())
             .timeout(std::time::Duration::from_secs(5))
             .send()
             .await,
