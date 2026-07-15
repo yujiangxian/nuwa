@@ -1,0 +1,17 @@
+#!/bin/sh
+# Strip Cursor-injected Co-authored-by so the GitHub contributors graph
+# stays attributed to the human author of this repository.
+if [ -n "$1" ] && [ -f "$1" ]; then
+  # Portable-ish: rewrite file without Cursor co-author lines
+  python - "$1" <<'PY'
+import sys
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as f:
+    lines = f.read().splitlines()
+kept = [l for l in lines if "Co-authored-by: Cursor" not in l]
+while kept and kept[-1].strip() == "":
+    kept.pop()
+with open(path, "w", encoding="utf-8", newline="\n") as f:
+    f.write("\n".join(kept) + "\n")
+PY
+fi
