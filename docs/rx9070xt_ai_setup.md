@@ -1,6 +1,9 @@
 RX 9070 XT 本地 AI 环境部署指南 (纯 Windows 11)
 ================================================================================
 
+> 通用安装脚本：`.\scripts\setup_local_ai.ps1 -Backend rocm`（venv：`envs/ai-rocm/`）  
+> NVIDIA / RTX 5070 请看：[`nvidia_cuda_setup.md`](nvidia_cuda_setup.md)
+
 硬件: AMD RX 9070 XT 16GB GDDR6 (gfx1201, RDNA 4)
 目标: 部署 Gemma 4 E4B (LLM) + GPT-SoVITS (TTS) + Whisper (ASR)
 参考: PTT PC_Shopping trfmk1 心得 + ROCm/TheRock 官方文档

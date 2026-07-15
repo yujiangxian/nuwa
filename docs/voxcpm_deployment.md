@@ -2,6 +2,9 @@
 
 本文档记录将 VoxCPM 作为项目首选 TTS 的部署策略，覆盖本地 CPU 验证与笔记本 RTX 5070 8G 部署两个阶段。
 
+> **轻量显存默认策略**：≤8GB NVIDIA 上优先采用下文 **策略 A**（LLM GPU + TTS/ASR CPU）。  
+> 通用 CUDA 安装见 [`nvidia_cuda_setup.md`](nvidia_cuda_setup.md)；脚本：`.\scripts\setup_local_ai.ps1 -Backend cuda`。
+
 ---
 
 ## 1. 硬件与模型搭配评估
