@@ -16,7 +16,8 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 import torch
-torch.backends.cudnn.enabled = False
+from nuwa_torch_device import resolve_torch_device
+_DEVICE = resolve_torch_device(torch)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model-path', required=True, help='CosyVoice 模型目录')
@@ -40,7 +41,7 @@ try:
     from cosyvoice.cli.cosyvoice import CosyVoice, CosyVoice2, CosyVoice3
 
     mp = Path(args.model_path)
-    use_gpu = torch.cuda.is_available()
+    use_gpu = _DEVICE == 'cuda'
     # 按存在的配置文件选择模型类（fp16 仅在 GPU 上启用以提速）
     if (mp / 'cosyvoice3.yaml').exists():
         Klass, kind = CosyVoice3, 'CosyVoice3'
