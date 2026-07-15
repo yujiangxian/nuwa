@@ -368,7 +368,7 @@ GPU information from `rocm-smi` or `nvidia-smi`. Returns `null` if no GPU is det
 null
 ```
 
-Supports AMD ROCm (`rocm-smi`) and NVIDIA (`nvidia-smi`). AMD is probed first.
+Supports AMD ROCm (`rocm-smi`) and NVIDIA (`nvidia-smi`). Probe order follows the resolved `NUWA_GPU_BACKEND` (`cuda` prefers `nvidia-smi`, `rocm` prefers `rocm-smi`). Response includes a `backend` field (`cuda` | `rocm` | `cpu`).
 
 ---
 
