@@ -68,8 +68,11 @@ try:
 
     import torch
     import torchaudio
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from nuwa_torch_device import resolve_torch_device
 
-    _GPU = torch.cuda.is_available()
+    _DEVICE = resolve_torch_device(torch)
+    _GPU = _DEVICE == "cuda"
 
     # ---- GPU monkey-patch：GLM-TTS 源码有多处无条件 .cuda()/.to("cuda") 调用 ----
     if not _GPU:
