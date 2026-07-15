@@ -203,6 +203,10 @@ export default function WorkflowPage() {
 
   // ---- Real Agent Execution state ----
   const [agentPipeline, setAgentPipeline] = useState<string>('voice_reply');
+  const [agentText, setAgentText] = useState('介绍一下语音合成技术');
+  const [agentAudioPath, setAgentAudioPath] = useState('assets/datasets/voices/jyy_000.wav');
+  const [agentSystem, setAgentSystem] = useState('');
+  const [showAdvancedJson, setShowAdvancedJson] = useState(false);
   const [agentInput, setAgentInput] = useState<string>('{"text":"介绍一下语音合成技术"}');
   const [_agentTaskId, setAgentTaskId] = useState<string | null>(null);
   const [agentStatus, setAgentStatus] = useState<string>('idle');
@@ -214,6 +218,25 @@ export default function WorkflowPage() {
   const agentStatusRef = useRef(agentStatus);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const needsAudio = agentPipeline === 'transcribe';
+  const needsText = !needsAudio;
+
+  const buildAgentPayload = useCallback((): Record<string, unknown> => {
+    if (showAdvancedJson) {
+      try {
+        const parsed = JSON.parse(agentInput) as unknown;
+        if (typeof parsed === 'string') return { text: parsed };
+        if (parsed && typeof parsed === 'object') return parsed as Record<string, unknown>;
+      } catch {
+        addToast({ message: '高级 JSON 无效，已改用表单字段', type: 'warning' });
+      }
+    }
+    if (needsAudio) return { audio_path: agentAudioPath.trim() };
+    const payload: Record<string, unknown> = { text: agentText.trim() };
+    if (agentSystem.trim()) payload.system = agentSystem.trim();
+    return payload;
+  }, [showAdvancedJson, agentInput, needsAudio, agentAudioPath, agentText, agentSystem, addToast]);
 
   useEffect(() => { agentStatusRef.current = agentStatus; }, [agentStatus]);
 
@@ -255,11 +278,17 @@ export default function WorkflowPage() {
     setAgentResult('');
     setAgentSteps([]);
     try {
-      let input: Record<string,unknown> = {};
-      try { input = JSON.parse(agentInput); } catch {
-        addToast({ message: 'JSON 格式无效，将作为纯文本发送', type: 'warning' });
+      const input = buildAgentPayload();
+      if (needsAudio && !String(input.audio_path || '').trim()) {
+        setAgentError('请填写音频路径');
+        setAgentStatus('failed');
+        return;
       }
-      if (typeof input === 'string') input = { text: input };
+      if (needsText && !String(input.text || input.prompt || '').trim() && !input.messages) {
+        setAgentError('请填写要发送的文本');
+        setAgentStatus('failed');
+        return;
+      }
 
       const { data } = await apiClient.post('/api/agents/run', { pipeline: agentPipeline, input });
       if (!data.success) { setAgentError(data.error || '启动失败'); setAgentStatus('failed'); return; }
@@ -297,11 +326,11 @@ export default function WorkflowPage() {
           }, 2000);
         }
       };
-    } catch (err: unknown) {
+    } catch {
       setAgentError('Agent 执行失败');
       setAgentStatus('failed');
     }
-  }, [agentPipeline, agentInput, addToast]);
+  }, [agentPipeline, buildAgentPayload, needsAudio, needsText]);
 
   const resetAgent = () => {
     setAgentTaskId(null);
@@ -363,8 +392,8 @@ export default function WorkflowPage() {
             style={{ width: 36, height: 36, borderRadius: 10, color: 'var(--text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
             title="返回首页"><ArrowLeft size={20} /></button>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>工作流编排</h1>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Agent 调度引擎 · 真实模型能力编排</p>
+            <h1 className="text-lg font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>工作流</h1>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>试跑固定流水线 · 或查看引擎演示（不调用真实模型）</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -372,7 +401,7 @@ export default function WorkflowPage() {
             <button key={t} onClick={() => setModeTab(t)}
               className="px-3 py-1.5 rounded-lg text-sm transition-all"
               style={{ background: modeTab === t ? 'var(--primary)' : 'var(--surface-hover)', color: modeTab === t ? 'var(--bg)' : 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer' }}>
-              {t === 'agent' ? 'Agent 编排' : 'Demo 引擎'}
+              {t === 'agent' ? '真实流水线' : '引擎演示'}
             </button>
           ))}
         </div>
@@ -409,16 +438,52 @@ export default function WorkflowPage() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>输入参数 (JSON)</span>
-              <textarea value={agentInput} onChange={e => setAgentInput(e.target.value)}
-                className="w-full text-xs rounded-xl px-3 py-2 outline-none resize-none mono"
-                rows={6}
-                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontFamily: 'JetBrains Mono, monospace' }} />
-              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                {agentPipeline === 'voice_reply' ? '试试: {"text":"你好"}' :
-                 agentPipeline === 'transcribe' ? '试试: {"audio_path":"assets/datasets/voices/jyy_000.wav"}' :
-                 '试试: {"text":"介绍一下语音合成技术"}'}
-              </p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>输入</span>
+                <button type="button" onClick={() => setShowAdvancedJson(v => !v)}
+                  className="text-[10px] px-2 py-0.5 rounded cursor-pointer"
+                  style={{ color: 'var(--text-secondary)', background: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                  {showAdvancedJson ? '用表单' : '高级 JSON'}
+                </button>
+              </div>
+              {showAdvancedJson ? (
+                <textarea value={agentInput} onChange={e => setAgentInput(e.target.value)}
+                  className="w-full text-xs rounded-xl px-3 py-2 outline-none resize-none mono"
+                  rows={6}
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontFamily: 'JetBrains Mono, monospace' }} />
+              ) : needsAudio ? (
+                <>
+                  <label className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>音频路径（相对项目根）</label>
+                  <input value={agentAudioPath} onChange={e => setAgentAudioPath(e.target.value)}
+                    className="w-full text-sm rounded-xl px-3 py-2 outline-none"
+                    style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+                    placeholder="assets/datasets/voices/jyy_000.wav" />
+                  <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>例如音色库里的 wav：assets/datasets/voices/…</p>
+                </>
+              ) : (
+                <>
+                  <label className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>要说的内容</label>
+                  <textarea value={agentText} onChange={e => setAgentText(e.target.value)}
+                    className="w-full text-sm rounded-xl px-3 py-2 outline-none resize-none"
+                    rows={4}
+                    style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+                    placeholder="写一句话，点执行就会走后端流水线" />
+                  {(agentPipeline === 'text_chat' || agentPipeline === 'text_chat_stream' || agentPipeline === 'voice_reply') && (
+                    <>
+                      <label className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>系统提示（可选）</label>
+                      <input value={agentSystem} onChange={e => setAgentSystem(e.target.value)}
+                        className="w-full text-sm rounded-xl px-3 py-2 outline-none"
+                        style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+                        placeholder="例如：你是一个简洁的助手" />
+                    </>
+                  )}
+                  <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                    {agentPipeline === 'voice_reply' && '流程：大模型回复 → 再用 TTS 念出来'}
+                    {agentPipeline === 'synthesize' && '流程：只做语音合成（TTS）'}
+                    {(agentPipeline === 'text_chat' || agentPipeline === 'text_chat_stream') && '流程：只做文字对话（LLM）'}
+                  </p>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -470,13 +535,32 @@ export default function WorkflowPage() {
           {/* Right: result */}
           <div className="flex-1 flex flex-col p-6 overflow-y-auto">
             <h2 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>执行结果</h2>
-            {agentResult ? (
-              <pre className="text-sm whitespace-pre-wrap break-all rounded-xl p-4"
-                style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontFamily: 'JetBrains Mono, monospace' }}>
-                {agentResult.length > 2000 ? `${agentResult.slice(0, 2000)}...` : agentResult}
-              </pre>
-            ) : (
-              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>选择流水线并点击执行，结果将显示在这里。</div>
+            {agentResult ? (() => {
+              let displayText = agentResult;
+              let audioSrc: string | null = null;
+              try {
+                const parsed = JSON.parse(agentResult) as { text?: string; audio_path?: string };
+                if (parsed && typeof parsed === 'object') {
+                  if (typeof parsed.text === 'string') displayText = parsed.text;
+                  if (typeof parsed.audio_path === 'string' && parsed.audio_path) {
+                    const base = parsed.audio_path.replace(/\\/g, '/').split('/').pop();
+                    if (base) audioSrc = `/api/audio/${encodeURIComponent(base)}`;
+                  }
+                }
+              } catch { /* keep raw */ }
+              return (
+                <div className="flex flex-col gap-3">
+                  <pre className="text-sm whitespace-pre-wrap break-all rounded-xl p-4"
+                    style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontFamily: 'JetBrains Mono, monospace' }}>
+                    {displayText.length > 2000 ? `${displayText.slice(0, 2000)}...` : displayText}
+                  </pre>
+                  {audioSrc && (
+                    <audio controls src={audioSrc} className="w-full" style={{ maxWidth: 480 }} />
+                  )}
+                </div>
+              );
+            })() : (
+              <div className="text-sm" style={{ color: 'var(--text-muted)' }}>选一条流水线，填表单，点执行。这里会显示文字结果；若有合成音频可直接播放。</div>
             )}
             {agentStatus === 'completed' && agentResult && (
               <div className="mt-4 flex items-center gap-2">
@@ -493,6 +577,11 @@ export default function WorkflowPage() {
       {modeTab === 'demo' && (
       <div className="flex-1 flex overflow-hidden">
         <div className="flex flex-col gap-4 p-6 overflow-y-auto" style={{ width: 460, borderRight: '1px solid var(--border)' }}>
+          <div className="text-xs leading-relaxed rounded-xl px-3 py-2"
+            style={{ background: 'rgba(72,202,228,0.08)', border: '1px solid rgba(72,202,228,0.2)', color: 'var(--text-secondary)' }}>
+            这是<strong style={{ color: 'var(--text-primary)' }}>引擎演示</strong>：用假数据演示「节点怎么串起来跑」。
+            不会调用真实 ASR / 大模型 / TTS。要试真实能力请切到「真实流水线」。
+          </div>
           <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{demo.description}</p>
 
           {/* Run status + controls */}
