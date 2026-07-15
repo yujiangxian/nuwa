@@ -14,7 +14,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::constants::OLLAMA_CHAT_URL;
+use crate::constants::ollama_chat_url;
 use crate::handlers::chat::{
     build_ollama_body, clamp_params, ollama_model_name, params_to_options, resolve_model,
     ChatRequest,
@@ -24,14 +24,6 @@ use crate::state::AppState;
 // 保持公开 API 稳定：纯函数 build_ollama_messages 现归属 chat.rs，
 // 经此重导出，既有库路径 `chat_stream::build_ollama_messages` 仍可用（集成测试依赖）。
 pub use crate::handlers::chat::build_ollama_messages;
-
-const OLLAMA_URL: &str = OLLAMA_CHAT_URL;
-
-/// Ollama 对话端点。默认 `OLLAMA_URL`，可由环境变量 `OLLAMA_CHAT_URL` 覆盖
-/// （仅用于测试将其指向死端口以确定性地触发连接失败路径；生产默认行为不变）。
-fn ollama_url() -> String {
-    std::env::var("OLLAMA_CHAT_URL").unwrap_or_else(|_| OLLAMA_URL.to_string())
-}
 
 /// 单个下行数据块（Stream_Chunk），序列化为一行 NDJSON。
 /// delta / done / error 三者互斥地承载本块语义（借助 skip_serializing_if）。
@@ -258,7 +250,7 @@ pub async fn chat_stream(
     );
 
     let client = reqwest::Client::new();
-    let res = client.post(ollama_url()).json(&ollama_req).send().await;
+    let res = client.post(ollama_chat_url()).json(&ollama_req).send().await;
 
     match res {
         Ok(resp) => {

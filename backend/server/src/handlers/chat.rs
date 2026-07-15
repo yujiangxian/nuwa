@@ -6,10 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::constants::OLLAMA_CHAT_URL;
+use crate::constants::ollama_chat_url;
 use crate::state::AppState;
-
-const OLLAMA_URL: &str = OLLAMA_CHAT_URL;
 
 #[derive(Debug, Deserialize)]
 pub struct ChatRequest {
@@ -233,7 +231,7 @@ pub async fn chat(
 
     let client = reqwest::Client::new();
     let res = client
-        .post(OLLAMA_URL)
+        .post(ollama_chat_url())
         .json(&ollama_req)
         .timeout(std::time::Duration::from_secs(120))
         .send()

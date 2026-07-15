@@ -6,9 +6,7 @@ module.exports = {
     'plugin:@typescript-eslint/recommended',
     'plugin:react-hooks/recommended',
   ],
-  // `legacy/` is pre-React vanilla-JS code kept for reference only; it isn't referenced
-  // by any HTML entry point or built by Vite, so it's excluded rather than "fixed".
-  ignorePatterns: ['dist', 'coverage', 'node_modules', '.eslintrc.cjs', 'playwright-report', 'legacy'],
+  ignorePatterns: ['dist', 'coverage', 'node_modules', '.eslintrc.cjs', 'playwright-report', 'e2e'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 'latest',
