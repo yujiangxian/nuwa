@@ -11,8 +11,9 @@ Be respectful. Be constructive. Assume good intent.
 ### Prerequisites
 - **Node.js** 20+ (frontend)
 - **Rust** 1.75+ (backend)
-- **Python** 3.10+ with venv at `envs/ai/` (inference scripts)
-- **Ollama** (LLM) — optional for frontend dev
+- **Python** 3.10+ — run `.\scripts\setup_local_ai.ps1` to create `envs/ai-cuda/`, `envs/ai-rocm/`, or `envs/ai/`
+- **Ollama** (LLM) — CUDA or ROCm build matching your GPU; optional for frontend-only work
+- Optional: `$env:NUWA_GPU_BACKEND = "cuda"|"rocm"|"cpu"|"auto"`
 
 ### Quick Start
 
