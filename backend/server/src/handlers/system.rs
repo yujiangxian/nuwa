@@ -34,6 +34,8 @@ pub struct GpuInfo {
     pub used_vram_mb: u64,
     pub free_vram_mb: u64,
     pub usage_percent: f64,
+    /// Resolved Nuwa GPU backend: `"cuda"` | `"rocm"` | `"cpu"`.
+    pub backend: String,
 }
 
 pub async fn get_disk_info(State(state): State<Arc<RwLock<AppState>>>) -> Json<DiskInfo> {
@@ -127,15 +129,40 @@ pub async fn get_gpu_info() -> Json<Option<GpuInfo>> {
 }
 
 async fn query_gpu_info() -> Option<GpuInfo> {
-    // 尝试 AMD ROCm SMI
-    if let Some(info) = query_rocm_smi().await {
-        return Some(info);
+    use crate::util::gpu_backend::{self, GpuBackend};
+
+    let backend = gpu_backend::resolve_backend();
+    let attach = |mut info: GpuInfo| {
+        info.backend = backend.as_str().to_string();
+        Some(info)
+    };
+
+    match backend {
+        GpuBackend::Cuda => {
+            if let Some(info) = query_nvidia_smi().await {
+                return attach(info);
+            }
+            if let Some(info) = query_rocm_smi().await {
+                return attach(info);
+            }
+        }
+        GpuBackend::Rocm => {
+            if let Some(info) = query_rocm_smi().await {
+                return attach(info);
+            }
+            if let Some(info) = query_nvidia_smi().await {
+                return attach(info);
+            }
+        }
+        GpuBackend::Cpu => {
+            tracing::info!("GPU backend is cpu; skipping SMI");
+            return None;
+        }
     }
-    // 尝试 NVIDIA SMI
-    if let Some(info) = query_nvidia_smi().await {
-        return Some(info);
-    }
-    tracing::info!("No GPU detected (rocm-smi and nvidia-smi unavailable)");
+    tracing::info!(
+        "No GPU detected via SMI for backend={}",
+        backend.as_str()
+    );
     None
 }
 
@@ -171,6 +198,7 @@ async fn query_rocm_smi() -> Option<GpuInfo> {
                 } else {
                     0.0
                 },
+                backend: String::new(),
             });
         }
     }
@@ -207,6 +235,7 @@ async fn query_nvidia_smi() -> Option<GpuInfo> {
             } else {
                 0.0
             },
+            backend: String::new(),
         });
     }
     None

@@ -45,6 +45,17 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    {
+        use util::gpu_backend;
+        let backend = gpu_backend::resolve_backend();
+        let py = util::python_exe();
+        tracing::info!(
+            backend = backend.as_str(),
+            python = %py.display(),
+            "GPU backend resolved"
+        );
+    }
+
     // 尝试从文件加载配置
     let mut app_state = match config_persist::load_config() {
         Some(cfg) => AppState {

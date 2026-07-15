@@ -15,6 +15,14 @@ export default function GpuBar({ gpuInfo }: { gpuInfo: GpuInfo | null }) {
           <Cpu size={14} style={{ color: 'var(--text-muted)' }} />
           <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>GPU 显存</span>
           <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{gpuInfo.name}</span>
+          {gpuInfo.backend && (
+            <span
+              className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded"
+              style={{ color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+            >
+              {gpuInfo.backend}
+            </span>
+          )}
         </div>
         <span className="text-[11px] font-mono" style={{ color: 'var(--text-muted)' }}>
           已用 {formatSize(gpuInfo.used_vram_mb)} / 总量 {formatSize(gpuInfo.total_vram_mb)}
