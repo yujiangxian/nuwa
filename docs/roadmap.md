@@ -30,15 +30,18 @@
 
 ### 2.1 Rust Agent 调度器 ✅
 - [x] `services/agent_scheduler.rs` — Agent 注册表 + 流水线定义 + Semaphore 并发控制
-- [x] `handlers/agents.rs` — 4 个 API 端点 + SSE 进度推送
-- [x] 4 条流水线: `voice_reply` / `text_chat` / `transcribe` / `synthesize`
-- [ ] 前端 WorkflowPage 对接真实 API（进行中）
+- [x] `handlers/agents.rs` — API 端点 + SSE 进度推送
+- [x] 流水线: `voice_reply` / `text_chat` / `text_chat_stream` / `transcribe` / `synthesize`
+- [x] Chat 页已通过 `text_chat_stream` 对接真实 Agent API
+- [x] WorkflowPage「真实流水线」页可试跑固定流水线（表单输入，非可视化编辑器）
 - [ ] 语义化错误恢复：某步骤失败不丢失中间结果
+- [ ] 任务取消 API
 
 ### 2.3 WorkflowPage 前端
-目前 `WorkflowPage.tsx` 是空壳，已有 `lib/workflow/engine/` 底层引擎。实现一个可视化工作流编辑器，拖拽节点编排 ASR→LLM→TTS 流水线。
+- **现状**：左侧可试跑后端固定流水线；「引擎演示」页是本地假数据，用来演示图执行引擎，**不会**调用真实 ASR/LLM/TTS。
+- **未做**：拖拽式可视化工作流编辑器（自己画「听→想→说」节点并保存）。`lib/workflow/engine/` 引擎已写好，尚未接到真实后端能力。
 
-已有可复用资产：`lib/workflow/engine/run.ts` (执行引擎)、`lib/workflow/graph.ts` (图结构)、`lib/workflow/mutate.ts` (图编辑)。
+已有可复用资产：`lib/workflow/engine/run.ts`、`lib/workflow/graph.ts`、`lib/workflow/mutate.ts`。
 
 ## Phase 3: IM 接入 — 微信/企业微信机器人 (2-3 周)
 

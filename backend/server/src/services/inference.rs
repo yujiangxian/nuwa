@@ -11,6 +11,16 @@ use crate::util;
 /// Beyond this the subprocess is killed and an error returned to the caller.
 const INFERENCE_TIMEOUT_SECS: u64 = 600; // 10 minutes
 
+/// Truncate user-facing text for logs (avoid dumping full transcripts / model stdout).
+fn redact_preview(s: &str, max_chars: usize) -> String {
+    let count = s.chars().count();
+    if count <= max_chars {
+        return s.to_string();
+    }
+    let preview: String = s.chars().take(max_chars).collect();
+    format!("{preview}…({count} chars)")
+}
+
 /// Read WAV header and return duration in seconds.
 /// WAV format: bytes 24-27 = sample rate, bytes 28-31 = byte rate,
 /// data chunk size follows "data" tag.
@@ -128,7 +138,7 @@ pub async fn transcribe(audio_path: &Path, model_id: &str) -> Result<String, Str
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        tracing::error!(stderr = %stderr, "ASR subprocess failed");
+        tracing::error!(stderr = %redact_preview(&stderr, 500), "ASR subprocess failed");
         return Err(format!("ASR 推理失败: {}", stderr.truncate(500)));
     }
 
@@ -148,7 +158,12 @@ pub async fn transcribe(audio_path: &Path, model_id: &str) -> Result<String, Str
             .get("inference_time_sec")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
-        tracing::info!("ASR 完成: {} ({}s)", text, time_sec);
+        tracing::info!(
+            chars = text.chars().count(),
+            time_sec,
+            preview = %redact_preview(text, 48),
+            "ASR 完成"
+        );
         Ok(text.to_string())
     } else {
         let error = result
@@ -212,11 +227,13 @@ pub async fn synthesize(
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    tracing::info!("TTS Python stdout: {}", stdout);
-    tracing::info!("TTS Python stderr: {}", stderr);
+    tracing::debug!(stdout = %redact_preview(&stdout, 200), "TTS Python stdout");
+    if !stderr.trim().is_empty() {
+        tracing::debug!(stderr = %redact_preview(&stderr, 200), "TTS Python stderr");
+    }
 
     if !output.status.success() {
-        tracing::error!(stderr = %stderr, "TTS subprocess failed");
+        tracing::error!(stderr = %redact_preview(&stderr, 500), "TTS subprocess failed");
         return Err(format!("TTS 推理失败: {}", stderr.truncate(500)));
     }
 
@@ -307,11 +324,13 @@ pub async fn synthesize_script(
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    tracing::info!("TTS script stdout: {}", stdout);
-    tracing::info!("TTS script stderr: {}", stderr);
+    tracing::debug!(stdout = %redact_preview(&stdout, 200), "TTS script stdout");
+    if !stderr.trim().is_empty() {
+        tracing::debug!(stderr = %redact_preview(&stderr, 200), "TTS script stderr");
+    }
 
     if !output.status.success() {
-        tracing::error!(stderr = %stderr, "TTS script subprocess failed");
+        tracing::error!(stderr = %redact_preview(&stderr, 500), "TTS script subprocess failed");
         return Err(format!("TTS 多段合成失败: {}", stderr.truncate(500)));
     }
 
