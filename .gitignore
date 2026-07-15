@@ -97,3 +97,6 @@ Thumbs.db
 secert/
 *.pem
 *.key
+
+.git-commit-msg.txt
+
