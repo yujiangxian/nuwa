@@ -85,5 +85,7 @@ All produce JSON: `{ "success": bool, "output_path"?, "error"?, "inference_time_
 - Pure logic goes in `lib/`, not in components
 
 ### TTS/ASR inference
-- Never modify the global Python environment — use `envs/ai/` venv
-- New inference scripts must follow the existing CLI signature pattern
+- Never modify the global Python environment — use `envs/ai-cuda/`, `envs/ai-rocm/`, or `envs/ai/` (see `scripts/setup_local_ai.ps1`)
+- Backend selection: `NUWA_GPU_BACKEND=auto|cuda|rocm|cpu` (auto probes `nvidia-smi` / `rocm-smi`)
+- Shared device helper: `scripts/nuwa_torch_device.py` (ROCm-only cudnn workaround)
+- New inference scripts must follow the existing CLI signature pattern and call `resolve_torch_device(torch)`

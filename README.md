@@ -27,10 +27,10 @@
 |------|------|------|
 | 前端 | React 19 + Vite 6 + Tailwind CSS v3 + Zustand | — |
 | 后端 | Rust + Axum 0.8 | 1.87 |
-| LLM 推理 | Ollama (ROCm 后端) | gemma4:e4b |
+| LLM 推理 | Ollama（CUDA 或 ROCm） | gemma4:e4b |
 | TTS 引擎 | CosyVoice3 / GLM-TTS / Qwen3-TTS / OpenVoice（Python 子进程多引擎） | — |
 | ASR 引擎 | Paraformer-Large / Whisper / GLM-ASR / Qwen3-ASR（Python 子进程多引擎） | — |
-| GPU | AMD RX 9070 XT (本地) | ROCm |
+| GPU | AMD RX 9070 XT（ROCm）/ NVIDIA RTX 5070（CUDA） | 双后端 |
 
 ---
 
@@ -112,7 +112,8 @@ ollama pull gemma4:e4b
 | [`docs/tested_models.md`](docs/tested_models.md) | ⭐ **已测试可用模型统一清单** — ASR/TTS 模型状态、推荐方案 |
 | [`docs/model_management.md`](docs/model_management.md) | ⭐ **模型管理功能文档** — 扫描/下载/手动导入完整指南 |
 | [`docs/tts_production_solution.md`](docs/tts_production_solution.md) | TTS 生产级方案 — 情感控制、长文本漂移修复 |
-| [`docs/rx9070xt_ai_setup.md`](docs/rx9070xt_ai_setup.md) | AMD RX 9070 XT 环境部署指南 |
+| [`docs/rx9070xt_ai_setup.md`](docs/rx9070xt_ai_setup.md) | AMD RX 9070 XT（ROCm）环境部署指南 |
+| [`docs/nvidia_cuda_setup.md`](docs/nvidia_cuda_setup.md) | NVIDIA CUDA / RTX 5070（Blackwell）环境部署指南 |
 | [`AGENTS.md`](AGENTS.md) | AI 编程助手专用指南 — 技术栈、规范、注意事项 |
 
 ---
@@ -122,8 +123,10 @@ ollama pull gemma4:e4b
 通用搭建步骤见 [`docs/setup.md`](docs/setup.md)。维护者参考环境：
 
 - **OS**: Windows 11
-- **GPU**: AMD RX 9070 XT（可选；CPU 也可跑部分模型）
-- **Python**: 3.10/3.11（`envs/ai/` 虚拟环境）
+- **GPU**: AMD RX 9070 XT（ROCm）或 NVIDIA RTX 5070（CUDA）
+- **Python**: 3.10/3.11 — 推荐 `.\scripts\setup_local_ai.ps1`（`envs/ai-cuda` / `envs/ai-rocm` / `envs/ai`）
+- **PyTorch**: CUDA cu128（Blackwell）或 ROCm nightly（gfx120X）
+- **覆盖**: `$env:NUWA_GPU_BACKEND = "cuda" | "rocm" | "cpu" | "auto"`
 - **Node.js**: 20+
 - **Rust**: 1.75+
 
