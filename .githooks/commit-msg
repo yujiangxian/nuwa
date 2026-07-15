@@ -1,17 +1,8 @@
 #!/bin/sh
-# Strip Cursor-injected Co-authored-by so the GitHub contributors graph
-# stays attributed to the human author of this repository.
-if [ -n "$1" ] && [ -f "$1" ]; then
-  # Portable-ish: rewrite file without Cursor co-author lines
-  python - "$1" <<'PY'
-import sys
-path = sys.argv[1]
-with open(path, "r", encoding="utf-8") as f:
-    lines = f.read().splitlines()
-kept = [l for l in lines if "Co-authored-by: Cursor" not in l]
-while kept and kept[-1].strip() == "":
-    kept.pop()
-with open(path, "w", encoding="utf-8", newline="\n") as f:
-    f.write("\n".join(kept) + "\n")
-PY
+# Global commit-msg hook: remove AI Co-authored-by trailers (Cursor / Claude / Copilot).
+HOOK_DIR=$(dirname "$0")
+if command -v python >/dev/null 2>&1; then
+  python "$HOOK_DIR/strip-ai-coauthor.py" "$1"
+elif command -v python3 >/dev/null 2>&1; then
+  python3 "$HOOK_DIR/strip-ai-coauthor.py" "$1"
 fi
