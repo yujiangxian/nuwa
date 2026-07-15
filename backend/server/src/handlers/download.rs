@@ -9,6 +9,7 @@ use crate::services::downloader::ChunkedDownloader;
 use crate::services::model_scanner;
 use crate::services::repo_fetcher::{self, RepoFile};
 use crate::state::{AppState, DownloadTask, TaskStatus};
+use crate::util::{resolve_models_dest, validate_download_url};
 
 #[derive(serde::Deserialize)]
 pub struct StartDownloadRequest {
@@ -939,11 +940,22 @@ pub async fn start_batch_download(
     State(state): State<Arc<RwLock<AppState>>>,
     Json(req): Json<StartBatchDownloadRequest>,
 ) -> Result<Json<DownloadTask>, Json<serde_json::Value>> {
+    let dest_dir = match resolve_models_dest(&req.dest_dir) {
+        Ok(p) => p,
+        Err(e) => return Err(Json(serde_json::json!({ "error": e }))),
+    };
+
+    let source = req.source.trim().to_ascii_lowercase();
+    if !matches!(source.as_str(), "huggingface" | "hf-mirror" | "modelscope") {
+        return Err(Json(serde_json::json!({
+            "error": "source 仅支持 huggingface / hf-mirror / modelscope"
+        })));
+    }
+
     let task_id = uuid::Uuid::new_v4().to_string();
-    let dest_dir = project_root().join(&req.dest_dir);
 
     // 获取文件列表
-    let files = match repo_fetcher::list_repo_files(&req.repo_id, &req.source).await {
+    let files = match repo_fetcher::list_repo_files(&req.repo_id, &source).await {
         Ok(files) => files,
         Err(e) => return Err(Json(serde_json::json!({"error": e}))),
     };
@@ -969,7 +981,7 @@ pub async fn start_batch_download(
         id: task_id.clone(),
         mode: "batch".to_string(),
         repo_id: Some(req.repo_id.clone()),
-        source: Some(req.source.clone()),
+        source: Some(source.clone()),
         dest_dir: Some(req.dest_dir.clone()),
         url: String::new(),
         dest: req.dest_dir.clone(),
@@ -992,7 +1004,6 @@ pub async fn start_batch_download(
     let state_clone = Arc::clone(&state);
     let task_id_inner = task_id.clone();
     let repo_id = req.repo_id.clone();
-    let source = req.source.clone();
 
     tokio::spawn(async move {
         // 更新状态为 Running
@@ -1196,10 +1207,16 @@ pub async fn start_batch_download(
 pub async fn start_download(
     State(state): State<Arc<RwLock<AppState>>>,
     Json(req): Json<StartDownloadRequest>,
-) -> Json<DownloadTask> {
-    let task_id = uuid::Uuid::new_v4().to_string();
+) -> Result<Json<DownloadTask>, Json<serde_json::Value>> {
+    if let Err(e) = validate_download_url(&req.url) {
+        return Err(Json(serde_json::json!({ "error": e })));
+    }
+    let dest_path = match resolve_models_dest(&req.dest) {
+        Ok(p) => p,
+        Err(e) => return Err(Json(serde_json::json!({ "error": e }))),
+    };
 
-    let dest_path = project_root().join(&req.dest);
+    let task_id = uuid::Uuid::new_v4().to_string();
 
     let task = DownloadTask {
         id: task_id.clone(),
@@ -1295,7 +1312,7 @@ pub async fn start_download(
         }
     });
 
-    Json(task)
+    Ok(Json(task))
 }
 
 pub async fn list_downloads(State(state): State<Arc<RwLock<AppState>>>) -> Json<Vec<DownloadTask>> {

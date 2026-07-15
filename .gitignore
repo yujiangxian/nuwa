@@ -43,7 +43,8 @@ config.json
 
 # ---------- 测试/临时产物 ----------
 test-results/
-e2e/
+playwright-report/
+blob-report/
 fix*.py
 
 # ---------- Claude Code ----------

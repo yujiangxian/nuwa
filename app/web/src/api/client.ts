@@ -5,6 +5,15 @@ import axios from 'axios';
 
 const isDev = typeof window !== 'undefined' && window.location?.hostname === 'localhost';
 
+/** Optional API key from Vite env — must match backend `NUWA_API_KEY` when set. */
+export const nuwaApiKey =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_NUWA_API_KEY) || '';
+
+/** Headers to attach on raw `fetch` calls that bypass axios. */
+export function apiAuthHeaders(): Record<string, string> {
+  return nuwaApiKey ? { 'X-Api-Key': nuwaApiKey } : {};
+}
+
 function genRequestId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -17,11 +26,14 @@ export const apiClient = axios.create({
   },
 });
 
-// Request interceptor: attach correlation ID + start timer
+// Request interceptor: attach correlation ID + optional API key + start timer
 apiClient.interceptors.request.use(
   (config) => {
     (config as any).__startTime = Date.now();
     config.headers.set('X-Request-Id', genRequestId());
+    if (nuwaApiKey) {
+      config.headers.set('X-Api-Key', nuwaApiKey);
+    }
     return config;
   },
   (error) => Promise.reject(error),

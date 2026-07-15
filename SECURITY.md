@@ -14,6 +14,17 @@
 |------|------|
 | master (最新) | :white_check_mark: |
 
+## 威胁模型（本地优先）
+
+Nuwa 默认按**本机单用户**设计：
+
+- 默认绑定 `127.0.0.1`（`NUWA_HOST` 可改为 `0.0.0.0` 开放局域网）
+- **默认无鉴权**；设置 `NUWA_API_KEY` 后，所有非 GET 请求必须携带匹配的 `X-Api-Key`
+- 绑定非 loopback 且未设置 API Key 时，启动会打 error 级警告
+- 下载接口仅允许 HuggingFace / ModelScope 等白名单 HTTPS 源，落盘路径限制在 `models/` 下
+
+前端通过 `VITE_NUWA_API_KEY` 注入同一密钥（见 `.env.example`）。
+
 ## 安全最佳实践
 
 - 所有 API 请求都有 50MB 大小限制

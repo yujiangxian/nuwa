@@ -108,6 +108,7 @@ ollama pull gemma4:e4b
 
 | 文档 | 内容 |
 |------|------|
+| [`docs/setup.md`](docs/setup.md) | ⭐ **开发环境搭建** — venv / 后端 / 前端 / Ollama / 环境变量 |
 | [`docs/tested_models.md`](docs/tested_models.md) | ⭐ **已测试可用模型统一清单** — ASR/TTS 模型状态、推荐方案 |
 | [`docs/model_management.md`](docs/model_management.md) | ⭐ **模型管理功能文档** — 扫描/下载/手动导入完整指南 |
 | [`docs/tts_production_solution.md`](docs/tts_production_solution.md) | TTS 生产级方案 — 情感控制、长文本漂移修复 |
@@ -118,15 +119,16 @@ ollama pull gemma4:e4b
 
 ## 本地环境
 
+通用搭建步骤见 [`docs/setup.md`](docs/setup.md)。维护者参考环境：
+
 - **OS**: Windows 11
-- **GPU**: AMD RX 9070 XT
-- **Python**: 3.10/3.11（多个隔离虚拟环境）
-- **PyTorch**: ROCm nightly (gfx120X)
+- **GPU**: AMD RX 9070 XT（可选；CPU 也可跑部分模型）
+- **Python**: 3.10/3.11（`envs/ai/` 虚拟环境）
 - **Node.js**: 20+
-- **Rust**: 1.87+
+- **Rust**: 1.75+
 
 ---
 
 ## 许可证
 
-本项目仅供个人研究使用。项目中包含的真人语音素材（孙燕姿等）需注意版权与隐私合规。
+本项目以 [MIT License](LICENSE) 开源。项目中包含的真人语音素材（如演示用参考音）请自行注意版权与隐私合规，勿用于未授权商业用途。

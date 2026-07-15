@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 use crate::config_persist;
 use crate::services::model_scanner;
 use crate::state::{AppState, ScanProgress};
+use crate::util::{project_root, safe_join_under};
 
 pub async fn list_models(
     State(state): State<Arc<RwLock<AppState>>>,
@@ -16,28 +17,53 @@ pub async fn list_models(
     Json(state.models.clone())
 }
 
-/// 解析项目根目录（与 main.rs 保持一致：基于 exe 路径推断）
-fn project_root() -> std::path::PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| {
-            exe.parent()
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .and_then(|p| p.parent())
-                .map(|p| p.to_path_buf())
-        })
-        .unwrap_or_else(|| {
-            std::env::current_dir()
-                .ok()
-                .and_then(|cd| {
-                    cd.parent()
-                        .and_then(|p| p.parent())
-                        .map(|p| p.to_path_buf())
-                })
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-        })
+/// Resolve models_dir from config to an absolute path under the project tree.
+fn resolve_models_dir(config_models_dir: &str) -> std::path::PathBuf {
+    let p = std::path::PathBuf::from(config_models_dir.trim());
+    if p.as_os_str().is_empty() {
+        return project_root().join("models");
+    }
+    if p.is_relative() {
+        project_root().join(p)
+    } else {
+        p
+    }
+}
+
+/// Ensure a model filesystem path stays under models_dir (blocks absolute path escapes).
+fn confine_model_path(
+    models_dir: &std::path::Path,
+    model_path: &str,
+) -> Result<std::path::PathBuf, String> {
+    let path = std::path::PathBuf::from(model_path);
+    let abs = if path.is_absolute() {
+        path
+    } else {
+        project_root().join(&path)
+    };
+
+    std::fs::create_dir_all(models_dir).map_err(|e| format!("无法创建 models 目录: {e}"))?;
+    let base = std::fs::canonicalize(models_dir).map_err(|e| format!("无法解析 models 目录: {e}"))?;
+
+    if abs.exists() {
+        let canon = std::fs::canonicalize(&abs).map_err(|e| format!("无法解析模型路径: {e}"))?;
+        if !canon.starts_with(&base) {
+            return Err("模型路径必须位于 models/ 目录内".to_string());
+        }
+        return Ok(canon);
+    }
+
+    // Not on disk yet / already deleted — still reject escapes via safe_join of relative suffix
+    if let Ok(rel) = abs.strip_prefix(&base) {
+        return safe_join_under(&base, &rel.to_string_lossy());
+    }
+    if let Ok(rel) = abs.strip_prefix(project_root()) {
+        let joined = project_root().join(rel);
+        if joined.starts_with(&base) || joined == base {
+            return Ok(joined);
+        }
+    }
+    Err("模型路径必须位于 models/ 目录内".to_string())
 }
 
 pub async fn scan_models(
@@ -163,12 +189,13 @@ pub async fn delete_model(
         })));
     }
 
-    // 解析模型路径为绝对路径
-    let path = std::path::PathBuf::from(&model.path);
-    let path = if path.is_relative() {
-        project_root().join(&path)
-    } else {
-        path
+    // 解析模型路径并限制在 models_dir 内
+    let models_dir = resolve_models_dir(&state.config.models_dir);
+    let path = match confine_model_path(&models_dir, &model.path) {
+        Ok(p) => p,
+        Err(e) => {
+            return Err(Json(serde_json::json!({ "error": e })));
+        }
     };
 
     // 删除目录

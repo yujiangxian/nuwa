@@ -426,7 +426,7 @@ fn describe_model(name: &str, model_type: &str) -> String {
     }
 }
 
-use crate::constants::OLLAMA_TAGS_URL;
+use crate::constants::ollama_tags_url;
 
 // ========== Ollama 模型发现 ==========
 
@@ -492,7 +492,7 @@ pub async fn scan_ollama_models() -> Vec<crate::state::ModelInfo> {
         Err(_) => return models,
     };
 
-    let res = match client.get(OLLAMA_TAGS_URL).send().await {
+    let res = match client.get(ollama_tags_url()).send().await {
         Ok(r) => r,
         Err(_) => {
             tracing::debug!("Ollama 未运行或无法连接，跳过 LLM 模型扫描");
