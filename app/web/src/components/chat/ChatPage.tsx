@@ -19,6 +19,7 @@ import {
   clampHighlightIndex, buildInsertedPresetText, type CommandItem,
 } from '@/lib/slashCommand';
 import { ArrowLeft, Settings, User, Monitor, Code } from 'lucide-react';
+import { apiUrl } from '@/api/client';
 import { useAssistantStream } from './useAssistantStream';
 import { SessionSidebar, DRAFT_KEY } from './SessionSidebar';
 import { MessageList } from './MessageList';
@@ -231,7 +232,7 @@ export function ChatPage() {
       });
       if (res.success && res.output_path) {
         useUIStore.getState().updateMessageAudio(msg.id, res.output_path);
-        player.playNow(msg.id, `/api/audio/${res.output_path}`);
+        player.playNow(msg.id, apiUrl(`/api/audio/${res.output_path}`));
       } else {
         addToast({ message: res.error || 'TTS 合成失败', type: 'error' });
       }
@@ -411,12 +412,12 @@ export function ChatPage() {
       const paths = msg.audioUrl.split(',');
       if (paths.length > 1) {
         // Streaming: play first segment immediately, enqueue the rest
-        player.playNow(`${msg.id}-s0`, `/api/audio/${paths[0]}`);
+        player.playNow(`${msg.id}-s0`, apiUrl(`/api/audio/${paths[0]}`));
         paths.slice(1).forEach((p, i) => {
-          player.enqueue(`${msg.id}-s${i + 1}`, `/api/audio/${p}`);
+          player.enqueue(`${msg.id}-s${i + 1}`, apiUrl(`/api/audio/${p}`));
         });
       } else {
-        player.playNow(msg.id, `/api/audio/${paths[0]}`);
+        player.playNow(msg.id, apiUrl(`/api/audio/${paths[0]}`));
       }
       return;
     }

@@ -81,9 +81,13 @@ export default function SettingsModal() {
               type="text"
               value={settings.backendUrl}
               onChange={(e) => updateSetting('backendUrl', e.target.value)}
+              placeholder="http://localhost:8080（留空=同源/代理）"
               className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
               style={{ background: 'var(--surface)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
             />
+            <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+              会同步到 API 客户端与 SSE/音频地址；开发默认直连 :8080（也可用 Vite /api 代理）。
+            </p>
           </div>
 
           {/* Models Dir */}

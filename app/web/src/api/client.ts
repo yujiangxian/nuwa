@@ -2,6 +2,7 @@
 // Copyright (c) 2025-2026 yujiangxian
 
 import axios from 'axios';
+import { joinApiUrl, normalizeApiBaseUrl } from '@/lib/apiBase';
 
 const isDev = typeof window !== 'undefined' && window.location?.hostname === 'localhost';
 
@@ -18,9 +19,36 @@ function genRequestId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function resolveTimeoutMs(): number {
+  const raw = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_API_TIMEOUT_MS : undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 30_000;
+}
+
+/** Current API origin from settings (`''` = same-origin / Vite proxy). */
+let apiBaseUrl = '';
+
+/** Apply settings.backendUrl to axios + apiUrl() helpers. */
+export function setApiBaseUrl(url: string): void {
+  apiBaseUrl = normalizeApiBaseUrl(url);
+  apiClient.defaults.baseURL = apiBaseUrl;
+}
+
+export function getApiBaseUrl(): string {
+  return apiBaseUrl;
+}
+
+/**
+ * Build a URL for `/api/...` paths used by EventSource, audio elements, and raw fetch.
+ * Empty base keeps relative paths (dev proxy / same-origin deploy).
+ */
+export function apiUrl(path: string): string {
+  return joinApiUrl(apiBaseUrl, path);
+}
+
 export const apiClient = axios.create({
   baseURL: '',
-  timeout: 30000,
+  timeout: resolveTimeoutMs(),
   headers: {
     'Content-Type': 'application/json',
   },

@@ -2,7 +2,7 @@
 // Copyright (c) 2025-2026 yujiangxian
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/api/client';
+import { apiClient, apiUrl } from '@/api/client';
 import type { Model, Voice, AppConfig } from '@/store';
 import type {
   ModelType,
@@ -388,7 +388,7 @@ export function useScanModelsDir() {
  * 试听音频 URL（经 Vite proxy 到后端 `GET /api/voices/{id}/audio`）。
  */
 export function voiceAudioUrl(id: string): string {
-  return `/api/voices/${id}/audio`;
+  return apiUrl(`/api/voices/${id}/audio`);
 }
 
 /**
