@@ -148,12 +148,9 @@ fn parse_wav(bytes: &[u8]) -> Option<(i32, Option<f64>)> {
     let duration = match (num_channels, bits_per_sample, data_len) {
         (Some(ch), Some(bits), Some(len)) if ch > 0 && bits >= 8 => {
             let bytes_per_sample_frame = (ch as u64) * (bits as u64 / 8);
-            if bytes_per_sample_frame == 0 {
-                None
-            } else {
-                let frames = len as u64 / bytes_per_sample_frame;
-                Some(frames as f64 / sr as f64)
-            }
+            (len as u64)
+                .checked_div(bytes_per_sample_frame)
+                .map(|frames| frames as f64 / sr as f64)
         }
         _ => None,
     };
