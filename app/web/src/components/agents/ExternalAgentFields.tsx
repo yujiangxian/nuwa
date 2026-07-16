@@ -10,10 +10,13 @@ import { Loader2, AlertCircle } from 'lucide-react';
 import type { ExternalProtocol } from '@/store/types';
 import { PROTOCOL_OPTIONS, PROVIDER_PRESETS, DEFAULT_PROTOCOL } from '@/lib/gateway';
 
-const PLACEHOLDERS: Record<ExternalProtocol, { baseUrl: string; model: string }> = {
-  'openai-compatible': { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
-  anthropic: { baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-4-6' },
-};
+function placeholderFor(protocol: ExternalProtocol): { baseUrl: string; model: string } {
+  const preset = PROVIDER_PRESETS.find((p) => p.protocol === protocol);
+  return {
+    baseUrl: preset?.baseUrl ?? (protocol === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1'),
+    model: preset?.defaultModel || (protocol === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4o-mini'),
+  };
+}
 
 export interface ExternalFieldsValue {
   endpoint: string;
@@ -34,7 +37,7 @@ export default function ExternalAgentFields({
   value, endpointError, probing, onPatch, onProbe,
 }: ExternalAgentFieldsProps) {
   const protocol = value.protocol ?? DEFAULT_PROTOCOL;
-  const placeholder = PLACEHOLDERS[protocol];
+  const placeholder = placeholderFor(protocol);
 
   return (
     <>

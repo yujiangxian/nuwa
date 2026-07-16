@@ -13,7 +13,55 @@ use uuid::Uuid;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::OnceLock;
 
-use crate::constants::ollama_chat_url;
+use crate::constants::{
+    ollama_chat_url, ollama_stream_timeout_secs, ollama_timeout_secs, DEFAULT_REF_AUDIO,
+    DEFAULT_REF_TEXT, FALLBACK_ASR_MODEL, FALLBACK_LLM_MODEL, FALLBACK_TTS_MODEL,
+};
+use crate::state::AppConfig;
+
+/// Runtime defaults for agent registry / pipeline fallbacks (from AppConfig).
+#[derive(Debug, Clone)]
+pub struct RuntimeDefaults {
+    /// Ollama bare model name (no `llm/` prefix).
+    pub llm_model: String,
+    pub asr_model: String,
+    pub tts_model: String,
+    pub ref_audio: String,
+    pub ref_text: String,
+}
+
+impl RuntimeDefaults {
+    pub fn from_app_config(cfg: &AppConfig) -> Self {
+        let llm = cfg
+            .current_llm_model
+            .as_deref()
+            .map(|id| id.strip_prefix("llm/").unwrap_or(id))
+            .filter(|s| !s.is_empty())
+            .unwrap_or(FALLBACK_LLM_MODEL)
+            .to_string();
+        let asr = cfg
+            .current_asr_model
+            .clone()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| FALLBACK_ASR_MODEL.to_string());
+        let tts = cfg
+            .current_tts_model
+            .clone()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| FALLBACK_TTS_MODEL.to_string());
+        Self {
+            llm_model: llm,
+            asr_model: asr,
+            tts_model: tts,
+            ref_audio: DEFAULT_REF_AUDIO.to_string(),
+            ref_text: DEFAULT_REF_TEXT.to_string(),
+        }
+    }
+
+    pub fn fallback() -> Self {
+        Self::from_app_config(&AppConfig::default())
+    }
+}
 
 /// 全局单例：Agent 注册表 + 任务仓库 + 并发控制
 static SCHEDULER: OnceLock<Arc<AgentScheduler>> = OnceLock::new();
@@ -140,33 +188,33 @@ impl AgentScheduler {
         }
     }
 
-    /// 列出所有可用能力和流水线
-    pub fn registry(&self) -> AgentRegistry {
+    /// 列出所有可用能力和流水线（模型 ID 跟随 AppConfig 当前选择）
+    pub fn registry(&self, defaults: &RuntimeDefaults) -> AgentRegistry {
         AgentRegistry {
             agents: vec![
                 AgentCapability {
                     id: "tts".into(),
                     name: "语音合成".into(),
-                    model_id: "tts/glm-tts-full".into(),
+                    model_id: defaults.tts_model.clone(),
                     input_kind: "text".into(),
                     output_kind: "audio".into(),
-                    description: "GLM-TTS zero-shot 声音克隆，可选多段情绪合成".into(),
+                    description: "TTS zero-shot 声音克隆，可选多段情绪合成".into(),
                 },
                 AgentCapability {
                     id: "asr".into(),
                     name: "语音识别".into(),
-                    model_id: "asr/paraformer-large".into(),
+                    model_id: defaults.asr_model.clone(),
                     input_kind: "audio".into(),
                     output_kind: "text".into(),
-                    description: "FunASR Paraformer-Large 中文语音识别".into(),
+                    description: "ASR 语音识别".into(),
                 },
                 AgentCapability {
                     id: "llm".into(),
                     name: "智能对话".into(),
-                    model_id: "llm/gemma4:e4b".into(),
+                    model_id: format!("llm/{}", defaults.llm_model),
                     input_kind: "text".into(),
                     output_kind: "text".into(),
-                    description: "Ollama Gemma 4 E4B 多轮对话".into(),
+                    description: format!("Ollama 多轮对话（{}）", defaults.llm_model),
                 },
             ],
             pipelines: vec![
@@ -244,8 +292,13 @@ impl AgentScheduler {
     }
 
     /// 发起一次流水线执行（异步，返回 task_id 立即返回）
-    pub async fn submit(&self, req: RunRequest, project_root: &Path) -> Result<String, String> {
-        let registry = self.registry();
+    pub async fn submit(
+        &self,
+        req: RunRequest,
+        project_root: &Path,
+        defaults: RuntimeDefaults,
+    ) -> Result<String, String> {
+        let registry = self.registry(&defaults);
         let pipeline = registry
             .pipelines
             .iter()
@@ -293,7 +346,7 @@ impl AgentScheduler {
         tokio::spawn(async move {
             let scheduler = scheduler();
             if let Err(e) = scheduler
-                .run_pipeline(&tid, &steps, &input, &root, &tx)
+                .run_pipeline(&tid, &steps, &input, &root, &tx, &defaults)
                 .await
             {
                 tracing::error!("Agent pipeline {} failed: {:?}", tid, e);
@@ -309,8 +362,9 @@ impl AgentScheduler {
         &self,
         req: RunRequest,
         _project_root: &Path,
+        defaults: RuntimeDefaults,
     ) -> Result<String, String> {
-        let registry = self.registry();
+        let registry = self.registry(&defaults);
         let _pipeline = registry
             .pipelines
             .iter()
@@ -375,7 +429,8 @@ impl AgentScheduler {
             let model_id = input
                 .get("model_id")
                 .and_then(|v| v.as_str())
-                .unwrap_or("gemma4:e4b");
+                .map(|id| id.strip_prefix("llm/").unwrap_or(id))
+                .unwrap_or(defaults.llm_model.as_str());
             let system_prompt = input.get("system").and_then(|v| v.as_str());
 
             let mut ollama_msgs = Vec::new();
@@ -406,7 +461,7 @@ impl AgentScheduler {
             match client
                 .post(ollama_chat_url())
                 .json(&ollama_body)
-                .timeout(std::time::Duration::from_secs(300))
+                .timeout(std::time::Duration::from_secs(ollama_stream_timeout_secs()))
                 .send()
                 .await
             {
@@ -573,6 +628,7 @@ impl AgentScheduler {
         input: &serde_json::Value,
         project_root: &Path,
         tx: &broadcast::Sender<TaskEvent>,
+        defaults: &RuntimeDefaults,
     ) -> Result<(), ()> {
         self.send_event(
             tx,
@@ -613,7 +669,7 @@ impl AgentScheduler {
             );
 
             // 获取该 agent 对应的 model 信号量（保证独占）
-            let registry = self.registry();
+            let registry = self.registry(defaults);
             let agent = registry
                 .agents
                 .iter()
@@ -637,11 +693,11 @@ impl AgentScheduler {
                     let audio_path = current_value
                         .get("audio_path")
                         .and_then(|v| v.as_str())
-                        .unwrap_or("assets/datasets/voices/jyy_000.wav");
+                        .unwrap_or(defaults.ref_audio.as_str());
                     let model_id = current_value
                         .get("model_id")
                         .and_then(|v| v.as_str())
-                        .unwrap_or("asr/paraformer-large");
+                        .unwrap_or(defaults.asr_model.as_str());
 
                     crate::services::inference::transcribe(&PathBuf::from(audio_path), model_id)
                         .await
@@ -656,15 +712,15 @@ impl AgentScheduler {
                     let model_id = current_value
                         .get("model_id")
                         .and_then(|v| v.as_str())
-                        .unwrap_or("tts/glm-tts-full");
+                        .unwrap_or(defaults.tts_model.as_str());
                     let ref_audio = current_value
                         .get("ref_audio")
                         .and_then(|v| v.as_str())
-                        .unwrap_or("assets/datasets/voices/jyy_000.wav");
+                        .unwrap_or(defaults.ref_audio.as_str());
                     let ref_text = current_value
                         .get("ref_text")
                         .and_then(|v| v.as_str())
-                        .unwrap_or("穿上它能更好完成任务它很美");
+                        .unwrap_or(defaults.ref_text.as_str());
 
                     let output_dir = project_root.join("output");
                     let _ = tokio::fs::create_dir_all(&output_dir).await;
@@ -690,7 +746,8 @@ impl AgentScheduler {
                     let model_id = current_value
                         .get("model_id")
                         .and_then(|v| v.as_str())
-                        .unwrap_or("gemma4:e4b");
+                        .map(|id| id.strip_prefix("llm/").unwrap_or(id))
+                        .unwrap_or(defaults.llm_model.as_str());
 
                     // 通过 Ollama API 调用
                     let ollama_body = serde_json::json!({
@@ -703,7 +760,7 @@ impl AgentScheduler {
                     match client
                         .post(ollama_chat_url())
                         .json(&ollama_body)
-                        .timeout(std::time::Duration::from_secs(120))
+                        .timeout(std::time::Duration::from_secs(ollama_timeout_secs()))
                         .send()
                         .await
                     {
@@ -793,5 +850,48 @@ impl AgentScheduler {
                 thinking: None,
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_defaults_from_config() {
+        let mut cfg = AppConfig::default();
+        cfg.current_llm_model = Some("llm/my-model:latest".into());
+        cfg.current_asr_model = Some("asr/whisper-tiny".into());
+        cfg.current_tts_model = Some("tts/cosyvoice2".into());
+        let d = RuntimeDefaults::from_app_config(&cfg);
+        assert_eq!(d.llm_model, "my-model:latest");
+        assert_eq!(d.asr_model, "asr/whisper-tiny");
+        assert_eq!(d.tts_model, "tts/cosyvoice2");
+        assert_eq!(d.ref_audio, DEFAULT_REF_AUDIO);
+    }
+
+    #[test]
+    fn runtime_defaults_fallback_when_unset() {
+        let d = RuntimeDefaults::fallback();
+        assert_eq!(d.llm_model, FALLBACK_LLM_MODEL);
+        assert_eq!(d.asr_model, FALLBACK_ASR_MODEL);
+        assert_eq!(d.tts_model, FALLBACK_TTS_MODEL);
+    }
+
+    #[test]
+    fn registry_uses_config_model_ids() {
+        let sched = AgentScheduler::new();
+        let d = RuntimeDefaults {
+            llm_model: "qwen3:8b".into(),
+            asr_model: "asr/whisper-tiny".into(),
+            tts_model: "tts/openvoice".into(),
+            ref_audio: DEFAULT_REF_AUDIO.into(),
+            ref_text: DEFAULT_REF_TEXT.into(),
+        };
+        let reg = sched.registry(&d);
+        let llm = reg.agents.iter().find(|a| a.id == "llm").unwrap();
+        assert_eq!(llm.model_id, "llm/qwen3:8b");
+        let asr = reg.agents.iter().find(|a| a.id == "asr").unwrap();
+        assert_eq!(asr.model_id, "asr/whisper-tiny");
     }
 }

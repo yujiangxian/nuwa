@@ -123,8 +123,8 @@ export default function PlaygroundPage() {
       let acc = '';
       let err: string | null = null;
       try {
-        const { apiAuthHeaders } = await import('@/api/client');
-        const resp = await fetch('/api/chat/stream', {
+        const { apiAuthHeaders, apiUrl } = await import('@/api/client');
+        const resp = await fetch(apiUrl('/api/chat/stream'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...apiAuthHeaders() },
           body: JSON.stringify({

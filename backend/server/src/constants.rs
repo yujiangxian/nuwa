@@ -15,6 +15,11 @@ pub const DEFAULT_REF_AUDIO: &str = "assets/datasets/voices/jyy_000.wav";
 /// 默认 TTS 参考音频对应文本。
 pub const DEFAULT_REF_TEXT: &str = "穿上它能更好完成任务它很美";
 
+/// 当 `AppConfig` 未选择模型时的回退 ID（registry / 调度器用）。
+pub const FALLBACK_LLM_MODEL: &str = "gemma4:e4b";
+pub const FALLBACK_ASR_MODEL: &str = "asr/paraformer-large";
+pub const FALLBACK_TTS_MODEL: &str = "tts/glm-tts-full";
+
 /// Resolve the Ollama chat endpoint (env `OLLAMA_CHAT_URL` or [`OLLAMA_CHAT_URL`]).
 pub fn ollama_chat_url() -> String {
     std::env::var("OLLAMA_CHAT_URL")
@@ -53,6 +58,33 @@ pub fn tts_retention_secs() -> u64 {
     days * 86400
 }
 
+/// ASR/TTS 子进程墙钟超时（秒）。环境变量 `NUWA_INFERENCE_TIMEOUT_SECS`，默认 600。
+pub fn inference_timeout_secs() -> u64 {
+    std::env::var("NUWA_INFERENCE_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(600)
+}
+
+/// Ollama 非流式/单次请求超时（秒）。`NUWA_OLLAMA_TIMEOUT_SECS`，默认 120。
+pub fn ollama_timeout_secs() -> u64 {
+    std::env::var("NUWA_OLLAMA_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(120)
+}
+
+/// Ollama 流式对话超时（秒）。`NUWA_OLLAMA_STREAM_TIMEOUT_SECS`，默认 300。
+pub fn ollama_stream_timeout_secs() -> u64 {
+    std::env::var("NUWA_OLLAMA_STREAM_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(300)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,5 +109,22 @@ mod tests {
         std::env::remove_var("OLLAMA_TAGS_URL");
         assert_eq!(ollama_tags_url(), "http://remote:11434/api/tags");
         std::env::remove_var("OLLAMA_CHAT_URL");
+    }
+
+    #[test]
+    fn timeout_helpers_respect_env() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("NUWA_INFERENCE_TIMEOUT_SECS", "42");
+        std::env::set_var("NUWA_OLLAMA_TIMEOUT_SECS", "33");
+        std::env::set_var("NUWA_OLLAMA_STREAM_TIMEOUT_SECS", "77");
+        assert_eq!(inference_timeout_secs(), 42);
+        assert_eq!(ollama_timeout_secs(), 33);
+        assert_eq!(ollama_stream_timeout_secs(), 77);
+        std::env::remove_var("NUWA_INFERENCE_TIMEOUT_SECS");
+        std::env::remove_var("NUWA_OLLAMA_TIMEOUT_SECS");
+        std::env::remove_var("NUWA_OLLAMA_STREAM_TIMEOUT_SECS");
+        assert_eq!(inference_timeout_secs(), 600);
+        assert_eq!(ollama_timeout_secs(), 120);
+        assert_eq!(ollama_stream_timeout_secs(), 300);
     }
 }

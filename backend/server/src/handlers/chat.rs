@@ -233,7 +233,9 @@ pub async fn chat(
     let res = client
         .post(ollama_chat_url())
         .json(&ollama_req)
-        .timeout(std::time::Duration::from_secs(120))
+        .timeout(std::time::Duration::from_secs(
+            crate::constants::ollama_timeout_secs(),
+        ))
         .send()
         .await;
 

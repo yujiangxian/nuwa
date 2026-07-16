@@ -69,6 +69,16 @@ impl Drop for ModelGuard {
     }
 }
 
+/// Look up scanned `ModelInfo.path` for a model id (prefer over hardcoded nested dirs).
+async fn installed_model_path(state: &Arc<RwLock<AppState>>, model_id: &str) -> Option<String> {
+    let s = state.read().await;
+    s.models
+        .iter()
+        .find(|m| m.id == model_id)
+        .map(|m| m.path.clone())
+        .filter(|p| !p.trim().is_empty())
+}
+
 // ========== ASR ==========
 
 #[derive(serde::Deserialize)]
@@ -158,8 +168,15 @@ pub async fn transcribe(
     };
 
     let _guard = ModelGuard::acquire(state.clone(), model_id.clone()).await;
+    let installed = installed_model_path(&state, &model_id).await;
 
-    let result = match inference::transcribe(&audio_path, &model_id).await {
+    let result = match inference::transcribe_at(
+        &audio_path,
+        &model_id,
+        installed.as_deref(),
+    )
+    .await
+    {
         Ok(text) => {
             // 记录最近使用时间
             let now = std::time::SystemTime::now()
@@ -316,13 +333,15 @@ pub async fn synthesize(
 
     // RAII guard removes model on drop (even on panic)
     let _guard = ModelGuard::acquire(state.clone(), model_id.clone()).await;
+    let installed = installed_model_path(&state, &model_id).await;
 
-    let result = match inference::synthesize(
+    let result = match inference::synthesize_at(
         &req.text,
         &model_id,
         &ref_audio,
         &ref_text,
         &output_path,
+        installed.as_deref(),
     )
     .await
     {
@@ -461,13 +480,15 @@ pub async fn synthesize_script(
     let output_path = output_dir.join(&output_filename);
 
     let _guard = ModelGuard::acquire(state.clone(), model_id.clone()).await;
+    let installed = installed_model_path(&state, &model_id).await;
 
-    let result = match inference::synthesize_script(
+    let result = match inference::synthesize_script_at(
         &segments_json,
         &model_id,
         &ref_audio,
         ref_text,
         &output_path,
+        installed.as_deref(),
     )
     .await
     {
@@ -625,9 +646,11 @@ pub async fn transcribe_upload(
     }
 
     let _guard = ModelGuard::acquire(state.clone(), model_id.clone()).await;
+    let installed = installed_model_path(&state, &model_id).await;
 
     // 调用 ASR 推理
-    let result = match inference::transcribe(&temp_path, &model_id).await {
+    let result = match inference::transcribe_at(&temp_path, &model_id, installed.as_deref()).await
+    {
         Ok(text) => {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
