@@ -8,6 +8,7 @@ import {
   parseSlashQuery,
   buildSlashText,
   buildBuiltinCommands,
+  parseMediaSlash,
   buildPresetCommands,
   buildCommandCatalog,
   filterCommands,
@@ -181,10 +182,19 @@ describe('clampHighlightIndex', () => {
   });
 });
 
+describe('parseMediaSlash', () => {
+  it('parses /image and /video with prompt', () => {
+    expect(parseMediaSlash('/image a cat')).toEqual({ kind: 'image', prompt: 'a cat' });
+    expect(parseMediaSlash('/video 海浪 8秒')).toEqual({ kind: 'video', prompt: '海浪 8秒' });
+    expect(parseMediaSlash('/image')).toBeNull();
+    expect(parseMediaSlash('hello')).toBeNull();
+  });
+});
+
 describe('command catalog construction', () => {
-  it('内置命令固定为 clear/retry/presets 三条且顺序稳定（Req 2.1）', () => {
+  it('内置命令固定为 clear/retry/presets/image/video 且顺序稳定（Req 2.1）', () => {
     const builtins = buildBuiltinCommands();
-    expect(builtins.map((b) => b.commandKey)).toEqual(['clear', 'retry', 'presets']);
+    expect(builtins.map((b) => b.commandKey)).toEqual(['clear', 'retry', 'presets', 'image', 'video']);
     expect(builtins.every((b) => b.kind === 'builtin')).toBe(true);
   });
 

@@ -74,6 +74,7 @@ describe('gateway/anthropic', () => {
     }));
     await expect(streamAnthropic({
       baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-6',
       messages: [{ role: 'user', content: 'hi' }],
       onDelta: () => {},
     })).rejects.toThrow('overloaded');
@@ -87,9 +88,18 @@ describe('gateway/anthropic', () => {
     }));
     await expect(streamAnthropic({
       baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-6',
       messages: [{ role: 'user', content: 'hi' }],
       onDelta: () => {},
     })).rejects.toThrow('invalid x-api-key');
+  });
+
+  it('streamAnthropic rejects empty model', async () => {
+    await expect(streamAnthropic({
+      baseUrl: 'https://api.anthropic.com',
+      messages: [{ role: 'user', content: 'hi' }],
+      onDelta: () => {},
+    })).rejects.toThrow('请填写模型 ID');
   });
 
   it('probeAnthropic succeeds on /v1/models', async () => {

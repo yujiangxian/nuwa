@@ -635,6 +635,9 @@ describe('ChatPage Voice_Loop no regression', () => {
       messages: [
         { id: 'a1', role: 'assistant', content: '你好呀', voiceName: '佳怡音色', duration: '0:04' },
       ],
+      agents: defaultAgents.map((a) =>
+        a.id === 'agent-assistant' ? { ...a, voiceId: 'jyy' } : a,
+      ),
     });
     mocks.synthesizeMutateAsync.mockResolvedValue({ success: true, output_path: 'reply.wav', error: null });
 
@@ -1177,6 +1180,9 @@ describe('ChatPage prompt-preset no-regression (Req 8.6)', () => {
       messages: [
         { id: 'a1', role: 'assistant', content: '你好呀', voiceName: '佳怡音色', duration: '0:04' },
       ],
+      agents: defaultAgents.map((a) =>
+        a.id === 'agent-assistant' ? { ...a, voiceId: 'jyy' } : a,
+      ),
     });
     mocks.synthesizeMutateAsync.mockResolvedValue({ success: true, output_path: 'reply.wav', error: null });
 

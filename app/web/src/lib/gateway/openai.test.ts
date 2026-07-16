@@ -30,10 +30,19 @@ describe('gateway/openai', () => {
     await streamOpenAICompatible({
       baseUrl: 'https://api.example.com/v1',
       apiKey: 'sk',
+      model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: 'hi' }],
       onDelta: (d) => { text += d; },
     });
     expect(text).toBe('你好世界');
+  });
+
+  it('rejects empty model instead of inventing a default', async () => {
+    await expect(streamOpenAICompatible({
+      baseUrl: 'https://api.example.com/v1',
+      messages: [{ role: 'user', content: 'hi' }],
+      onDelta: () => {},
+    })).rejects.toThrow('请填写模型 ID');
   });
 
   it('prepends system message and sends bearer auth', async () => {
@@ -43,6 +52,7 @@ describe('gateway/openai', () => {
     await streamOpenAICompatible({
       baseUrl: 'https://api.example.com/v1',
       apiKey: 'sk-abc',
+      model: 'gpt-4o-mini',
       system: '你是助手',
       messages: [{ role: 'user', content: 'hi' }],
       onDelta: () => {},
@@ -67,8 +77,18 @@ describe('gateway/openai', () => {
       status: 401,
       text: () => Promise.resolve('unauthorized'),
     }));
-    const r = await probeOpenAICompatible({ baseUrl: 'https://api.example.com/v1' });
+    const r = await probeOpenAICompatible({
+      baseUrl: 'https://api.example.com/v1',
+      model: 'gpt-4o-mini',
+    });
     expect(r.ok).toBe(false);
     expect(r.message).toContain('unauthorized');
+  });
+
+  it('probeOpenAICompatible requires model when /models fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404, text: () => Promise.resolve('no') }));
+    const r = await probeOpenAICompatible({ baseUrl: 'https://api.example.com/v1' });
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain('请填写模型 ID');
   });
 });

@@ -99,22 +99,24 @@ Chat / AgentsPage
       ▼
 lib/gateway/index.ts（ADAPTERS 注册表）
       ├─ openai.ts     OpenAI 兼容（OpenAI / OpenRouter / DeepSeek / Ollama / LM Studio…）
-      └─ anthropic.ts  Anthropic Messages API（Claude 系列，浏览器直连）
+      ├─ anthropic.ts  Anthropic Messages API（Claude 系列，浏览器直连）
+      └─ xaiOauth.ts   SuperGrok 订阅（经 Nuwa 后端 OAuth 代理）
 ```
 
 设计要点：
 
 - **统一接口**：每个协议实现 `ProtocolAdapter { streamChat, probe }`（`gateway/types.ts`），
   Chat 与 AgentsPage 只面向注册表分派，不感知具体协议。
-- **协议字段**：`Agent.protocol: 'openai-compatible' | 'anthropic'`（默认 openai-compatible；
+- **协议字段**：`Agent.protocol: 'openai-compatible' | 'anthropic' | 'xai-oauth'`（默认 openai-compatible；
   导入/持久化经 `parseProtocol` 校验，未知值回退）。
 - **Anthropic 直连**：`/v1/messages` SSE（`content_block_delta`），请求头
   `anthropic-version: 2023-06-01` + `anthropic-dangerous-direct-browser-access: true`；
   `max_tokens` 必填（默认 8192）；temperature 收口到 [0,1]；相邻同角色消息合并、
   首条必须为 user（`toAnthropicMessages` 纯函数）。
-- **密钥模型不变**：仍仅 localStorage（`gateway/secrets.ts`），任何协议都不经 Nuwa 后端。
+- **密钥模型不变**（除 xai-oauth）：仍仅 localStorage（`gateway/secrets.ts`）。
+  SuperGrok 凭证仅存后端 `data/xai_oauth.json`。
 - **提供商预设**（`gateway/presets.ts`）：OpenAI / Anthropic / OpenRouter / DeepSeek /
-  Ollama（本机）/ LM Studio（本机）一键填充协议 + Base URL + 默认模型。
+  Ollama（本机）/ LM Studio（本机）/ **xAI SuperGrok（订阅）** 一键填充。
 
 验收：
 
@@ -123,17 +125,35 @@ lib/gateway/index.ts（ADAPTERS 注册表）
 - [x] openai 兼容行为与 V3 完全一致（回归测试迁移至 `lib/gateway/*.test.ts`）
 - [x] 预设一键填充；导入未知协议回退默认
 
+---
+
+## V5 — SuperGrok 订阅（文本 / 图像 / 视频）
+
+详见 [`docs/features/supergrok-integration.md`](supergrok-integration.md)。
+
+- 设置页「导入 Grok Build」或设备码登录 → 后端 OAuth
+- 外部 Agent 协议 `xai-oauth`；Chat 斜杠 `/image`、`/video`
+
+验收：
+
+- [x] 后端路由 `/api/xai/*` + `/api/media/xai/*`
+- [x] 网关协议与 Agent 预设
+- [x] Chat 媒体消息渲染
+
+## V6 — 本机 Claude Code / Cursor（MVP）
+
+详见 [`docs/features/local-coding-agents.md`](local-coding-agents.md)。
+
+- [x] 协议 `claude-code`：后端 spawn `claude -p`（默认 text 流式；可选 stream-json）
+- [x] 协议 `cursor-sdk`：后端 spawn Cursor headless `agent -p`（需 CLI + `CURSOR_API_KEY`）
+- [x] Agents 预设 + 设置页检测 / Key 保存
+- [ ] Chat 内 tool 步骤可视化（二期）
+
 ### 后续：ACP 等 Agent 协议（未实施）
 
 [ACP（Agent Client Protocol）](https://agentclientprotocol.com) 类接入与 HTTP LLM 网关本质不同：
 需要**本机子进程**（如 `claude-code-acp`、`gemini --experimental-acp`）+ JSON-RPC(stdio) +
-会话/权限模型，必须经 Rust 后端做进程管理与桥接（SSE/WebSocket 透传）。落地时：
-
-1. 后端新增 `acp_bridge` 服务（spawn/handshake/session 生命周期）
-2. `ExternalProtocol` 增加 `'acp'`，网关注册表挂新适配器（浏览器 ↔ 后端桥）
-3. Agent 表单增加「本地命令」配置（命令、参数、工作目录）
-
-在此之前，Claude / Gemini 等一律走各自 HTTP API（anthropic / openai-compatible 协议）。
+会话/权限模型，必须经 Rust 后端做进程管理与桥接（SSE/WebSocket 透传）。可与 V6 并行评估。
 
 ---
 

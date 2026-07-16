@@ -7,7 +7,12 @@ import type { ChatMessage } from '@/store/uiStore';
 import type { UseAudioQueue } from '@/hooks/useAudioQueue';
 import MarkdownMessage from '@/components/MarkdownMessage';
 import { estimateText } from '@/lib/tokenEstimate';
+import { apiUrl } from '@/api/client';
 import { MessageActions } from './MessageActions';
+
+function mediaSrc(url: string): string {
+  return url.startsWith('http') || url.startsWith('blob:') ? url : apiUrl(url);
+}
 
 /** Chat / Agent persona fields used for avatar display. */
 export type ChatPersona = {
@@ -184,6 +189,37 @@ export function MessageList({
                   <div className="mb-3">
                     <MarkdownMessage source={msg.content} />
                   </div>
+                  {msg.media && (
+                    <div className="mb-3">
+                      {msg.media.status === 'pending' && (
+                        <div className="flex items-center gap-2 text-xs py-6 justify-center rounded-xl" style={{ background: 'var(--surface)', color: 'var(--text-muted)' }}>
+                          <Loader2 size={14} className="animate-spin" />
+                          {msg.media.kind === 'video' ? '视频生成中…' : '图像生成中…'}
+                        </div>
+                      )}
+                      {msg.media.status === 'error' && (
+                        <div className="text-xs rounded-xl px-3 py-2" style={{ background: 'rgba(255,107,107,0.08)', color: '#FF6B6B' }}>
+                          {msg.media.error || '生成失败'}
+                        </div>
+                      )}
+                      {msg.media.status === 'done' && msg.media.url && msg.media.kind === 'image' && (
+                        <img
+                          src={mediaSrc(msg.media.url)}
+                          alt={msg.media.prompt || 'generated'}
+                          className="rounded-xl max-w-full"
+                          style={{ maxHeight: 360, border: '1px solid var(--border)' }}
+                        />
+                      )}
+                      {msg.media.status === 'done' && msg.media.url && msg.media.kind === 'video' && (
+                        <video
+                          controls
+                          src={mediaSrc(msg.media.url)}
+                          className="rounded-xl max-w-full"
+                          style={{ maxHeight: 360, border: '1px solid var(--border)' }}
+                        />
+                      )}
+                    </div>
+                  )}
                   {(msg.voiceName || msg.audioUrl || ttsPendingMsgId === msg.id) && (
                     <div className="flex items-center gap-3">
                       <button

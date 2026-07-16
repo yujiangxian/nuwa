@@ -7,7 +7,7 @@ use std::sync::{Arc, OnceLock};
 use tokio::sync::{OwnedSemaphorePermit, RwLock, Semaphore};
 
 use crate::config_persist;
-use crate::constants::{DEFAULT_REF_AUDIO, DEFAULT_REF_TEXT};
+use crate::constants::{default_ref_audio, default_ref_text};
 use crate::services::inference;
 use crate::state::AppState;
 
@@ -305,7 +305,7 @@ pub async fn synthesize(
     }
 
     let ref_audio = if req.ref_audio.is_empty() {
-        PathBuf::from(DEFAULT_REF_AUDIO)
+        PathBuf::from(default_ref_audio())
     } else {
         match crate::util::safe_resolve(&crate::util::project_root().join("assets"), &req.ref_audio)
         {
@@ -321,7 +321,7 @@ pub async fn synthesize(
         }
     };
     let ref_text = if req.ref_text.is_empty() {
-        DEFAULT_REF_TEXT.to_string()
+        default_ref_text()
     } else {
         req.ref_text.clone()
     };
@@ -456,8 +456,9 @@ pub async fn synthesize_script(
         }).into_response();
     }
 
-    let ref_audio_path = match req.ref_audio.as_deref().unwrap_or(DEFAULT_REF_AUDIO) {
-        "" => PathBuf::from(DEFAULT_REF_AUDIO),
+    let default_audio = default_ref_audio();
+    let ref_audio_path = match req.ref_audio.as_deref().unwrap_or(default_audio.as_str()) {
+        "" => PathBuf::from(default_ref_audio()),
         p => match crate::util::safe_resolve(&crate::util::project_root().join("assets"), p) {
             Ok(path) => path,
             Err(_) => {
@@ -472,7 +473,8 @@ pub async fn synthesize_script(
         },
     };
     let ref_audio = ref_audio_path;
-    let ref_text = req.ref_text.as_deref().unwrap_or(DEFAULT_REF_TEXT);
+    let default_text = default_ref_text();
+    let ref_text = req.ref_text.as_deref().unwrap_or(default_text.as_str());
 
     let segments_json = serde_json::to_string(&req.segments).unwrap_or_else(|_| "[]".to_string());
 

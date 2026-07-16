@@ -107,6 +107,8 @@ interface UIState {
   deleteMessage: (messageId: string) => Promise<void>;
   /** 更新消息的 audioUrl/duration（TTS 合成成功后持久化音频引用）。 */
   updateMessageAudio: (id: string, audioUrl: string, duration?: string) => void;
+  /** 更新消息的媒体附件（图像/视频生成）。 */
+  updateMessageMedia: (id: string, media: ChatMessage['media']) => void;
   /** 更新消息的反馈（thumbs up/down）。 */
   updateMessageFeedback: (id: string, feedback: 'up' | 'down') => void;
   /**
@@ -479,7 +481,7 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   createSession: async (agentId) => {
     const agent = get().agents.find((a) => a.id === agentId);
-    const voiceId = agent?.voiceId || 'jyy';
+    const voiceId = agent?.voiceId?.trim() || '';
     const newSession: ChatSession = {
       id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
       title: DEFAULT_TITLE,
@@ -710,6 +712,24 @@ export const useUIStore = create<UIState>((set, get) => ({
     }
   },
 
+  updateMessageMedia: (id, media) => {
+    const { messages, currentSessionId, isPersistent } = get();
+    const idx = messages.findIndex((m) => m.id === id);
+    if (idx < 0) return;
+    const updated = { ...messages[idx], media };
+    const newMessages = [...messages];
+    newMessages[idx] = updated;
+    set({ messages: newMessages });
+
+    const seq = messages[idx]._seq ?? idx;
+    if (isPersistent && currentSessionId) {
+      const persisted: PersistedMessage = { ...updated, sessionId: currentSessionId, seq };
+      chatDb.saveMessage(persisted).catch((err: unknown) => {
+        console.warn('Failed to persist message media update', err);
+      });
+    }
+  },
+
   updateMessageFeedback: (id, feedback) => {
     const { messages, currentSessionId, isPersistent } = get();
     const idx = messages.findIndex((m) => m.id === id);
@@ -905,7 +925,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ searchResults: results, isSearching: false });
   },
 
-  selectedVoiceId: 'jyy',
+  selectedVoiceId: '',
   setSelectedVoiceId: (id) => set({ selectedVoiceId: id }),
 
   params: { speed: 1.0, pitch: 0, temperature: 0.6, topK: 20, emotion: '中性' },
