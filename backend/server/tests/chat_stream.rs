@@ -27,7 +27,10 @@ use nuwa_server::state::AppState;
 
 /// 启动被测服务（真实路由 + 默认 AppState），返回基础 URL（如 `http://127.0.0.1:54321`）。
 async fn spawn_server() -> String {
-    let state = Arc::new(RwLock::new(AppState::default()));
+    let mut app_state = AppState::default();
+    // 硬编码清理后不再静默 fallback 模型；集成测试显式设置 LLM。
+    app_state.config.current_llm_model = Some("test-llm".into());
+    let state = Arc::new(RwLock::new(app_state));
     let app = routes::create_router().with_state(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

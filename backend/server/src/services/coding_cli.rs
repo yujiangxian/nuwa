@@ -383,26 +383,6 @@ pub fn save_anthropic_api_key(key: &str) -> Result<(), String> {
     save_key_file(&anthropic_api_key_path(), key)
 }
 
-async fn probe_version(bin: &Path) -> Option<String> {
-    let out = Command::new(bin)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await
-        .ok()?;
-    let mut s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if s.is_empty() {
-        s = String::from_utf8_lossy(&out.stderr).trim().to_string();
-    }
-    if s.is_empty() {
-        None
-    } else {
-        Some(s.lines().next().unwrap_or(&s).to_string())
-    }
-}
-
 pub async fn status(provider: CodingProvider) -> CodingStatus {
     match provider {
         CodingProvider::ClaudeCode => match resolve_claude_launch() {
