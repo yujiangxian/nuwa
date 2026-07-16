@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import {
   useUIStore,
-  defaultCharacters,
+  defaultAgents,
   setChatDbForTesting,
   type ChatSession,
 } from '@/store/uiStore';
@@ -78,7 +78,13 @@ vi.mock('@/hooks/useApi', () => ({
 
 vi.mock('@/hooks/useRecorder', () => ({ useRecorder: () => mocks.recorder }));
 vi.mock('@/hooks/useAudioQueue', () => ({ useAudioQueue: () => mocks.player }));
-vi.mock('@/api/client', () => ({ apiClient: { post: mocks.apiPost } }));
+vi.mock('@/api/client', () => ({
+  apiClient: { post: mocks.apiPost },
+  setApiBaseUrl: vi.fn(),
+  getApiBaseUrl: () => '',
+  apiUrl: (path: string) => path,
+  longRequestTimeoutMs: () => 300000,
+}));
 
 // Toast store mock that supports both the hook-selector form (ChatPage) and the
 // imperative getState() form (uiStore internal save-failed toasts).
@@ -292,8 +298,8 @@ beforeEach(() => {
 
   useUIStore.setState({
     inputText: '',
-    currentCharacterId: 'assistant',
-    characters: defaultCharacters,
+    currentAgentId: 'agent-assistant',
+    agents: defaultAgents,
     sessions: baseSessions.map((s) => ({ ...s })),
     currentSessionId: 's2',
     messages: [],
@@ -332,10 +338,10 @@ describe('ChatPage data source & loading state', () => {
 });
 
 describe('ChatPage session lifecycle UI', () => {
-  it('creates a new session bound to the current character', () => {
+  it('creates a new session bound to the current agent', () => {
     render(<ChatPage />);
     fireEvent.click(screen.getByRole('button', { name: /新建对话/ }));
-    expect(createSpy).toHaveBeenCalledWith('assistant');
+    expect(createSpy).toHaveBeenCalledWith('agent-assistant');
   });
 
   it('switches session when a session row is clicked', async () => {

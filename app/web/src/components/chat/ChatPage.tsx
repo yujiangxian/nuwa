@@ -19,6 +19,7 @@ import {
   clampHighlightIndex, buildInsertedPresetText, type CommandItem,
 } from '@/lib/slashCommand';
 import { ArrowLeft, Settings, User, Monitor, Code } from 'lucide-react';
+import { apiUrl } from '@/api/client';
 import { useAssistantStream } from './useAssistantStream';
 import { SessionSidebar, DRAFT_KEY } from './SessionSidebar';
 import { MessageList } from './MessageList';
@@ -27,9 +28,10 @@ import { ChatComposer } from './ChatComposer';
 export function ChatPage() {
   const setPage = useUIStore((s) => s.setPage);
   const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
-  const characters = useUIStore((s) => s.characters);
-  const currentCharacterId = useUIStore((s) => s.currentCharacterId);
-  const setCurrentCharacter = useUIStore((s) => s.setCurrentCharacter);
+  const agents = useUIStore((s) => s.agents);
+  const currentAgentId = useUIStore((s) => s.currentAgentId);
+  const setCurrentAgent = useUIStore((s) => s.setCurrentAgent);
+  const bindSessionAgent = useUIStore((s) => s.bindSessionAgent);
   const sessions = useUIStore((s) => s.sessions);
   const currentSessionId = useUIStore((s) => s.currentSessionId);
   const messages = useUIStore((s) => s.messages);
@@ -78,7 +80,7 @@ export function ChatPage() {
   const currentTtsModel = config?.current_models?.tts ?? config?.current_tts_model ?? undefined;
   const currentLlmModel = config?.current_models?.llm ?? config?.current_llm_model ?? 'gemma4:e4b';
 
-  // Character dropdown state
+  // Character dropdown state → Agent picker
   const [charMenuOpen, setCharMenuOpen] = useState(false);
   // Regenerate temperature dropdown state
   const [regenMenuOpen, setRegenMenuOpen] = useState(false);
@@ -110,9 +112,9 @@ export function ChatPage() {
   // Command palette access
   const openPalette = useUIStore((s) => s.openPalette);
 
-  const currentCharacter = characters.find((c) => c.id === currentCharacterId);
-  // 当前音色名经 voices 解析 currentCharacter.voiceId（去写死映射）；未命中回退占位。
-  const currentVoice = voices.find((v) => v.id === currentCharacter?.voiceId)?.name ?? '默认音色';
+  const currentAgent = agents.find((a) => a.id === currentAgentId);
+  const activePersona = currentAgent;
+  const currentVoice = voices.find((v) => v.id === activePersona?.voiceId)?.name ?? '默认音色';
 
   // Context_Window：当前 LLM 模型上下文长度候选值。InstalledModel 元数据暂无该字段，
   // 故为 undefined → Context_Resolver 回退默认值并标记为估算（forward-compatible）。
@@ -142,7 +144,7 @@ export function ChatPage() {
     runAssistantStream,
     handleStop,
   } = useAssistantStream({
-    currentCharacter,
+    currentAgent,
     currentVoice,
     autoPlay,
     synthesize,
@@ -221,7 +223,7 @@ export function ChatPage() {
   const speakMessage = useCallback(async (msg: ChatMessage) => {
     setTtsLoadingId(msg.id);
     try {
-      const ref = resolveVoiceRef(currentCharacter?.voiceId, voices);
+      const ref = resolveVoiceRef(activePersona?.voiceId, voices);
       const res = await synthesize.mutateAsync({
         text: msg.content,
         modelId: currentTtsModel,
@@ -230,7 +232,7 @@ export function ChatPage() {
       });
       if (res.success && res.output_path) {
         useUIStore.getState().updateMessageAudio(msg.id, res.output_path);
-        player.playNow(msg.id, `/api/audio/${res.output_path}`);
+        player.playNow(msg.id, apiUrl(`/api/audio/${res.output_path}`));
       } else {
         addToast({ message: res.error || 'TTS 合成失败', type: 'error' });
       }
@@ -239,7 +241,7 @@ export function ChatPage() {
     } finally {
       setTtsLoadingId(null);
     }
-  }, [currentCharacter, voices, currentTtsModel, synthesize, player, addToast, setTtsLoadingId]);
+  }, [activePersona, voices, currentTtsModel, synthesize, player, addToast, setTtsLoadingId]);
 
   const handleSend = useCallback(async () => {
     if (!inputText.trim() || isTyping || sendingRef.current) return;
@@ -281,7 +283,7 @@ export function ChatPage() {
       }
       if (e.ctrlKey && e.key === 'n') {
         e.preventDefault();
-        createSession(currentCharacterId);
+        createSession(currentAgentId);
         return;
       }
       if (e.key === 'Escape') {
@@ -301,7 +303,7 @@ export function ChatPage() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isTyping, currentCharacterId, openPalette, createSession, handleStop, setInputText]);
+  }, [isTyping, currentAgentId, openPalette, createSession, handleStop, setInputText]);
 
   // Copy_Action：Clipboard API → execCommand 两级回退，确保非安全上下文也可用。
   const handleCopy = useCallback(async (content: string) => {
@@ -410,12 +412,12 @@ export function ChatPage() {
       const paths = msg.audioUrl.split(',');
       if (paths.length > 1) {
         // Streaming: play first segment immediately, enqueue the rest
-        player.playNow(`${msg.id}-s0`, `/api/audio/${paths[0]}`);
+        player.playNow(`${msg.id}-s0`, apiUrl(`/api/audio/${paths[0]}`));
         paths.slice(1).forEach((p, i) => {
-          player.enqueue(`${msg.id}-s${i + 1}`, `/api/audio/${p}`);
+          player.enqueue(`${msg.id}-s${i + 1}`, apiUrl(`/api/audio/${p}`));
         });
       } else {
-        player.playNow(msg.id, `/api/audio/${paths[0]}`);
+        player.playNow(msg.id, apiUrl(`/api/audio/${paths[0]}`));
       }
       return;
     }
@@ -530,39 +532,63 @@ export function ChatPage() {
             <Monitor size={14} style={{ color: 'var(--text-secondary)' }} />
             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{currentLlmModel?.replace(/^llm\//, '')}</span>
           </div>
-          {/* Character dropdown */}
+          {/* Agent dropdown */}
           <div className="relative">
             <button
               className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full glass"
               style={{ border: '1px solid var(--border)', cursor: 'pointer', background: charMenuOpen ? 'rgba(72,202,228,0.08)' : undefined }}
               onClick={() => setCharMenuOpen((v) => !v)}
             >
-              <div className="w-4 h-4 rounded-full" style={{ background: 'linear-gradient(135deg, #48CAE4, #0096C7)' }} />
-              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{currentCharacter?.name}</span>
+              <div className="w-4 h-4 rounded-full" style={{ background: activePersona?.avatar || 'linear-gradient(135deg, #48CAE4, #0096C7)' }} />
+              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{activePersona?.name ?? 'Agent'}</span>
               <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>▼</span>
             </button>
             {charMenuOpen && (
               <>
                 <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setCharMenuOpen(false)} />
-                <div className="glass rounded-xl" style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 50, width: 220, maxHeight: 280, overflowY: 'auto', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.35)', padding: 6 }}>
-                  {characters.map((c) => (
+                <div className="glass rounded-xl" style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 50, width: 240, maxHeight: 280, overflowY: 'auto', border: '1px solid var(--border)', boxShadow: '0 8px 32px rgba(0,0,0,0.35)', padding: 6 }}>
+                  {agents.length === 0 && (
                     <button
-                      key={c.id}
-                      onClick={() => { setCurrentCharacter(c.id); setCharMenuOpen(false); }}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all"
-                      style={{ background: c.id === currentCharacterId ? 'rgba(72,202,228,0.08)' : 'transparent', border: 'none', cursor: 'pointer' }}
-                      onMouseEnter={(e) => { if (c.id !== currentCharacterId) (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)'; }}
-                      onMouseLeave={(e) => { if (c.id !== currentCharacterId) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs rounded-lg"
+                      style={{ color: 'var(--primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                      onClick={() => { setCharMenuOpen(false); setPage('agents'); }}
                     >
-                      <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ background: c.avatar }}>
+                      前往创建 Agent…
+                    </button>
+                  )}
+                  {agents.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => {
+                        setCurrentAgent(a.id);
+                        if (currentSessionId) void bindSessionAgent(currentSessionId, a.id);
+                        setCharMenuOpen(false);
+                        setTempSystemPrompt(null);
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all"
+                      style={{ background: a.id === currentAgentId ? 'rgba(72,202,228,0.08)' : 'transparent', border: 'none', cursor: 'pointer' }}
+                      onMouseEnter={(e) => { if (a.id !== currentAgentId) (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)'; }}
+                      onMouseLeave={(e) => { if (a.id !== currentAgentId) (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                    >
+                      <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ background: a.avatar }}>
                         <User size={10} style={{ color: 'white' }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm truncate" style={{ color: 'var(--text-primary)' }}>{c.name}</div>
-                        <div className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{c.description}</div>
+                        <div className="text-sm truncate" style={{ color: 'var(--text-primary)' }}>{a.name}</div>
+                        <div className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>{a.description || a.pipeline}</div>
                       </div>
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-[11px] rounded-lg mt-1"
+                    style={{ color: 'var(--text-muted)', background: 'transparent', border: 'none', borderTop: '1px solid var(--border)', cursor: 'pointer' }}
+                    onClick={() => { setCharMenuOpen(false); setPage('agents'); }}
+                  >
+                    管理 Agent…
+                  </button>
                 </div>
               </>
             )}
@@ -596,7 +622,7 @@ export function ChatPage() {
           <textarea
             className="w-full outline-none resize-none rounded-lg text-sm leading-relaxed"
             style={{ padding: '8px 12px', minHeight: 80, color: 'var(--text-primary)', background: 'var(--surface-hover)', border: '1px solid var(--border)', caretColor: 'var(--primary)' }}
-            value={tempSystemPrompt ?? currentCharacter?.systemPrompt ?? ''}
+            value={tempSystemPrompt ?? activePersona?.systemPrompt ?? ''}
             onChange={(e) => setTempSystemPrompt(e.target.value || null)}
           />
         </div>
@@ -604,7 +630,7 @@ export function ChatPage() {
 
       <div className="flex flex-1 min-h-0 relative">
         <SessionSidebar
-          currentCharacterId={currentCharacterId}
+          currentAgentId={currentAgentId}
           createSession={createSession}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
@@ -642,7 +668,7 @@ export function ChatPage() {
             const budget = computeBudget({
               contextLength: ctx.contextLength,
               isEstimated: ctx.isEstimated,
-              systemPrompt: tempSystemPrompt ?? currentCharacter?.systemPrompt ?? '',
+              systemPrompt: tempSystemPrompt ?? activePersona?.systemPrompt ?? '',
               messages,
               reservedTokens: reserved,
             });
@@ -674,7 +700,7 @@ export function ChatPage() {
           <MessageList
             messages={messages}
             messageRefs={messageRefs}
-            currentCharacter={currentCharacter}
+            currentCharacter={activePersona}
             editingId={editingId}
             editDraft={editDraft}
             setEditDraft={setEditDraft}

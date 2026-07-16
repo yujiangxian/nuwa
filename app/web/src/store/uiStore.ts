@@ -3,12 +3,12 @@
 
 import { create } from 'zustand';
 import { useSettingsStore } from './settingsStore';
-import { useCharacterStore, defaultCharacters, setCharacterDbForTesting } from './characterStore';
-export { defaultCharacters, setCharacterDbForTesting };
+import { useAgentStore, defaultAgents, setAgentDbForTesting } from './agentStore';
 import { createChatDb, type ChatDb, type PersistedMessage } from '@/lib/chatDb';
 // 类型定义已提取至 types.ts，此处重导出保持向后兼容
-import type { AppPage, VoiceItem, Character, CharacterInput, ChatSession, ChatMessage, PromptPreset, GenerationParams } from './types';
-export type { AppPage, VoiceItem, Character, CharacterInput, ChatSession, ChatMessage, PromptPreset, GenerationParams };
+import type { AppPage, VoiceItem, Character, CharacterInput, Agent, AgentInput, AgentPipeline, AgentKind, AgentStep, AgentCapability, ExternalProtocol, ChatSession, ChatMessage, PromptPreset, GenerationParams } from './types';
+export { defaultAgents, setAgentDbForTesting };
+export type { AppPage, VoiceItem, Character, CharacterInput, Agent, AgentInput, AgentPipeline, AgentKind, AgentStep, AgentCapability, ExternalProtocol, ChatSession, ChatMessage, PromptPreset, GenerationParams };
 import { createPresetDb, type PresetDb } from '@/lib/promptPresetDb';
 import { DEFAULT_TITLE, deriveTitle } from '@/lib/chatTitle';
 import { pickLatestSession } from '@/lib/chatSession';
@@ -55,16 +55,16 @@ interface UIState {
   settings: AppSettings;
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void;
 
-  // Characters
-  characters: Character[];
-  currentCharacterId: string;
-  charactersLoading: boolean; // 启动加载态，初始 true
-  charactersPersistent: boolean; // false 表示处于 Memory_Fallback_Mode（角色侧）
-  setCurrentCharacter: (id: string) => void;
-  loadCharacters: () => Promise<void>;
-  createCharacter: (input: CharacterInput) => Promise<void>;
-  updateCharacter: (id: string, input: CharacterInput) => Promise<void>;
-  deleteCharacter: (id: string) => Promise<void>;
+  // Agents (Chat binds to these; Character domain removed — merged into Agent)
+  agents: Agent[];
+  currentAgentId: string;
+  agentsLoading: boolean;
+  agentsPersistent: boolean;
+  setCurrentAgent: (id: string) => void;
+  loadAgents: () => Promise<void>;
+  createAgent: (input: AgentInput) => Promise<void>;
+  updateAgent: (id: string, input: AgentInput) => Promise<void>;
+  deleteAgent: (id: string) => Promise<void>;
 
   // Prompt presets
   presets: PromptPreset[];
@@ -92,8 +92,10 @@ interface UIState {
   sessionsLoading: boolean; // 启动加载态
   isPersistent: boolean; // false 表示处于 Memory_Fallback_Mode
   loadSessions: () => Promise<void>;
-  createSession: (characterId: string) => Promise<void>;
+  createSession: (agentId: string) => Promise<void>;
   switchSession: (sessionId: string) => Promise<void>;
+  /** Bind an Agent to a session (mid-chat switch). Updates agentId + characterId alias. */
+  bindSessionAgent: (sessionId: string, agentId: string) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
   renameSession: (sessionId: string, title: string) => Promise<void>;
   /** 切换某会话置顶状态（Req 2.1, 2.2）：内存取反 + 持久化更新后的该会话。 */
@@ -305,25 +307,25 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ settings: useSettingsStore.getState().settings });
   },
 
-  // Character domain delegates to characterStore
-  characters: useCharacterStore.getState().characters,
-  currentCharacterId: useCharacterStore.getState().currentCharacterId,
-  charactersLoading: useCharacterStore.getState().charactersLoading,
-  charactersPersistent: useCharacterStore.getState().charactersPersistent,
-  setCurrentCharacter: (id) => { useCharacterStore.getState().setCurrentCharacter(id); set({ currentCharacterId: id }); },
-  loadCharacters: () => useCharacterStore.getState().loadCharacters().then(() => {
-    const cs = useCharacterStore.getState();
-    set({ characters: cs.characters, currentCharacterId: cs.currentCharacterId, charactersLoading: cs.charactersLoading, charactersPersistent: cs.charactersPersistent });
+  // Agent domain delegates to agentStore
+  agents: useAgentStore.getState().agents,
+  currentAgentId: useAgentStore.getState().currentAgentId,
+  agentsLoading: useAgentStore.getState().agentsLoading,
+  agentsPersistent: useAgentStore.getState().agentsPersistent,
+  setCurrentAgent: (id) => { useAgentStore.getState().setCurrentAgent(id); set({ currentAgentId: id }); },
+  loadAgents: () => useAgentStore.getState().loadAgents().then(() => {
+    const as = useAgentStore.getState();
+    set({ agents: as.agents, currentAgentId: as.currentAgentId, agentsLoading: as.agentsLoading, agentsPersistent: as.agentsPersistent });
   }),
-  createCharacter: (input) => useCharacterStore.getState().createCharacter(input).then(() => {
-    set({ characters: useCharacterStore.getState().characters });
+  createAgent: (input) => useAgentStore.getState().createAgent(input).then(() => {
+    set({ agents: useAgentStore.getState().agents });
   }),
-  updateCharacter: (id, input) => useCharacterStore.getState().updateCharacter(id, input).then(() => {
-    set({ characters: useCharacterStore.getState().characters });
+  updateAgent: (id, input) => useAgentStore.getState().updateAgent(id, input).then(() => {
+    set({ agents: useAgentStore.getState().agents });
   }),
-  deleteCharacter: (id) => useCharacterStore.getState().deleteCharacter(id).then(() => {
-    const cs = useCharacterStore.getState();
-    set({ characters: cs.characters, currentCharacterId: cs.currentCharacterId });
+  deleteAgent: (id) => useAgentStore.getState().deleteAgent(id).then(() => {
+    const as = useAgentStore.getState();
+    set({ agents: as.agents, currentAgentId: as.currentAgentId });
   }),
 
   presets: [],
@@ -438,7 +440,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       set({ isPersistent: false });
       useToastStore.getState().addToast({ message: '本地历史无法保存', type: 'warning' });
       // 自动建一个内存会话（isPersistent=false，createSession 跳过持久化）。
-      await get().createSession(get().currentCharacterId);
+      await get().createSession(get().currentAgentId);
       set({ sessionsLoading: false });
       return;
     }
@@ -461,21 +463,28 @@ export const useUIStore = create<UIState>((set, get) => ({
         } catch {
           set({ messages: [] });
         }
+        const boundId = latest.agentId ?? latest.characterId;
+        if (boundId && get().agents.some((a) => a.id === boundId)) {
+          useAgentStore.getState().setCurrentAgent(boundId);
+          set({ currentAgentId: boundId });
+        }
       }
     } else {
       // 空状态：自动新建会话并设为当前。
       set({ sessions: [], currentSessionId: null, messages: [] });
-      await get().createSession(get().currentCharacterId);
+      await get().createSession(get().currentAgentId);
     }
     set({ sessionsLoading: false });
   },
 
-  createSession: async (characterId) => {
-    const voiceId = get().characters.find((c) => c.id === characterId)?.voiceId || 'jyy';
+  createSession: async (agentId) => {
+    const agent = get().agents.find((a) => a.id === agentId);
+    const voiceId = agent?.voiceId || 'jyy';
     const newSession: ChatSession = {
       id: Date.now().toString() + Math.random().toString(36).slice(2, 6),
       title: DEFAULT_TITLE,
-      characterId,
+      characterId: agentId, // deprecated alias = agentId
+      agentId,
       voiceId,
       updatedAt: new Date().toISOString(),
       pinned: false,
@@ -499,6 +508,40 @@ export const useUIStore = create<UIState>((set, get) => ({
       set({ messages: msgs });
     } catch {
       set({ messages: [] });
+    }
+    // Restore Agent bound to this session (ChatGPT-style)
+    const session = get().sessions.find((s) => s.id === sessionId);
+    const boundId = session?.agentId ?? session?.characterId;
+    if (boundId && get().agents.some((a) => a.id === boundId)) {
+      useAgentStore.getState().setCurrentAgent(boundId);
+      set({ currentAgentId: boundId });
+    }
+  },
+
+  bindSessionAgent: async (sessionId, agentId) => {
+    if (!get().agents.some((a) => a.id === agentId)) return;
+    const agent = get().agents.find((a) => a.id === agentId);
+    let updated: ChatSession | undefined;
+    set((s) => ({
+      sessions: s.sessions.map((sess) => {
+        if (sess.id !== sessionId) return sess;
+        updated = {
+          ...sess,
+          agentId,
+          characterId: agentId,
+          voiceId: agent?.voiceId || sess.voiceId,
+        };
+        return updated;
+      }),
+    }));
+    useAgentStore.getState().setCurrentAgent(agentId);
+    set({ currentAgentId: agentId });
+    if (updated && get().isPersistent) {
+      try {
+        await chatDb.saveSession(updated);
+      } catch {
+        toastSaveFailed();
+      }
     }
   },
 
@@ -526,11 +569,16 @@ export const useUIStore = create<UIState>((set, get) => ({
           } catch {
             set({ messages: [] });
           }
+          const boundId = latest.agentId ?? latest.characterId;
+          if (boundId && get().agents.some((a) => a.id === boundId)) {
+            useAgentStore.getState().setCurrentAgent(boundId);
+            set({ currentAgentId: boundId });
+          }
         }
       } else {
         // 删除后已无会话：进入空状态并自动新建。
         set({ sessions: [], currentSessionId: null, messages: [] });
-        await get().createSession(get().currentCharacterId);
+        await get().createSession(get().currentAgentId);
       }
     } else {
       // 非当前会话：currentSessionId 与 messages 保持不变。
@@ -760,10 +808,15 @@ export const useUIStore = create<UIState>((set, get) => ({
     const now = new Date().toISOString();
     // 为每个导入条目构造新会话（新 id、updatedAt 缺失回退当前时间）与新消息（保序、新 id）。
     const built = result.sessions.map((entry) => {
+      const agentId =
+        (entry.session as { agentId?: string }).agentId
+        ?? entry.session.characterId
+        ?? get().currentAgentId;
       const session: ChatSession = {
         id: newSessionId(),
         title: entry.session.title,
-        characterId: entry.session.characterId,
+        characterId: agentId,
+        agentId,
         voiceId: entry.session.voiceId,
         updatedAt: entry.session.updatedAt.length > 0 ? entry.session.updatedAt : now,
         pinned: false,

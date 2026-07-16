@@ -7,8 +7,8 @@ import { useThemeEffect } from '@/hooks/useThemeEffect';
 import { useLangEffect } from '@/hooks/useLangEffect';
 import { useKeybindings } from '@/hooks/useKeybindings';
 import HomePage from '@/components/HomePage';
-import CharactersPage from '@/components/CharactersPage';
 import PromptPresetsPage from '@/components/PromptPresetsPage';
+import AgentsPage from '@/components/AgentsPage';
 import SettingsModal from '@/components/SettingsModal';
 import CommandPalette from '@/components/CommandPalette';
 import ToastContainer from '@/components/ToastContainer';
@@ -18,7 +18,6 @@ const ChatPage = lazy(() => import('@/components/ChatPage'));
 const VoiceStudioPage = lazy(() => import('@/components/VoiceStudioPage'));
 const TranscribePage = lazy(() => import('@/components/TranscribePage'));
 const ModelsPage = lazy(() => import('@/components/ModelsPage'));
-const WorkflowPage = lazy(() => import('@/components/WorkflowPage'));
 const PlaygroundPage = lazy(() => import('@/components/PlaygroundPage'));
 
 const PageLoader = () => (
@@ -28,27 +27,22 @@ const PageLoader = () => (
 );
 
 function App() {
-  // 运行期主题副作用：应用 settings.theme 并在 system 模式跟随系统偏好（Req 2.1/3.4）。
   useThemeEffect();
-  // 运行期语言副作用：将 <html lang> 同步为当前 LocaleCode（Req 6.1/6.2）。
   useLangEffect();
-  // 全局键盘快捷键引擎：mod+k 唤起/关闭命令面板、Escape 关闭最上层模态（command-palette Req 6）。
   useKeybindings();
 
   const currentPage = useUIStore((s) => s.currentPage);
   const setPage = useUIStore((s) => s.setPage);
   const loadSessions = useUIStore((s) => s.loadSessions);
-  const loadCharacters = useUIStore((s) => s.loadCharacters);
+  const loadAgents = useUIStore((s) => s.loadAgents);
   const loadPresets = useUIStore((s) => s.loadPresets);
 
-  // 启动初始化：挂载时触发一次会话恢复、角色恢复与预设恢复（init -> 恢复 / 种子 / 降级）。
   useEffect(() => {
     void loadSessions();
-    void loadCharacters();
+    void loadAgents();
     void loadPresets();
-  }, [loadSessions, loadCharacters, loadPresets]);
+  }, [loadSessions, loadAgents, loadPresets]);
 
-  // Sync URL <-> state bidirectionally
   useEffect(() => {
     const pathToPage: Record<string, string> = {
       '/': 'home',
@@ -56,33 +50,31 @@ function App() {
       '/voice': 'voice',
       '/transcribe': 'transcribe',
       '/models': 'models',
-      '/characters': 'characters',
       '/presets': 'presets',
-      '/workflow': 'workflow',
+      '/agents': 'agents',
       '/playground': 'playground',
     };
-    // Init from URL on mount
+    // Legacy URLs → agents
+    if (window.location.pathname === '/workflow' || window.location.pathname === '/characters') {
+      setPage('agents');
+      window.history.replaceState({}, '', '/agents');
+      return;
+    }
     const path = window.location.pathname;
     const pageFromUrl = pathToPage[path];
     if (pageFromUrl && pageFromUrl !== currentPage) {
-      setPage(pageFromUrl as any);
+      setPage(pageFromUrl as Parameters<typeof setPage>[0]);
     }
 
-    // Listen browser back/forward
     const onPop = () => {
       const p = pathToPage[window.location.pathname];
-      if (p) setPage(p as any);
+      if (p) setPage(p as Parameters<typeof setPage>[0]);
     };
     window.addEventListener('popstate', onPop);
-
     return () => window.removeEventListener('popstate', onPop);
-    // Intentionally mount-only: this initializes from the URL once and registers a
-    // single popstate listener. `currentPage`/`setPage` are read via closure and are
-    // safe to omit — re-running on every `currentPage` change would defeat the "once" intent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update URL when page changes (with transition)
   useEffect(() => {
     const targetPath =
       currentPage === 'home' ? '/' :
@@ -90,16 +82,14 @@ function App() {
       currentPage === 'voice' ? '/voice' :
       currentPage === 'transcribe' ? '/transcribe' :
       currentPage === 'models' ? '/models' :
-      currentPage === 'characters' ? '/characters' :
       currentPage === 'presets' ? '/presets' :
-      currentPage === 'workflow' ? '/workflow' :
+      currentPage === 'agents' ? '/agents' :
       currentPage === 'playground' ? '/playground' : '/';
     if (window.location.pathname !== targetPath) {
       window.history.pushState({}, '', targetPath);
     }
   }, [currentPage]);
 
-  // Page transition animation
   const renderPage = () => {
     switch (currentPage) {
       case 'home': return <HomePage />;
@@ -107,9 +97,8 @@ function App() {
       case 'voice': return <Suspense fallback={<PageLoader />}><VoiceStudioPage /></Suspense>;
       case 'transcribe': return <Suspense fallback={<PageLoader />}><TranscribePage /></Suspense>;
       case 'models': return <Suspense fallback={<PageLoader />}><ModelsPage /></Suspense>;
-      case 'characters': return <CharactersPage />;
       case 'presets': return <PromptPresetsPage />;
-      case 'workflow': return <Suspense fallback={<PageLoader />}><WorkflowPage /></Suspense>;
+      case 'agents': return <AgentsPage />;
       case 'playground': return <Suspense fallback={<PageLoader />}><PlaygroundPage /></Suspense>;
       default: return <HomePage />;
     }
@@ -117,12 +106,7 @@ function App() {
 
   return (
     <div className="h-screen w-screen overflow-hidden relative" style={{ zIndex: 10 }}>
-      <div
-        className="h-full w-full"
-        style={{
-          transition: 'opacity 0.2s ease, transform 0.2s ease',
-        }}
-      >
+      <div className="h-full w-full" style={{ transition: 'opacity 0.2s ease, transform 0.2s ease' }}>
         {renderPage()}
       </div>
       <SettingsModal />

@@ -42,6 +42,11 @@ results/
 
 # ---------- 本地运行时配置 ----------
 config.json
+.env
+.env.*
+!.env.example
+app/web/.env.local
+app/web/.env.*.local
 
 # ---------- 测试/临时产物 ----------
 test-results/

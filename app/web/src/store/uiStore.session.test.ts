@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 yujiangxian
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import fc from 'fast-check';
-import { useUIStore, setChatDbForTesting, defaultCharacters, type Character, type ChatSession, type ChatMessage } from '@/store/uiStore';
+import { useUIStore, setChatDbForTesting, defaultAgents, type Agent, type ChatSession, type ChatMessage } from '@/store/uiStore';
 import { DEFAULT_TITLE, deriveTitle } from '@/lib/chatTitle';
 import { createFakeChatDb, type FakeChatDb } from '@/store/testChatDb';
 
@@ -24,8 +24,8 @@ function resetStore(): void {
     messages: [],
     sessionsLoading: false,
     isPersistent: true,
-    characters: defaultCharacters,
-    currentCharacterId: 'assistant',
+    agents: defaultAgents,
+    currentAgentId: 'assistant',
   });
 }
 
@@ -34,8 +34,17 @@ beforeEach(resetStore);
 // Token generator for ids / voice ids (non-empty, simple alphabet).
 const tokenArb = fc.stringOf(fc.constantFrom(...'abcdefghijklmnopqrstuvwxyz0123456789'.split('')), { minLength: 1, maxLength: 6 });
 
-function makeCharacter(id: string, voiceId: string): Character {
-  return { id, name: id, avatar: '', systemPrompt: '', voiceId, description: '' };
+function makeAgent(id: string, voiceId: string): Agent {
+  return {
+    id,
+    name: id,
+    avatar: '',
+    systemPrompt: '',
+    voiceId,
+    description: '',
+    kind: 'local',
+    pipeline: 'text_chat_stream',
+  };
 }
 
 describe('Chat_Store createSession (Property 7)', () => {
@@ -49,15 +58,16 @@ describe('Chat_Store createSession (Property 7)', () => {
           .chain((list) => fc.record({ list: fc.constant(list), pickIdx: fc.integer({ min: 0, max: list.length - 1 }) })),
         async ({ list, pickIdx }) => {
           resetStore();
-          const characters = list.map((c) => makeCharacter(c.id, c.voiceId));
-          const picked = characters[pickIdx];
-          useUIStore.setState({ characters, currentCharacterId: picked.id });
+          const agents = list.map((c) => makeAgent(c.id, c.voiceId));
+          const picked = agents[pickIdx];
+          useUIStore.setState({ agents, currentAgentId: picked.id });
 
           await useUIStore.getState().createSession(picked.id);
 
           const s = useUIStore.getState();
           const created = s.sessions[0];
           expect(created.characterId).toBe(picked.id);
+          expect(created.agentId).toBe(picked.id);
           expect(created.voiceId).toBe(picked.voiceId);
           expect(created.title).toBe(DEFAULT_TITLE);
           expect(s.currentSessionId).toBe(created.id);
