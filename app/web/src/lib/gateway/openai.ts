@@ -2,65 +2,18 @@
 // Copyright (c) 2025-2026 yujiangxian
 
 /**
- * V3: OpenAI-compatible external Agent client (browser-side).
- * API keys stay in localStorage only — never sent to Nuwa backend.
+ * OpenAI 兼容协议适配器（浏览器直连）。
+ * 覆盖 OpenAI / OpenRouter / DeepSeek / Ollama / LM Studio 等 `/chat/completions` 形接口。
  */
 
-const SECRET_PREFIX = 'nuwa_agent_secret:';
-
-export function externalSecretKey(agentId: string): string {
-  return `${SECRET_PREFIX}${agentId}`;
-}
-
-export function loadExternalApiKey(agentId: string): string {
-  try {
-    return localStorage.getItem(externalSecretKey(agentId)) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-export function saveExternalApiKey(agentId: string, apiKey: string): void {
-  try {
-    const key = externalSecretKey(agentId);
-    if (!apiKey.trim()) localStorage.removeItem(key);
-    else localStorage.setItem(key, apiKey.trim());
-  } catch {
-    /* ignore quota / private mode */
-  }
-}
-
-export function deleteExternalApiKey(agentId: string): void {
-  try {
-    localStorage.removeItem(externalSecretKey(agentId));
-  } catch {
-    /* ignore */
-  }
-}
-
-export function normalizeBaseUrl(raw: string): string {
-  return raw.trim().replace(/\/+$/, '');
-}
-
-export type ExternalProtocol = 'openai-compatible';
-
-export interface StreamExternalArgs {
-  baseUrl: string;
-  apiKey?: string;
-  model?: string;
-  system?: string;
-  messages: { role: string; content: string }[];
-  temperature?: number;
-  topP?: number;
-  signal?: AbortSignal;
-  onDelta: (delta: string) => void;
-}
+import type { GatewayProbeArgs, GatewayProbeResult, GatewayStreamArgs } from './types';
+import { normalizeBaseUrl } from './url';
 
 /**
  * Stream chat completions from an OpenAI-compatible endpoint.
  * Expects SSE lines: data: {...} with choices[0].delta.content
  */
-export async function streamOpenAICompatible(args: StreamExternalArgs): Promise<void> {
+export async function streamOpenAICompatible(args: GatewayStreamArgs): Promise<void> {
   const base = normalizeBaseUrl(args.baseUrl);
   if (!base) throw new Error('缺少外部 Agent 地址');
 
@@ -127,18 +80,8 @@ export async function streamOpenAICompatible(args: StreamExternalArgs): Promise<
   }
 }
 
-export interface ProbeExternalResult {
-  ok: boolean;
-  message: string;
-}
-
-/** Lightweight connectivity check: POST a tiny non-stream completion (or GET /models). */
-export async function probeExternalAgent(opts: {
-  baseUrl: string;
-  apiKey?: string;
-  model?: string;
-  signal?: AbortSignal;
-}): Promise<ProbeExternalResult> {
+/** Lightweight connectivity check: GET /models, falling back to a tiny completion. */
+export async function probeOpenAICompatible(opts: GatewayProbeArgs): Promise<GatewayProbeResult> {
   const base = normalizeBaseUrl(opts.baseUrl);
   if (!base) return { ok: false, message: '请填写 Base URL' };
 
