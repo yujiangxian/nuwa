@@ -882,10 +882,12 @@ mod tests {
 
     #[test]
     fn runtime_defaults_from_config() {
-        let mut cfg = AppConfig::default();
-        cfg.current_llm_model = Some("llm/my-model:latest".into());
-        cfg.current_asr_model = Some("asr/whisper-tiny".into());
-        cfg.current_tts_model = Some("tts/cosyvoice2".into());
+        let cfg = AppConfig {
+            current_llm_model: Some("llm/my-model:latest".into()),
+            current_asr_model: Some("asr/whisper-tiny".into()),
+            current_tts_model: Some("tts/cosyvoice2".into()),
+            ..Default::default()
+        };
         let models = vec![ModelInfo {
             id: "asr/whisper-tiny".into(),
             name: "w".into(),
