@@ -11,7 +11,7 @@
 | TTS 合成 | ✅ | GLM-TTS + 多段情绪 + 季莹莹音色 |
 | 模型管理 | ✅ | HuggingFace/ModelScope 下载 + 扫描 |
 | 音色库 | ✅ | 上传/试听/删除 |
-| 角色系统 | ✅ | 3 个角色 + CRUD |
+| 角色系统 | ✅ | 已并入 Agent（人设 + 执行方式） |
 | 代码质量 | ✅ | 970 测试 + TS strict + CI |
 
 ## Phase 1: 文档更新 + 代码收尾 (完成)
@@ -24,24 +24,28 @@
 - [ ] `presetStore` / `sessionStore` 接入
 - [ ] `docs/project.md` 删除（超算相关内容已清理）
 
-## Phase 2: Agent 调度层 — 统一任务编排 (2-3 周)
+## Phase 2: Agent 调度层 — 统一任务编排
 
-**目标**: 把 ASR/LLM/TTS 的能力组合成可调度的任务流水线，前端一键触发。
+**目标**: Chat 调用可配置 Agent；Agent 页定义本地/编排/外部智能体。
+
+### 2.0 产品入口
+- [x] 规划文档：`docs/features/agents.md`（V1/V2/V3）
+- [x] 首页「Agent」与智能对话平级；删除「工作流编排」页
+- [x] Agent CRUD（IndexedDB）+ Chat 选用 Agent
+- [x] V2 工作流步骤编排并入 Agent（`lib/agentWorkflow`）
+- [x] V3 外部 OpenAI 兼容 Agent（`lib/externalAgent`）
+- [x] 角色并入 Agent（删除角色页；迁移 + 会话绑定 `agentId`）
 
 ### 2.1 Rust Agent 调度器 ✅
 - [x] `services/agent_scheduler.rs` — Agent 注册表 + 流水线定义 + Semaphore 并发控制
 - [x] `handlers/agents.rs` — API 端点 + SSE 进度推送
 - [x] 流水线: `voice_reply` / `text_chat` / `text_chat_stream` / `transcribe` / `synthesize`
-- [x] Chat 页已通过 `text_chat_stream` 对接真实 Agent API
-- [x] WorkflowPage「真实流水线」页可试跑固定流水线（表单输入，非可视化编辑器）
+- [x] Chat 页已通过 `text_chat_stream` 对接真实 Agent API（并由所选 Agent 的 system/voice 驱动）
 - [ ] 语义化错误恢复：某步骤失败不丢失中间结果
 - [ ] 任务取消 API
 
-### 2.3 WorkflowPage 前端
-- **现状**：左侧可试跑后端固定流水线；「引擎演示」页是本地假数据，用来演示图执行引擎，**不会**调用真实 ASR/LLM/TTS。
-- **未做**：拖拽式可视化工作流编辑器（自己画「听→想→说」节点并保存）。`lib/workflow/engine/` 引擎已写好，尚未接到真实后端能力。
-
-已有可复用资产：`lib/workflow/engine/run.ts`、`lib/workflow/graph.ts`、`lib/workflow/mutate.ts`。
+### 2.3 工作流（已并入 Agent 路线图）
+- 独立 WorkflowPage **已移除**；引擎代码保留在 `lib/workflow/` 供 V2 Agent 编排使用。
 
 ## Phase 3: IM 接入 — 微信/企业微信机器人 (2-3 周)
 

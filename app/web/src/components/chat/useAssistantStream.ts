@@ -2,8 +2,8 @@
 // Copyright (c) 2025-2026 yujiangxian
 
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { useUIStore, type ChatMessage } from '@/store/uiStore';
-import { apiClient } from '@/api/client';
+import { useUIStore, type ChatMessage, type Agent } from '@/store/uiStore';
+import { apiClient, apiUrl, longRequestTimeoutMs } from '@/api/client';
 import { type ErrorDetail } from '@/lib/errorDetail';
 import type { TtsResponse } from '@/hooks/useApi';
 import type { UseAudioQueue } from '@/hooks/useAudioQueue';
@@ -16,6 +16,8 @@ import { resolveReservedTokens } from '@/lib/contextBudget';
 import { trimMessages } from '@/lib/contextTrim';
 import { estimateText } from '@/lib/tokenEstimate';
 import { extractNewSentences } from '@/lib/sentenceSplit';
+import { resolvePipelineFromSteps, shouldAutoTts } from '@/lib/agentWorkflow';
+import { loadExternalApiKey, streamChat } from '@/lib/gateway';
 
 function formatDuration(secs: number): string {
   const m = Math.floor(secs / 60);
@@ -33,7 +35,8 @@ type SynthesizeMutate = {
 };
 
 export type UseAssistantStreamArgs = {
-  currentCharacter: { voiceId?: string; systemPrompt?: string } | undefined;
+  /** Active Agent (drives persona + external / workflow / local pipeline). */
+  currentAgent?: Agent | undefined;
   currentVoice: string;
   autoPlay: boolean;
   synthesize: SynthesizeMutate;
@@ -48,7 +51,7 @@ export type UseAssistantStreamArgs = {
 };
 
 export function useAssistantStream({
-  currentCharacter,
+  currentAgent,
   currentVoice,
   autoPlay,
   synthesize,
@@ -111,7 +114,11 @@ export function useAssistantStream({
       accRef.current = '';
       const ctrl = new AbortController();
       setAbortController(ctrl);
-      const system = tempSystemPrompt ?? currentCharacter?.systemPrompt;
+      const system = tempSystemPrompt ?? currentAgent?.systemPrompt;
+      const pipeline = currentAgent?.kind === 'workflow' && currentAgent.steps?.length
+        ? resolvePipelineFromSteps(currentAgent.steps)
+        : (currentAgent?.pipeline ?? 'text_chat_stream');
+      const wantTts = autoPlay || shouldAutoTts(currentAgent?.steps, pipeline);
 
       // chat-generation-parameters：合并当前 Active 生成参数（Default_State 为 {}，逐字段无回归）。
       const genFragment = buildRequestFragment(useUIStore.getState().chatGenParams);
@@ -149,11 +156,11 @@ export function useAssistantStream({
           accRef.current = accumulateDelta(accRef.current, chunk);
           setStreamingContent(accRef.current);
 
-          if (autoPlay && ttsSentenceCount < MAX_STREAM_SENTENCES) {
+          if (wantTts && ttsSentenceCount < MAX_STREAM_SENTENCES) {
             const { sentences, boundary } = extractNewSentences(accRef.current, sentBoundaryRef.current);
             if (sentences.length > 0 && boundary > sentBoundaryRef.current) {
               sentBoundaryRef.current = boundary;
-              const ref = resolveVoiceRef(currentCharacter?.voiceId, voices);
+              const ref = resolveVoiceRef(currentAgent?.voiceId, voices);
               sentences.forEach((sentence) => {
                 if (ttsSentenceCount >= MAX_STREAM_SENTENCES) return;
                 if (ttsSentenceCount === 0) setTtsPendingMsgId(streamMsgId);
@@ -174,7 +181,7 @@ export function useAssistantStream({
                     const dur = streamTotalDurRef.current > 0 ? formatDuration(streamTotalDurRef.current) : undefined;
                     useUIStore.getState().updateMessageAudio(streamMsgId, streamAudioPathsRef.current.join(','), dur);
                     if (!abortedTtsRef.current) {
-                      player.enqueue(`${streamMsgId}-s${sentenceNum}`, `/api/audio/${res.output_path}`);
+                      player.enqueue(`${streamMsgId}-s${sentenceNum}`, apiUrl(`/api/audio/${res.output_path}`));
                     }
                   }
                 }).catch(() => {
@@ -192,7 +199,34 @@ export function useAssistantStream({
         let connectFailed = false;
         let agentFailed = false;
 
-        // Primary: Agent streaming pipeline
+        // V3: external Agent — 经 AI 网关按协议分派（openai-compatible / anthropic）
+        if (currentAgent?.kind === 'external') {
+          try {
+            if (!currentAgent.endpoint?.trim()) {
+              addToast({ message: '请先在 Agent 页配置外部地址', type: 'error' });
+            } else {
+              await streamChat(currentAgent.protocol, {
+                baseUrl: currentAgent.endpoint,
+                apiKey: loadExternalApiKey(currentAgent.id),
+                model: currentAgent.externalModel,
+                system: system ?? undefined,
+                messages: sendMessages,
+                temperature: currentAgent.temperature,
+                topP: currentAgent.topP,
+                signal: ctrl.signal,
+                onDelta: (delta) => onChunk({ delta }),
+              });
+              sseCompletedRef.current = true;
+            }
+          } catch (err: unknown) {
+            if (!(ctrl.signal.aborted || (err as ErrorDetail)?.name === 'AbortError')) {
+              connectFailed = true;
+              streamErrorMsg = err instanceof Error ? err.message : '外部 Agent 调用失败';
+              addToast({ message: streamErrorMsg, type: 'error', duration: 5000 });
+            }
+          }
+        } else {
+        // Primary: local / workflow → Agent streaming pipeline (always text_chat_stream for Chat deltas)
         try {
           const agentInput: Record<string, unknown> = {
             messages: sendMessages,
@@ -203,7 +237,7 @@ export function useAssistantStream({
           const { data } = await apiClient.post<{ success: boolean; task_id: string; error?: string }>(
             '/api/agents/run-stream',
             { pipeline: 'text_chat_stream', input: agentInput },
-            { signal: ctrl.signal, timeout: 300000 },
+            { signal: ctrl.signal, timeout: longRequestTimeoutMs() },
           );
 
           if (data?.success && data?.task_id) {
@@ -218,7 +252,7 @@ export function useAssistantStream({
               };
               ctrl.signal.addEventListener('abort', cleanup, { once: true });
 
-              const eventSource = new EventSource(`/api/agents/tasks/${taskId}/events`);
+              const eventSource = new EventSource(apiUrl(`/api/agents/tasks/${taskId}/events`));
               eventSource.onmessage = (e) => {
                 try {
                   const ev = JSON.parse(e.data);
@@ -254,9 +288,10 @@ export function useAssistantStream({
         } catch (err: unknown) {
           connectFailed = !(ctrl.signal.aborted || (err as ErrorDetail)?.name === 'AbortError');
         }
+        } // end local/workflow branch
 
-        // Fallback: if agent/stream failed and no content, try direct /api/chat
-        if (connectFailed && accRef.current === '') {
+        // Fallback: if agent/stream failed and no content, try direct /api/chat (local only)
+        if (connectFailed && accRef.current === '' && currentAgent?.kind !== 'external') {
           try {
             const { data } = await apiClient.post<{ content: string }>(
               '/api/chat',
@@ -297,9 +332,9 @@ export function useAssistantStream({
           // Fallback: short replies don't trigger sentence-level TTS (min 3 chars).
           // Synthesize the full text once so audio is cached for instant replay —
           // but only when autoPlay is on (Req 5.3: autoPlay OFF must not call TTS at all).
-          if (autoPlay && ttsSentenceCount === 0 && accRef.current.trim().length > 0 && !ctrl.signal.aborted) {
+          if (wantTts && ttsSentenceCount === 0 && accRef.current.trim().length > 0 && !ctrl.signal.aborted) {
             setTtsLoadingId(finalMsg.id);
-            const ref = resolveVoiceRef(currentCharacter?.voiceId, voices);
+            const ref = resolveVoiceRef(currentAgent?.voiceId, voices);
             synthesize.mutateAsync({
               text: accRef.current,
               modelId: currentTtsModel,
@@ -309,8 +344,8 @@ export function useAssistantStream({
               if (res.success && res.output_path) {
                 const dur = res.duration_sec ? formatDuration(res.duration_sec) : undefined;
                 useUIStore.getState().updateMessageAudio(finalMsg.id, res.output_path, dur);
-                if (autoPlay && !player.playing && !abortedTtsRef.current) {
-                  player.playNow(finalMsg.id, `/api/audio/${res.output_path}`);
+                if (wantTts && !player.playing && !abortedTtsRef.current) {
+                  player.playNow(finalMsg.id, apiUrl(`/api/audio/${res.output_path}`));
                 }
               }
             }).catch(() => {}).finally(() => {
@@ -336,7 +371,7 @@ export function useAssistantStream({
         sentBoundaryRef.current = 0;
       }
     },
-    [currentCharacter, currentVoice, addToast, autoPlay, synthesize, currentTtsModel, voices, appendMessage, setLastTrimmedCount, activeModelContextLength, tempSystemPrompt, player, ttsSynthCount, ttsSynthDone],
+    [currentAgent, currentVoice, addToast, autoPlay, synthesize, currentTtsModel, voices, appendMessage, setLastTrimmedCount, activeModelContextLength, tempSystemPrompt, player, ttsSynthCount, ttsSynthDone],
   );
 
   useEffect(() => {

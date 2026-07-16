@@ -3,17 +3,16 @@
 
 import { useUIStore } from '@/store/uiStore';
 import { useI18n } from '@/hooks/useI18n';
-import { MessageSquare, Music, Mic, Monitor, Settings, AudioWaveform, Users, MessageSquareText, Workflow, FlaskConical } from 'lucide-react';
+import { MessageSquare, Music, Mic, Monitor, Settings, AudioWaveform, MessageSquareText, FlaskConical, Bot } from 'lucide-react';
 
 const features = [
   { id: 'chat' as const, titleKey: 'home.feature.chat.title', descKey: 'home.feature.chat.desc', icon: MessageSquare, color: '#48CAE4', bg: 'rgba(72,202,228,0.08)', border: 'rgba(72,202,228,0.15)' },
+  { id: 'agents' as const, title: 'Agent', desc: '定义本地 / 工作流 / 外部智能体；对话页选用', icon: Bot, color: '#48E5C2', bg: 'rgba(72,229,194,0.08)', border: 'rgba(72,229,194,0.15)' },
   { id: 'playground' as const, title: 'Playground', desc: '模型调参与测试工作台', icon: FlaskConical, color: '#E57C48', bg: 'rgba(229,124,72,0.08)', border: 'rgba(229,124,72,0.15)' },
-  { id: 'characters' as const, titleKey: 'home.feature.characters.title', descKey: 'home.feature.characters.desc', icon: Users, color: '#9B5DE5', bg: 'rgba(155,93,229,0.08)', border: 'rgba(155,93,229,0.15)' },
   { id: 'presets' as const, titleKey: 'home.feature.presets.title', descKey: 'home.feature.presets.desc', icon: MessageSquareText, color: '#F4A261', bg: 'rgba(244,162,97,0.08)', border: 'rgba(244,162,97,0.15)' },
   { id: 'voice' as const, titleKey: 'home.feature.voice.title', descKey: 'home.feature.voice.desc', icon: Music, color: '#FF6B9D', bg: 'rgba(255,107,157,0.08)', border: 'rgba(255,107,157,0.15)' },
   { id: 'transcribe' as const, titleKey: 'home.feature.transcribe.title', descKey: 'home.feature.transcribe.desc', icon: Mic, color: '#52B788', bg: 'rgba(82,183,136,0.08)', border: 'rgba(82,183,136,0.15)' },
   { id: 'models' as const, titleKey: 'home.feature.models.title', descKey: 'home.feature.models.desc', icon: Monitor, color: '#D4AF37', bg: 'rgba(212,175,55,0.08)', border: 'rgba(212,175,55,0.15)' },
-  { id: 'workflow' as const, title: '工作流编排', desc: '可视化搭建并单步执行多智能体工作流', icon: Workflow, color: '#48E5C2', bg: 'rgba(72,229,194,0.08)', border: 'rgba(72,229,194,0.15)' },
 ];
 
 export default function HomePage() {

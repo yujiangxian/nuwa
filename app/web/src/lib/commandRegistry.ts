@@ -19,8 +19,8 @@ export interface CommandRegistryContext {
   setPage: (page: AppPage) => void;
   setSettingsOpen: (open: boolean) => void;
   updateSetting: (key: 'theme' | 'language', value: string) => void;
-  createSession: (characterId: string) => void | Promise<void>;
-  currentCharacterId: string;
+  createSession: (agentId: string) => void | Promise<void>;
+  currentAgentId: string;
   platform: Platform;
   /** 翻译函数（用于命令标题本地化），可选；缺省用内置中文标题。 */
   t?: (key: string) => string;
@@ -30,10 +30,10 @@ export interface CommandRegistryContext {
 const NAV_ITEMS: { page: AppPage; title: string; keywords: string[] }[] = [
   { page: 'home', title: '前往 首页', keywords: ['home', '首页', 'shouye'] },
   { page: 'chat', title: '前往 对话', keywords: ['chat', '对话', 'duihua'] },
+  { page: 'agents', title: '前往 Agent', keywords: ['agent', 'agents', '智能体'] },
   { page: 'voice', title: '前往 声音工坊', keywords: ['voice', 'studio', '声音', '工坊'] },
   { page: 'transcribe', title: '前往 录音转写', keywords: ['transcribe', '录音', '转写'] },
   { page: 'models', title: '前往 模型管理', keywords: ['models', '模型', '管理'] },
-  { page: 'characters', title: '前往 角色管理', keywords: ['characters', '角色', '管理'] },
   { page: 'presets', title: '前往 提示词', keywords: ['presets', 'prompt', '提示词'] },
 ];
 
@@ -56,11 +56,11 @@ function canonicalCombo(src: string, platform: Platform): string | undefined {
  * 构建有序 Command_Item 列表（Req 2）。
  *
  * 包含：
- * - 7 个导航命令（home/chat/voice/transcribe/models/characters/presets，Req 2.2），run 调用 setPage。
+ * - 7 个导航命令（home/chat/agents/voice/transcribe/models/presets），run 调用 setPage。
  * - 1 个打开设置命令（Req 2.3），run 调用 setSettingsOpen(true)。
  * - 3 个切换主题命令（dark/light/system，Req 2.4），run 调用 updateSetting('theme', …)。
  * - N 个切换语言命令（每个受支持 Locale_Setting，Req 2.5），run 调用 updateSetting('language', …)。
- * - 1 个新建会话命令（Req 2.6），run 调用 createSession(currentCharacterId) 后 setPage('chat')。
+ * - 1 个新建会话命令（Req 2.6），run 调用 createSession(currentAgentId) 后 setPage('chat')。
  *
  * 保证全部 id 唯一（Req 2.7）；关联 Key_Combo 的命令在 combo 上记录规范化字符串（Req 2.8）。
  */
@@ -118,7 +118,7 @@ export function buildCommandRegistry(ctx: CommandRegistryContext): CommandItem[]
     group: 'session',
     combo: canonicalCombo('mod+n', ctx.platform),
     run: () => {
-      void ctx.createSession(ctx.currentCharacterId);
+      void ctx.createSession(ctx.currentAgentId);
       ctx.setPage('chat');
     },
   });

@@ -18,10 +18,6 @@ fn apply_inference_env(cmd: &mut tokio::process::Command) -> GpuBackend {
     backend
 }
 
-/// Maximum wall-clock time for a single inference subprocess (seconds).
-/// Beyond this the subprocess is killed and an error returned to the caller.
-const INFERENCE_TIMEOUT_SECS: u64 = 600; // 10 minutes
-
 /// Truncate user-facing text for logs (avoid dumping full transcripts / model stdout).
 fn redact_preview(s: &str, max_chars: usize) -> String {
     let count = s.chars().count();
@@ -58,76 +54,133 @@ pub fn wav_duration_secs(path: &Path) -> Option<f64> {
     None
 }
 
-/// 清理所有 `util::project_root()` / `util::python_exe()` / `util::resolve_path()` 调用，统一走 `util` 模块。
-/// 解析模型 ID 到实际路径和脚本
-pub fn resolve_asr_model(model_id: &str) -> Result<(&'static str, PathBuf), String> {
-    match model_id {
-        "asr/paraformer-large" => Ok((
-            "scripts/inference_asr_paraformer.py",
-            util::project_root().join("models/asr/paraformer-large/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"),
-        )),
-        "asr/whisper-tiny" => Ok((
-            "scripts/inference_asr_whisper.py",
-            util::project_root().join("models/asr/whisper-tiny"),
-        )),
-        "asr/glm-asr-nano" => Ok((
-            "scripts/inference_asr_glm.py",
-            util::project_root().join("models/asr/glm-asr-nano"),
-        )),
-        "asr/qwen3-asr-0.6b" => Ok((
-            "scripts/inference_asr_qwen3.py",
-            util::project_root().join("models/asr/qwen3-asr-0.6b/Qwen/Qwen3-ASR-0___6B"),
-        )),
-        _ => Err(format!("不支持的 ASR 模型: {}", model_id)),
+/// Pick the first existing candidate under project root; otherwise return the first candidate.
+/// Prefer scanned/shallow download dirs over vendor-nested layouts when both are listed.
+fn pick_model_dir(candidates: &[&str]) -> PathBuf {
+    let root = util::project_root();
+    for rel in candidates {
+        let p = root.join(rel);
+        if p.exists() {
+            return p;
+        }
+    }
+    root.join(candidates.first().copied().unwrap_or("models"))
+}
+
+/// Resolve an optional scanned ModelInfo.path (relative to project root or absolute).
+fn resolve_override_path(override_path: Option<&str>) -> Option<PathBuf> {
+    let raw = override_path?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let p = PathBuf::from(raw);
+    let abs = if p.is_absolute() {
+        p
+    } else {
+        util::project_root().join(p)
+    };
+    if abs.exists() {
+        Some(abs)
+    } else {
+        None
     }
 }
 
-pub fn resolve_tts_model(model_id: &str) -> Result<(&'static str, PathBuf), String> {
-    match model_id {
-        // CosyVoice2-0.5B：zero-shot 声音克隆效果第一梯队，复用同一推理脚本
-        // （脚本按目录下 cosyvoice2.yaml 自动选用 CosyVoice2 类、采样率 24000、GPU fp16）。
-        "tts/cosyvoice2" => Ok((
-            "scripts/inference_tts_cosyvoice.py",
-            util::project_root().join("models/tts/cosyvoice2/iic/CosyVoice2-0.5B"),
-        )),
-        "tts/cosyvoice3" => Ok((
-            "scripts/inference_tts_cosyvoice.py",
-            util::project_root().join("models/tts/cosyvoice3/iic/CosyVoice-300M"),
-        )),
-        "tts/glm-tts-full" => Ok((
-            "scripts/inference_tts_glm.py",
-            util::project_root().join("models/tts/glm-tts-full"),
-        )),
-        // 向后兼容旧 ID
-        "tts/glm-tts" => Ok((
-            "scripts/inference_tts_glm.py",
-            util::project_root().join("models/tts/glm-tts-full"),
-        )),
-        "tts/qwen3-tts-base" => Ok((
-            "scripts/inference_tts_qwen3.py",
-            util::project_root().join("models/tts/qwen3-tts-base"),
-        )),
-        "tts/openvoice" => Ok((
-            "scripts/inference_tts_openvoice.py",
-            util::project_root().join("models/tts/openvoice"),
-        )),
-        _ => Err(format!("不支持的 TTS 模型: {}", model_id)),
+/// 解析模型 ID 到推理脚本 + 磁盘路径。
+/// `installed_path` 来自模型扫描（`ModelInfo.path`），存在则优先使用。
+pub fn resolve_asr_model(model_id: &str) -> Result<(&'static str, PathBuf), String> {
+    resolve_asr_model_at(model_id, None)
+}
+
+pub fn resolve_asr_model_at(
+    model_id: &str,
+    installed_path: Option<&str>,
+) -> Result<(&'static str, PathBuf), String> {
+    let script = match model_id {
+        "asr/paraformer-large" => "scripts/inference_asr_paraformer.py",
+        "asr/whisper-tiny" => "scripts/inference_asr_whisper.py",
+        "asr/glm-asr-nano" => "scripts/inference_asr_glm.py",
+        "asr/qwen3-asr-0.6b" => "scripts/inference_asr_qwen3.py",
+        _ => return Err(format!("不支持的 ASR 模型: {}", model_id)),
+    };
+    if let Some(p) = resolve_override_path(installed_path) {
+        return Ok((script, p));
     }
+    let path = match model_id {
+        "asr/paraformer-large" => pick_model_dir(&[
+            "models/asr/paraformer-large",
+            "models/asr/paraformer-large/damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+        ]),
+        "asr/whisper-tiny" => pick_model_dir(&["models/asr/whisper-tiny"]),
+        "asr/glm-asr-nano" => pick_model_dir(&["models/asr/glm-asr-nano"]),
+        "asr/qwen3-asr-0.6b" => pick_model_dir(&[
+            "models/asr/qwen3-asr-0.6b",
+            "models/asr/qwen3-asr-0.6b/Qwen/Qwen3-ASR-0___6B",
+        ]),
+        _ => unreachable!(),
+    };
+    Ok((script, path))
+}
+
+pub fn resolve_tts_model(model_id: &str) -> Result<(&'static str, PathBuf), String> {
+    resolve_tts_model_at(model_id, None)
+}
+
+pub fn resolve_tts_model_at(
+    model_id: &str,
+    installed_path: Option<&str>,
+) -> Result<(&'static str, PathBuf), String> {
+    let script = match model_id {
+        "tts/cosyvoice2" | "tts/cosyvoice3" => "scripts/inference_tts_cosyvoice.py",
+        "tts/glm-tts-full" | "tts/glm-tts" => "scripts/inference_tts_glm.py",
+        "tts/qwen3-tts-base" => "scripts/inference_tts_qwen3.py",
+        "tts/openvoice" => "scripts/inference_tts_openvoice.py",
+        _ => return Err(format!("不支持的 TTS 模型: {}", model_id)),
+    };
+    if let Some(p) = resolve_override_path(installed_path) {
+        return Ok((script, p));
+    }
+    let path = match model_id {
+        "tts/cosyvoice2" => pick_model_dir(&[
+            "models/tts/cosyvoice2",
+            "models/tts/cosyvoice2/iic/CosyVoice2-0.5B",
+        ]),
+        "tts/cosyvoice3" => pick_model_dir(&[
+            "models/tts/cosyvoice3",
+            "models/tts/cosyvoice3/iic/CosyVoice-300M",
+        ]),
+        "tts/glm-tts-full" | "tts/glm-tts" => pick_model_dir(&["models/tts/glm-tts-full"]),
+        "tts/qwen3-tts-base" => pick_model_dir(&["models/tts/qwen3-tts-base"]),
+        "tts/openvoice" => pick_model_dir(&["models/tts/openvoice"]),
+        _ => unreachable!(),
+    };
+    Ok((script, path))
 }
 
 /// ASR 语音识别
 pub async fn transcribe(audio_path: &Path, model_id: &str) -> Result<String, String> {
+    transcribe_at(audio_path, model_id, None).await
+}
+
+/// ASR with optional scanned `ModelInfo.path` override.
+pub async fn transcribe_at(
+    audio_path: &Path,
+    model_id: &str,
+    installed_path: Option<&str>,
+) -> Result<String, String> {
     let _started = std::time::Instant::now();
     let audio_path = util::resolve_path(audio_path);
-    let (script, model_path) = resolve_asr_model(model_id)?;
+    let (script, model_path) = resolve_asr_model_at(model_id, installed_path)?;
     let script_path = util::project_root().join(script);
     let output_json = std::env::temp_dir().join(format!("nuwa_asr_{}.json", uuid::Uuid::new_v4()));
+    let timeout_secs = crate::constants::inference_timeout_secs();
 
     tracing::info!(
-        "ASR 推理: model={} audio={} script={}",
+        "ASR 推理: model={} audio={} script={} path={}",
         model_id,
         audio_path.display(),
-        script_path.display()
+        script_path.display(),
+        model_path.display()
     );
 
     let mut cmd = tokio::process::Command::new(util::python_exe());
@@ -135,7 +188,7 @@ pub async fn transcribe(audio_path: &Path, model_id: &str) -> Result<String, Str
     tracing::info!(backend = backend.as_str(), "ASR inference Python env");
 
     let output = tokio::time::timeout(
-        std::time::Duration::from_secs(INFERENCE_TIMEOUT_SECS),
+        std::time::Duration::from_secs(timeout_secs),
         cmd.arg(&script_path)
             .arg("--model-path")
             .arg(&model_path)
@@ -147,7 +200,7 @@ pub async fn transcribe(audio_path: &Path, model_id: &str) -> Result<String, Str
             .output(),
     )
     .await
-    .map_err(|_| format!("ASR 推理超时 (>{INFERENCE_TIMEOUT_SECS}s)"))?
+    .map_err(|_| format!("ASR 推理超时 (>{timeout_secs}s)"))?
     .map_err(|e| format!("启动 ASR 子进程失败: {}", e))?;
 
     if !output.status.success() {
@@ -196,12 +249,25 @@ pub async fn synthesize(
     ref_text: &str,
     output_path: &Path,
 ) -> Result<(), String> {
+    synthesize_at(text, model_id, ref_audio, ref_text, output_path, None).await
+}
+
+/// TTS with optional scanned `ModelInfo.path` override.
+pub async fn synthesize_at(
+    text: &str,
+    model_id: &str,
+    ref_audio: &Path,
+    ref_text: &str,
+    output_path: &Path,
+    installed_path: Option<&str>,
+) -> Result<(), String> {
     let started = std::time::Instant::now();
     let ref_audio = util::resolve_path(ref_audio);
     let output_path = util::resolve_path(output_path);
-    let (script, model_path) = resolve_tts_model(model_id)?;
+    let (script, model_path) = resolve_tts_model_at(model_id, installed_path)?;
     let script_path = util::project_root().join(script);
     let output_json = std::env::temp_dir().join(format!("nuwa_tts_{}.json", uuid::Uuid::new_v4()));
+    let timeout_secs = crate::constants::inference_timeout_secs();
 
     // 确保输出目录存在
     if let Some(parent) = output_path.parent() {
@@ -209,11 +275,12 @@ pub async fn synthesize(
     }
 
     tracing::info!(
-        "TTS 推理: model={} text_len={} ref={} output={}",
+        "TTS 推理: model={} text_len={} ref={} output={} path={}",
         model_id,
         text.len(),
         ref_audio.display(),
-        output_path.display()
+        output_path.display(),
+        model_path.display()
     );
 
     let mut cmd = tokio::process::Command::new(util::python_exe());
@@ -221,7 +288,7 @@ pub async fn synthesize(
     tracing::info!(backend = backend.as_str(), "TTS inference Python env");
 
     let output = tokio::time::timeout(
-        std::time::Duration::from_secs(INFERENCE_TIMEOUT_SECS),
+        std::time::Duration::from_secs(timeout_secs),
         cmd.arg(&script_path)
             .arg("--model-path")
             .arg(&model_path)
@@ -239,7 +306,7 @@ pub async fn synthesize(
             .output(),
     )
     .await
-    .map_err(|_| format!("TTS 推理超时 (>{INFERENCE_TIMEOUT_SECS}s)"))?
+    .map_err(|_| format!("TTS 推理超时 (>{timeout_secs}s)"))?
     .map_err(|e| format!("启动 TTS 子进程失败: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -297,23 +364,37 @@ pub async fn synthesize_script(
     ref_text: &str,
     output_path: &Path,
 ) -> Result<(), String> {
+    synthesize_script_at(segments_json, model_id, ref_audio, ref_text, output_path, None).await
+}
+
+/// Multi-segment TTS with optional scanned `ModelInfo.path` override.
+pub async fn synthesize_script_at(
+    segments_json: &str,
+    model_id: &str,
+    ref_audio: &Path,
+    ref_text: &str,
+    output_path: &Path,
+    installed_path: Option<&str>,
+) -> Result<(), String> {
     let started = std::time::Instant::now();
     let ref_audio = util::resolve_path(ref_audio);
     let output_path = util::resolve_path(output_path);
-    let (_script, model_path) = resolve_tts_model(model_id)?;
+    let (_script, model_path) = resolve_tts_model_at(model_id, installed_path)?;
     let script_path = util::project_root().join("scripts/inference_tts_glm_script.py");
     let output_json =
         std::env::temp_dir().join(format!("nuwa_tts_script_{}.json", uuid::Uuid::new_v4()));
+    let timeout_secs = crate::constants::inference_timeout_secs();
 
     if let Some(parent) = output_path.parent() {
         let _ = tokio::fs::create_dir_all(parent).await;
     }
 
     tracing::info!(
-        "TTS 多段合成: model={} ref={} output={}",
+        "TTS 多段合成: model={} ref={} output={} path={}",
         model_id,
         ref_audio.display(),
-        output_path.display()
+        output_path.display(),
+        model_path.display()
     );
 
     let mut cmd = tokio::process::Command::new(util::python_exe());
@@ -321,7 +402,7 @@ pub async fn synthesize_script(
     tracing::info!(backend = backend.as_str(), "TTS script inference Python env");
 
     let output = tokio::time::timeout(
-        std::time::Duration::from_secs(INFERENCE_TIMEOUT_SECS),
+        std::time::Duration::from_secs(timeout_secs),
         cmd.arg(&script_path)
             .arg("--model-path")
             .arg(&model_path)
@@ -339,7 +420,7 @@ pub async fn synthesize_script(
             .output(),
     )
     .await
-    .map_err(|_| format!("TTS 多段合成超时 (>{INFERENCE_TIMEOUT_SECS}s)"))?
+    .map_err(|_| format!("TTS 多段合成超时 (>{timeout_secs}s)"))?
     .map_err(|e| format!("启动 TTS 多段合成子进程失败: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);

@@ -39,8 +39,9 @@ const wordArb = fc.stringOf(fc.constantFrom(...SAFE_CHARS), { minLength: 1, maxL
 const textArb = fc
   .array(wordArb, { minLength: 1, maxLength: 8 })
   .map((words) => words.join(' '))
-  // GFM treats "1. foo" as an ordered list, which drops the "1. " from visible text.
-  .filter((text) => !/(?:^|\s)\d+\.\s/.test(text));
+  // GFM treats "1. foo" / bare "9." as ordered lists, which drops the marker from
+  // visible text (CI saw textContent "\n\n" for source "9.").
+  .filter((text) => !/(?:^|\s)\d+\./.test(text));
 
 describe('MarkdownMessage 纯文本语义保留', () => {
   it('Property 1: 纯文本语义保留', () => {

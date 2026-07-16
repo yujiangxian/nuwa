@@ -6,6 +6,7 @@
 /// 持久化到 localStorage 键 `nuwa_settings`。
 
 import { create } from 'zustand';
+import { setApiBaseUrl } from '@/api/client';
 import type { AppSettings } from './types';
 
 const LEGACY_DEFAULT_BACKEND_URL = 'http://localhost:9880';
@@ -63,5 +64,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const next = { ...get().settings, [key]: value };
     saveSettings(next);
     set({ settings: next });
+    if (key === 'backendUrl') setApiBaseUrl(String(value));
   },
 }));
+
+// Wire axios / apiUrl to persisted settings at module load.
+setApiBaseUrl(useSettingsStore.getState().settings.backendUrl);

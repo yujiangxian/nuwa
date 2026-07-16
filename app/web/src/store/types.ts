@@ -5,7 +5,67 @@
 // 所有 lib/ 模块的类型导入应使用此文件而非 uiStore.ts，
 // 消除运行时依赖，仅保持类型级耦合。
 
-export type AppPage = 'home' | 'chat' | 'playground' | 'voice' | 'transcribe' | 'models' | 'characters' | 'presets' | 'workflow';
+export type AppPage = 'home' | 'chat' | 'playground' | 'voice' | 'transcribe' | 'models' | 'presets' | 'agents';
+
+/** V1: local only. V2 adds workflow; V3 adds external. */
+export type AgentKind = 'local' | 'workflow' | 'external';
+
+/** Local execution pipeline ids backed by agent_scheduler. */
+export type AgentPipeline = 'text_chat_stream' | 'text_chat' | 'voice_reply';
+
+/** V2 workflow step capability. */
+export type AgentCapability = 'asr' | 'llm' | 'tts';
+
+export interface AgentStep {
+  id: string;
+  capability: AgentCapability;
+  label: string;
+}
+
+/** 外部 Agent 接入协议（AI 网关按此分派适配器）。 */
+export type ExternalProtocol = 'openai-compatible' | 'anthropic';
+
+export interface Agent {
+  id: string;
+  name: string;
+  description: string;
+  avatar: string;
+  systemPrompt: string;
+  voiceId: string;
+  kind: AgentKind;
+  /** Used when kind === 'local' (and as fallback for workflow). */
+  pipeline: AgentPipeline;
+  /** V2: ordered capabilities when kind === 'workflow'. */
+  steps?: AgentStep[];
+  /** Optional mood label (migrated from Character). */
+  mood?: string;
+  temperature?: number;
+  topP?: number;
+  /** V3: OpenAI-compatible base URL (no trailing slash required). */
+  endpoint?: string;
+  /** V3: model id on the remote provider. */
+  externalModel?: string;
+  protocol?: ExternalProtocol;
+}
+
+export interface AgentInput {
+  name: string;
+  description: string;
+  avatar: string;
+  systemPrompt: string;
+  voiceId: string;
+  kind: AgentKind;
+  pipeline: AgentPipeline;
+  steps?: AgentStep[];
+  mood?: string;
+  temperature?: number;
+  topP?: number;
+  endpoint?: string;
+  externalModel?: string;
+  protocol?: ExternalProtocol;
+  /** V3: written to localStorage only, not persisted in IndexedDB. */
+  apiKey?: string;
+}
 
 export interface VoiceItem {
   id: string;
@@ -42,7 +102,13 @@ export interface CharacterInput {
 export interface ChatSession {
   id: string;
   title: string;
+  /**
+   * @deprecated use agentId — kept as alias for import/export compatibility.
+   * New sessions write characterId = agentId.
+   */
   characterId: string;
+  /** Bound Agent for this session (Chat calls this Agent). Optional for legacy sessions. */
+  agentId?: string;
   voiceId: string;
   updatedAt: string;
   pinned: boolean;

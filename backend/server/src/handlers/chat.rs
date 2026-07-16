@@ -140,7 +140,7 @@ pub struct ChatError {
 }
 
 fn default_model() -> String {
-    "gemma4:e4b".to_string()
+    crate::constants::FALLBACK_LLM_MODEL.to_string()
 }
 
 /// Model_Selection 回退顺序：current_llm_model → 请求体 model。
@@ -233,7 +233,9 @@ pub async fn chat(
     let res = client
         .post(ollama_chat_url())
         .json(&ollama_req)
-        .timeout(std::time::Duration::from_secs(120))
+        .timeout(std::time::Duration::from_secs(
+            crate::constants::ollama_timeout_secs(),
+        ))
         .send()
         .await;
 

@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import {
   useUIStore,
-  defaultCharacters,
+  defaultAgents,
   setChatDbForTesting,
   type PromptPreset,
 } from '@/store/uiStore';
@@ -40,7 +40,13 @@ vi.mock('@/hooks/useApi', () => ({
 }));
 vi.mock('@/hooks/useRecorder', () => ({ useRecorder: () => mocks.recorder }));
 vi.mock('@/hooks/useAudioPlayer', () => ({ useAudioPlayer: () => mocks.player }));
-vi.mock('@/api/client', () => ({ apiClient: { post: mocks.apiPost } }));
+vi.mock('@/api/client', () => ({
+  apiClient: { post: mocks.apiPost },
+  setApiBaseUrl: vi.fn(),
+  getApiBaseUrl: () => '',
+  apiUrl: (path: string) => path,
+  longRequestTimeoutMs: () => 300000,
+}));
 vi.mock('@/store/toastStore', () => {
   const useToastStore: any = (selector: any) => selector({ addToast: mocks.addToast });
   useToastStore.getState = () => ({ addToast: mocks.addToast });
@@ -78,8 +84,8 @@ beforeEach(() => {
 
   useUIStore.setState({
     inputText: '',
-    currentCharacterId: 'assistant',
-    characters: defaultCharacters,
+    currentAgentId: 'agent-assistant',
+    agents: defaultAgents,
     presets,
     sessions: [{ id: 's1', title: '会话', characterId: 'assistant', voiceId: 'jyy', updatedAt: new Date().toISOString(), pinned: false }],
     currentSessionId: 's1',

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 yujiangxian
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -10,7 +10,7 @@ import { createChatDb, type ChatDb } from '@/lib/chatDb';
 import {
   useUIStore,
   setChatDbForTesting,
-  defaultCharacters,
+  defaultAgents,
   type ChatSession,
 } from '@/store/uiStore';
 import { createFakeChatDb } from '@/store/testChatDb';
@@ -41,8 +41,8 @@ function baseStore(db: ChatDb): void {
     messages: [],
     sessionsLoading: false,
     isPersistent: true,
-    characters: defaultCharacters,
-    currentCharacterId: 'assistant',
+    agents: defaultAgents,
+    currentAgentId: 'assistant',
   });
 }
 
@@ -142,8 +142,8 @@ describe('togglePin 局部性 (Req 2.3, 2.4)', () => {
       sessions: [sess],
       currentSessionId: sess.id,
       isPersistent: true,
-      characters: defaultCharacters,
-      currentCharacterId: 'assistant',
+      agents: defaultAgents,
+      currentAgentId: 'assistant',
     });
     await useUIStore.getState().togglePin('missing-id');
     // 未命中：无可持久化目标，saveSession 不被调用。
@@ -182,8 +182,8 @@ describe('降级模式仅内存 (Req 3.2)', () => {
       sessions: [sess],
       currentSessionId: sess.id,
       isPersistent: false,
-      characters: defaultCharacters,
-      currentCharacterId: 'assistant',
+      agents: defaultAgents,
+      currentAgentId: 'assistant',
     });
 
     await useUIStore.getState().togglePin(sess.id);
@@ -205,8 +205,8 @@ describe('持久写入失败保留内存并提示 (Req 3.4)', () => {
       sessions: [sess],
       currentSessionId: sess.id,
       isPersistent: true,
-      characters: defaultCharacters,
-      currentCharacterId: 'assistant',
+      agents: defaultAgents,
+      currentAgentId: 'assistant',
     });
     useToastStore.setState({ toasts: [] });
 
