@@ -6,7 +6,7 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 import fc from 'fast-check';
 import {
   useUIStore,
-  defaultCharacters,
+  defaultAgents,
   setChatDbForTesting,
   type ChatSession,
 } from '@/store/uiStore';
@@ -115,8 +115,8 @@ beforeEach(() => {
 
   useUIStore.setState({
     inputText: '',
-    currentCharacterId: 'assistant',
-    characters: defaultCharacters,
+    currentAgentId: 'agent-assistant',
+    agents: defaultAgents,
     sessions: baseSessions.map((s) => ({ ...s })),
     currentSessionId: 's1',
     messages: [],

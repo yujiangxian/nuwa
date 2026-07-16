@@ -3,16 +3,24 @@
 
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react';
 import { Play, User, Square, Loader2, Check, X } from 'lucide-react';
-import type { ChatMessage, Character } from '@/store/uiStore';
+import type { ChatMessage } from '@/store/uiStore';
 import type { UseAudioQueue } from '@/hooks/useAudioQueue';
 import MarkdownMessage from '@/components/MarkdownMessage';
 import { estimateText } from '@/lib/tokenEstimate';
 import { MessageActions } from './MessageActions';
 
+/** Chat / Agent persona fields used for avatar display. */
+export type ChatPersona = {
+  name?: string;
+  avatar?: string;
+  systemPrompt?: string;
+  voiceId?: string;
+};
+
 export type MessageListProps = {
   messages: ChatMessage[];
   messageRefs: MutableRefObject<Map<string, HTMLDivElement>>;
-  currentCharacter: Character | undefined;
+  currentCharacter: ChatPersona | undefined;
   editingId: string | null;
   editDraft: string;
   setEditDraft: (v: string) => void;

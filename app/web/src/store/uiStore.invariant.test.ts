@@ -1,9 +1,9 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 yujiangxian
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import fc from 'fast-check';
-import { useUIStore, setChatDbForTesting, defaultCharacters } from '@/store/uiStore';
+import { useUIStore, setChatDbForTesting, defaultAgents } from '@/store/uiStore';
 import { createFakeChatDb, type FakeChatDb } from '@/store/testChatDb';
 
 /**
@@ -27,8 +27,8 @@ function resetStore(): void {
     messages: [],
     sessionsLoading: false,
     isPersistent: true,
-    characters: defaultCharacters,
-    currentCharacterId: 'assistant',
+    agents: defaultAgents,
+    currentAgentId: 'assistant',
   });
 }
 

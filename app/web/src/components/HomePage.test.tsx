@@ -7,26 +7,24 @@ import { useUIStore } from '@/store/uiStore';
 import HomePage from '@/components/HomePage';
 
 /**
- * Component tests for the HomePage character-management entry (task 6.6).
- * Req 8.1: a functional entry into Character_Manager exists.
- * Req 8.2: triggering it navigates to Character_Manager (/characters).
+ * Component tests for the HomePage Agent entry (character management merged into Agent).
  */
 
 beforeEach(() => {
   useUIStore.setState((s) => ({ currentPage: 'home', settings: { ...s.settings, language: '简体中文' } }));
 });
 
-describe('HomePage character-management entry', () => {
-  it('renders the 角色管理 entry (Req 8.1)', () => {
+describe('HomePage Agent entry', () => {
+  it('renders the Agent entry', () => {
     render(<HomePage />);
-    expect(screen.getByText('角色管理')).toBeInTheDocument();
-    expect(screen.getByText('创建与管理 AI 人设')).toBeInTheDocument();
+    expect(screen.getByText('Agent')).toBeInTheDocument();
+    expect(screen.getByText('定义本地 / 工作流 / 外部智能体；对话页选用')).toBeInTheDocument();
   });
 
-  it('navigates to the characters page when clicked (Req 8.2)', () => {
+  it('navigates to the agents page when clicked', () => {
     render(<HomePage />);
-    fireEvent.click(screen.getByRole('button', { name: /角色管理/ }));
-    expect(useUIStore.getState().currentPage).toBe('characters');
+    fireEvent.click(screen.getByRole('button', { name: /Agent/ }));
+    expect(useUIStore.getState().currentPage).toBe('agents');
   });
 });
 

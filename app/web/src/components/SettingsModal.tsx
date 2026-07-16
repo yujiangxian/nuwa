@@ -201,7 +201,7 @@ export default function SettingsModal() {
                       exportedAt: new Date().toISOString(),
                       version: 'nuwa-v0.3.0',
                       sessions,
-                      characters: store.characters,
+                      agents: store.agents,
                       presets: store.presets,
                       settings: store.settings,
                     };
