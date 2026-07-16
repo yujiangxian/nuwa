@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import {
   useUIStore,
-  defaultCharacters,
+  defaultAgents,
   setChatDbForTesting,
   type PromptPreset,
 } from '@/store/uiStore';
@@ -78,8 +78,8 @@ beforeEach(() => {
 
   useUIStore.setState({
     inputText: '',
-    currentCharacterId: 'assistant',
-    characters: defaultCharacters,
+    currentAgentId: 'agent-assistant',
+    agents: defaultAgents,
     presets,
     sessions: [{ id: 's1', title: '会话', characterId: 'assistant', voiceId: 'jyy', updatedAt: new Date().toISOString(), pinned: false }],
     currentSessionId: 's1',
