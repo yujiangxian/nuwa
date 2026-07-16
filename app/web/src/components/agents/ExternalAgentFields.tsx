@@ -11,10 +11,12 @@ import type { ExternalProtocol } from '@/store/types';
 import { PROTOCOL_OPTIONS, PROVIDER_PRESETS, DEFAULT_PROTOCOL } from '@/lib/gateway';
 
 function placeholderFor(protocol: ExternalProtocol): { baseUrl: string; model: string } {
-  const preset = PROVIDER_PRESETS.find((p) => p.protocol === protocol);
+  const preset =
+    PROVIDER_PRESETS.find((p) => p.protocol === protocol && p.defaultModel)
+    ?? PROVIDER_PRESETS.find((p) => p.protocol === protocol);
   return {
-    baseUrl: preset?.baseUrl ?? (protocol === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.openai.com/v1'),
-    model: preset?.defaultModel || (protocol === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4o-mini'),
+    baseUrl: preset?.baseUrl ?? '',
+    model: preset?.defaultModel ?? '',
   };
 }
 

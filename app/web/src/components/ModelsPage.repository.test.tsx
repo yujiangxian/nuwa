@@ -18,6 +18,10 @@ import type { PresetModel } from '@/lib/modelTypes';
 
 vi.mock('@/api/client', () => ({
   apiClient: { get: vi.fn(), post: vi.fn(), delete: vi.fn() },
+  setApiBaseUrl: vi.fn(),
+  getApiBaseUrl: () => '',
+  apiUrl: (path: string) => path,
+  longRequestTimeoutMs: () => 300000,
 }));
 
 const mockGet = apiClient.get as unknown as ReturnType<typeof vi.fn>;
