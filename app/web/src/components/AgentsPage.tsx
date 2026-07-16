@@ -25,7 +25,18 @@ import {
   probeExternalAgent,
   parseProtocol,
   DEFAULT_PROTOCOL,
+  isLocalProxyProtocol,
+  XAI_OAUTH_ENDPOINT,
+  CLAUDE_CODE_ENDPOINT,
+  CURSOR_SDK_ENDPOINT,
 } from '@/lib/gateway';
+
+function proxyEndpoint(protocol: string | undefined, current?: string): string {
+  if (protocol === 'xai-oauth') return current?.trim() || XAI_OAUTH_ENDPOINT;
+  if (protocol === 'claude-code') return current?.trim() || CLAUDE_CODE_ENDPOINT;
+  if (protocol === 'cursor-sdk') return current?.trim() || CURSOR_SDK_ENDPOINT;
+  return current ?? '';
+}
 import ExternalAgentFields from '@/components/agents/ExternalAgentFields';
 import {
   ArrowLeft, Settings, Plus, Bot, Pencil, Trash2, Check, X, Loader2,
@@ -64,7 +75,7 @@ const PIPELINE_OPTIONS: { id: AgentPipeline; label: string }[] = [
 const KIND_OPTIONS: { id: AgentKind; label: string; hint: string }[] = [
   { id: 'local', label: '本地', hint: '绑定固定流水线' },
   { id: 'workflow', label: '工作流', hint: '自定义 ASR/LLM/TTS 步骤' },
-  { id: 'external', label: '外部', hint: 'AI 网关（OpenAI 兼容 / Anthropic）' },
+  { id: 'external', label: '外部', hint: '网关 / SuperGrok / 本机 Claude·Cursor' },
 ];
 
 type FormState = AgentInput & { apiKey: string };
@@ -81,7 +92,7 @@ const EMPTY_FORM: FormState = {
   temperature: 0.7,
   topP: 0.9,
   endpoint: '',
-  externalModel: 'gpt-4o-mini',
+  externalModel: '',
   protocol: 'openai-compatible',
   apiKey: '',
 };
@@ -113,7 +124,7 @@ export default function AgentsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const openCreate = () => {
-    setForm({ ...EMPTY_FORM, voiceId: voices[0]?.id ?? 'jyy', steps: makeSteps(['llm']) });
+    setForm({ ...EMPTY_FORM, voiceId: voices[0]?.id ?? '', steps: makeSteps(['llm']) });
     setNameError(false);
     setPromptError(false);
     setEndpointError(false);
@@ -133,7 +144,7 @@ export default function AgentsPage() {
       temperature: a.temperature,
       topP: a.topP,
       endpoint: a.endpoint ?? '',
-      externalModel: a.externalModel ?? 'gpt-4o-mini',
+      externalModel: a.externalModel ?? '',
       protocol: a.protocol ?? DEFAULT_PROTOCOL,
       apiKey: loadExternalApiKey(a.id),
     });
@@ -212,7 +223,9 @@ export default function AgentsPage() {
   const handleSubmit = async () => {
     const nameOk = validateName(form.name).ok;
     const promptOk = form.kind === 'external' || form.systemPrompt.trim().length > 0;
-    const endpointOk = form.kind !== 'external' || (form.endpoint?.trim().length ?? 0) > 0;
+    const endpointOk = form.kind !== 'external'
+      || isLocalProxyProtocol(form.protocol)
+      || (form.endpoint?.trim().length ?? 0) > 0;
     setNameError(!nameOk);
     setPromptError(!promptOk);
     setEndpointError(!endpointOk);
@@ -226,7 +239,11 @@ export default function AgentsPage() {
           ? resolvePipelineFromSteps(form.steps)
           : form.pipeline,
         steps: form.kind === 'workflow' ? form.steps : undefined,
-        endpoint: form.kind === 'external' ? form.endpoint : undefined,
+        endpoint: form.kind === 'external'
+          ? (isLocalProxyProtocol(form.protocol)
+            ? proxyEndpoint(form.protocol, form.endpoint)
+            : form.endpoint)
+          : undefined,
         externalModel: form.kind === 'external' ? form.externalModel : undefined,
         protocol: form.kind === 'external' ? (form.protocol ?? DEFAULT_PROTOCOL) : undefined,
         apiKey: form.kind === 'external' ? form.apiKey : undefined,
@@ -277,7 +294,7 @@ export default function AgentsPage() {
         systemPrompt: String(data.systemPrompt),
         description: String(data.description ?? ''),
         avatar: String(data.avatar || GRADIENT_PRESETS[0]),
-        voiceId: String(data.voiceId || voices[0]?.id || 'jyy'),
+        voiceId: String(data.voiceId || voices[0]?.id || ''),
         kind,
         pipeline: (['text_chat_stream', 'text_chat', 'voice_reply'] as AgentPipeline[]).includes(data.pipeline)
           ? data.pipeline
@@ -506,8 +523,11 @@ export default function AgentsPage() {
                 <select value={form.voiceId} onChange={(e) => setForm((f) => ({ ...f, voiceId: e.target.value }))}
                   className="rounded-xl px-3 py-2 text-sm outline-none"
                   style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
-                  {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                  {voices.length === 0 && <option value="jyy">jyy</option>}
+                  {voices.length === 0 ? (
+                    <option value="">暂无音色（请先在声音工坊添加）</option>
+                  ) : (
+                    voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)
+                  )}
                 </select>
               </>
             )}

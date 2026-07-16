@@ -31,7 +31,7 @@ describe('session ↔ agent binding', () => {
     const s = useUIStore.getState().sessions[0];
     expect(s.agentId).toBe('socrates');
     expect(s.characterId).toBe('socrates');
-    expect(s.voiceId).toBe('narrator');
+    expect(s.voiceId).toBe('');
   });
 
   it('switchSession restores currentAgentId from session', async () => {
@@ -77,7 +77,7 @@ describe('session ↔ agent binding', () => {
     const sess = useUIStore.getState().sessions.find((s) => s.id === sid)!;
     expect(sess.agentId).toBe('counselor');
     expect(sess.characterId).toBe('counselor');
-    expect(sess.voiceId).toBe('stefanie');
+    expect(sess.voiceId).toBe('');
     expect(useUIStore.getState().currentAgentId).toBe('counselor');
   });
 });

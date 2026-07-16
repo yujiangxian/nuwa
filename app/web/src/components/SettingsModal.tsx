@@ -6,6 +6,8 @@ import { useToastStore } from '@/store/toastStore';
 import { useI18n } from '@/hooks/useI18n';
 import { LOCALE_LABELS, SUPPORTED_LOCALES } from '@/lib/i18n';
 import { apiClient } from '@/api/client';
+import SuperGrokCard from '@/components/settings/SuperGrokCard';
+import CodingAgentsCard from '@/components/settings/CodingAgentsCard';
 import { X, Moon, Sun, Monitor, FolderOpen, Download, Trash2 } from 'lucide-react';
 
 export default function SettingsModal() {
@@ -89,6 +91,16 @@ export default function SettingsModal() {
               会同步到 API 客户端与 SSE/音频地址；开发默认直连 :8080（也可用 Vite /api 代理）。
             </p>
           </div>
+
+          <div className="h-px" style={{ background: 'var(--border)' }} />
+
+          <SuperGrokCard />
+
+          <div className="h-px" style={{ background: 'var(--border)' }} />
+
+          <CodingAgentsCard />
+
+          <div className="h-px" style={{ background: 'var(--border)' }} />
 
           {/* Models Dir */}
           <div>
