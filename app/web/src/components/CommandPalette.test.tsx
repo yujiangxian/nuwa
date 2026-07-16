@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 yujiangxian
 
 // Feature: command-palette — CommandPalette 组件测试（任务 7.2，Req 1.2, 1.3, 1.5, 4, 5, 8）
@@ -18,7 +18,7 @@ function setupStore() {
     paletteOpen: false,
     paletteQuery: '',
     highlightIndex: -1,
-    currentCharacterId: 'assistant',
+    currentAgentId: 'assistant',
     setPage,
     setSettingsOpen,
     updateSetting,

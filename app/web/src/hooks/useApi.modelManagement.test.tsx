@@ -34,6 +34,10 @@ vi.mock('@/api/client', () => ({
     post: vi.fn(),
     delete: vi.fn(),
   },
+  setApiBaseUrl: vi.fn(),
+  getApiBaseUrl: () => '',
+  apiUrl: (path: string) => path,
+  longRequestTimeoutMs: () => 300000,
 }));
 
 const mockGet = apiClient.get as unknown as ReturnType<typeof vi.fn>;

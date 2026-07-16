@@ -1,8 +1,8 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 yujiangxian
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useUIStore, setChatDbForTesting, defaultCharacters } from '@/store/uiStore';
+import { useUIStore, setChatDbForTesting, defaultAgents } from '@/store/uiStore';
 import type { ChatDb } from '@/lib/chatDb';
 import { useToastStore } from '@/store/toastStore';
 import { createFakeChatDb } from '@/store/testChatDb';
@@ -20,8 +20,8 @@ function resetStore(): void {
     messages: [],
     sessionsLoading: true,
     isPersistent: true,
-    characters: defaultCharacters,
-    currentCharacterId: 'assistant',
+    agents: defaultAgents,
+    currentAgentId: 'assistant',
   });
   useToastStore.setState({ toasts: [] });
 }

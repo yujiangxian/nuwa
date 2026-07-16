@@ -14,12 +14,16 @@ use tokio::sync::RwLock;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt as _;
 
-use crate::services::agent_scheduler::{self, scheduler, RunRequest};
+use crate::services::agent_scheduler::{self, scheduler, RunRequest, RuntimeDefaults};
 use crate::state::AppState;
 
 /// GET /api/agents — 列出所有可用能力和流水线
-pub async fn list_agents() -> Json<serde_json::Value> {
-    let registry = scheduler().registry();
+pub async fn list_agents(State(state): State<Arc<RwLock<AppState>>>) -> Json<serde_json::Value> {
+    let defaults = {
+        let s = state.read().await;
+        RuntimeDefaults::from_app_state(&s.config, &s.models)
+    };
+    let registry = scheduler().registry(&defaults);
     Json(serde_json::to_value(registry).unwrap_or_default())
 }
 
@@ -28,11 +32,15 @@ pub async fn run_pipeline(
     State(state): State<Arc<RwLock<AppState>>>,
     Json(req): Json<RunRequest>,
 ) -> Json<serde_json::Value> {
-    // 获取项目根目录用于 output/ 路径
-    let project_root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    drop(state); // 释放锁
+    let (project_root, defaults) = {
+        let s = state.read().await;
+        (
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            RuntimeDefaults::from_app_state(&s.config, &s.models),
+        )
+    };
 
-    match scheduler().submit(req, &project_root).await {
+    match scheduler().submit(req, &project_root, defaults).await {
         Ok(task_id) => Json(serde_json::json!({
             "success": true,
             "task_id": task_id,
@@ -49,10 +57,18 @@ pub async fn run_pipeline_stream(
     State(state): State<Arc<RwLock<AppState>>>,
     Json(req): Json<RunRequest>,
 ) -> Json<serde_json::Value> {
-    let project_root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    drop(state);
+    let (project_root, defaults) = {
+        let s = state.read().await;
+        (
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            RuntimeDefaults::from_app_state(&s.config, &s.models),
+        )
+    };
 
-    match scheduler().submit_stream(req, &project_root).await {
+    match scheduler()
+        .submit_stream(req, &project_root, defaults)
+        .await
+    {
         Ok(task_id) => Json(serde_json::json!({
             "success": true,
             "task_id": task_id,

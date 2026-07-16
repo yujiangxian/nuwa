@@ -49,7 +49,7 @@ export default function CommandPalette(): React.ReactElement | null {
   const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
   const updateSetting = useUIStore((s) => s.updateSetting);
   const createSession = useUIStore((s) => s.createSession);
-  const currentCharacterId = useUIStore((s) => s.currentCharacterId);
+  const currentAgentId = useUIStore((s) => s.currentAgentId);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -60,11 +60,11 @@ export default function CommandPalette(): React.ReactElement | null {
       setSettingsOpen,
       updateSetting: (key, value) => updateSetting(key, value),
       createSession,
-      currentCharacterId,
+      currentAgentId,
       platform: detectPlatform(),
     };
     return buildCommandRegistry(ctx);
-  }, [setPage, setSettingsOpen, updateSetting, createSession, currentCharacterId]);
+  }, [setPage, setSettingsOpen, updateSetting, createSession, currentAgentId]);
 
   // 当前查询的 Filtered_Commands（纯函数计算）。
   const filtered = useMemo(

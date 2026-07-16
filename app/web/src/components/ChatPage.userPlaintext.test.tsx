@@ -6,7 +6,7 @@ import { render, cleanup } from '@testing-library/react';
 import fc from 'fast-check';
 import {
   useUIStore,
-  defaultCharacters,
+  defaultAgents,
   setChatDbForTesting,
   type ChatSession,
 } from '@/store/uiStore';
@@ -55,7 +55,13 @@ vi.mock('@/hooks/useApi', () => ({
 }));
 vi.mock('@/hooks/useRecorder', () => ({ useRecorder: () => mocks.recorder }));
 vi.mock('@/hooks/useAudioPlayer', () => ({ useAudioPlayer: () => mocks.player }));
-vi.mock('@/api/client', () => ({ apiClient: { post: mocks.apiPost } }));
+vi.mock('@/api/client', () => ({
+  apiClient: { post: mocks.apiPost },
+  setApiBaseUrl: vi.fn(),
+  getApiBaseUrl: () => '',
+  apiUrl: (path: string) => path,
+  longRequestTimeoutMs: () => 300000,
+}));
 vi.mock('@/store/toastStore', () => {
   const useToastStore: any = (selector: any) => selector({ addToast: mocks.addToast });
   useToastStore.getState = () => ({ addToast: mocks.addToast });
@@ -111,8 +117,8 @@ beforeEach(() => {
 
   useUIStore.setState({
     inputText: '',
-    currentCharacterId: 'assistant',
-    characters: defaultCharacters,
+    currentAgentId: 'agent-assistant',
+    agents: defaultAgents,
     sessions: baseSessions.map((s) => ({ ...s })),
     currentSessionId: 's1',
     messages: [],
