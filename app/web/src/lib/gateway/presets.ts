@@ -40,10 +40,17 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   },
   {
     id: 'deepseek',
-    label: 'DeepSeek',
+    label: 'DeepSeek（OpenAI 兼容）',
     protocol: 'openai-compatible',
     baseUrl: 'https://api.deepseek.com/v1',
-    defaultModel: 'deepseek-chat',
+    defaultModel: 'deepseek-v4-pro',
+  },
+  {
+    id: 'deepseek-anthropic',
+    label: 'DeepSeek（Anthropic 兼容）',
+    protocol: 'anthropic',
+    baseUrl: 'https://api.deepseek.com/anthropic',
+    defaultModel: 'deepseek-v4-pro',
   },
   {
     id: 'ollama',
