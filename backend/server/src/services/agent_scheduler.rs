@@ -17,7 +17,7 @@ use crate::constants::{
     ollama_chat_url, ollama_stream_timeout_secs, ollama_timeout_secs, DEFAULT_REF_AUDIO,
     DEFAULT_REF_TEXT, FALLBACK_ASR_MODEL, FALLBACK_LLM_MODEL, FALLBACK_TTS_MODEL,
 };
-use crate::state::AppConfig;
+use crate::state::{AppConfig, ModelInfo};
 
 /// Runtime defaults for agent registry / pipeline fallbacks (from AppConfig).
 #[derive(Debug, Clone)]
@@ -28,10 +28,16 @@ pub struct RuntimeDefaults {
     pub tts_model: String,
     pub ref_audio: String,
     pub ref_text: String,
+    /// Scanned `ModelInfo.path` by model id (prefer over nested vendor dirs).
+    pub model_paths: HashMap<String, String>,
 }
 
 impl RuntimeDefaults {
     pub fn from_app_config(cfg: &AppConfig) -> Self {
+        Self::from_app_state(cfg, &[])
+    }
+
+    pub fn from_app_state(cfg: &AppConfig, models: &[ModelInfo]) -> Self {
         let llm = cfg
             .current_llm_model
             .as_deref()
@@ -49,17 +55,27 @@ impl RuntimeDefaults {
             .clone()
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| FALLBACK_TTS_MODEL.to_string());
+        let model_paths = models
+            .iter()
+            .filter(|m| !m.path.trim().is_empty())
+            .map(|m| (m.id.clone(), m.path.clone()))
+            .collect();
         Self {
             llm_model: llm,
             asr_model: asr,
             tts_model: tts,
             ref_audio: DEFAULT_REF_AUDIO.to_string(),
             ref_text: DEFAULT_REF_TEXT.to_string(),
+            model_paths,
         }
     }
 
     pub fn fallback() -> Self {
         Self::from_app_config(&AppConfig::default())
+    }
+
+    fn installed_path(&self, model_id: &str) -> Option<&str> {
+        self.model_paths.get(model_id).map(|s| s.as_str())
     }
 }
 
@@ -699,10 +715,15 @@ impl AgentScheduler {
                         .and_then(|v| v.as_str())
                         .unwrap_or(defaults.asr_model.as_str());
 
-                    crate::services::inference::transcribe(&PathBuf::from(audio_path), model_id)
-                        .await
-                        .map(|text| serde_json::json!({ "text": text }))
-                        .map_err(|e| e.to_string())
+                    let installed = defaults.installed_path(model_id);
+                    crate::services::inference::transcribe_at(
+                        &PathBuf::from(audio_path),
+                        model_id,
+                        installed,
+                    )
+                    .await
+                    .map(|text| serde_json::json!({ "text": text }))
+                    .map_err(|e| e.to_string())
                 }
                 "tts" => {
                     let text = current_value
@@ -726,12 +747,14 @@ impl AgentScheduler {
                     let _ = tokio::fs::create_dir_all(&output_dir).await;
                     let output_path = output_dir.join(format!("agent_tts_{}.wav", &task_id[..8]));
 
-                    crate::services::inference::synthesize(
+                    let installed = defaults.installed_path(model_id);
+                    crate::services::inference::synthesize_at(
                         text,
                         model_id,
                         &PathBuf::from(ref_audio),
                         ref_text,
                         &output_path,
+                        installed,
                     )
                     .await
                     .map(|()| serde_json::json!({ "audio_path": output_path.to_string_lossy(), "text": text }))
@@ -863,11 +886,30 @@ mod tests {
         cfg.current_llm_model = Some("llm/my-model:latest".into());
         cfg.current_asr_model = Some("asr/whisper-tiny".into());
         cfg.current_tts_model = Some("tts/cosyvoice2".into());
-        let d = RuntimeDefaults::from_app_config(&cfg);
+        let models = vec![ModelInfo {
+            id: "asr/whisper-tiny".into(),
+            name: "w".into(),
+            version: String::new(),
+            quant: String::new(),
+            path: "models/asr/whisper-tiny".into(),
+            sample_rate: 16000,
+            model_type: "asr".into(),
+            size_mb: 0.0,
+            files: 0,
+            main_files: vec![],
+            description: String::new(),
+            source: "local".into(),
+            context_length: None,
+        }];
+        let d = RuntimeDefaults::from_app_state(&cfg, &models);
         assert_eq!(d.llm_model, "my-model:latest");
         assert_eq!(d.asr_model, "asr/whisper-tiny");
         assert_eq!(d.tts_model, "tts/cosyvoice2");
         assert_eq!(d.ref_audio, DEFAULT_REF_AUDIO);
+        assert_eq!(
+            d.installed_path("asr/whisper-tiny"),
+            Some("models/asr/whisper-tiny")
+        );
     }
 
     #[test]
@@ -887,6 +929,7 @@ mod tests {
             tts_model: "tts/openvoice".into(),
             ref_audio: DEFAULT_REF_AUDIO.into(),
             ref_text: DEFAULT_REF_TEXT.into(),
+            model_paths: HashMap::new(),
         };
         let reg = sched.registry(&d);
         let llm = reg.agents.iter().find(|a| a.id == "llm").unwrap();

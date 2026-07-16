@@ -250,7 +250,14 @@ pub async fn chat_stream(
     );
 
     let client = reqwest::Client::new();
-    let res = client.post(ollama_chat_url()).json(&ollama_req).send().await;
+    let res = client
+        .post(ollama_chat_url())
+        .json(&ollama_req)
+        .timeout(std::time::Duration::from_secs(
+            crate::constants::ollama_stream_timeout_secs(),
+        ))
+        .send()
+        .await;
 
     match res {
         Ok(resp) => {
