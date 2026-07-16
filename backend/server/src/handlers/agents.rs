@@ -21,7 +21,7 @@ use crate::state::AppState;
 pub async fn list_agents(State(state): State<Arc<RwLock<AppState>>>) -> Json<serde_json::Value> {
     let defaults = {
         let s = state.read().await;
-        RuntimeDefaults::from_app_config(&s.config)
+        RuntimeDefaults::from_app_state(&s.config, &s.models)
     };
     let registry = scheduler().registry(&defaults);
     Json(serde_json::to_value(registry).unwrap_or_default())
@@ -36,7 +36,7 @@ pub async fn run_pipeline(
         let s = state.read().await;
         (
             std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
-            RuntimeDefaults::from_app_config(&s.config),
+            RuntimeDefaults::from_app_state(&s.config, &s.models),
         )
     };
 
@@ -61,7 +61,7 @@ pub async fn run_pipeline_stream(
         let s = state.read().await;
         (
             std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
-            RuntimeDefaults::from_app_config(&s.config),
+            RuntimeDefaults::from_app_state(&s.config, &s.models),
         )
     };
 

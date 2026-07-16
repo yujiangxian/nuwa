@@ -78,7 +78,13 @@ vi.mock('@/hooks/useApi', () => ({
 
 vi.mock('@/hooks/useRecorder', () => ({ useRecorder: () => mocks.recorder }));
 vi.mock('@/hooks/useAudioQueue', () => ({ useAudioQueue: () => mocks.player }));
-vi.mock('@/api/client', () => ({ apiClient: { post: mocks.apiPost } }));
+vi.mock('@/api/client', () => ({
+  apiClient: { post: mocks.apiPost },
+  setApiBaseUrl: vi.fn(),
+  getApiBaseUrl: () => '',
+  apiUrl: (path: string) => path,
+  longRequestTimeoutMs: () => 300000,
+}));
 
 // Toast store mock that supports both the hook-selector form (ChatPage) and the
 // imperative getState() form (uiStore internal save-failed toasts).

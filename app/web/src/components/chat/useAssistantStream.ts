@@ -3,7 +3,7 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useUIStore, type ChatMessage, type Agent } from '@/store/uiStore';
-import { apiClient, apiUrl } from '@/api/client';
+import { apiClient, apiUrl, longRequestTimeoutMs } from '@/api/client';
 import { type ErrorDetail } from '@/lib/errorDetail';
 import type { TtsResponse } from '@/hooks/useApi';
 import type { UseAudioQueue } from '@/hooks/useAudioQueue';
@@ -237,7 +237,7 @@ export function useAssistantStream({
           const { data } = await apiClient.post<{ success: boolean; task_id: string; error?: string }>(
             '/api/agents/run-stream',
             { pipeline: 'text_chat_stream', input: agentInput },
-            { signal: ctrl.signal, timeout: 300000 },
+            { signal: ctrl.signal, timeout: longRequestTimeoutMs() },
           );
 
           if (data?.success && data?.task_id) {

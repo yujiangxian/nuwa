@@ -55,7 +55,13 @@ vi.mock('@/hooks/useApi', () => ({
 
 vi.mock('@/hooks/useRecorder', () => ({ useRecorder: () => mocks.recorder }));
 vi.mock('@/hooks/useAudioPlayer', () => ({ useAudioPlayer: () => mocks.player }));
-vi.mock('@/api/client', () => ({ apiClient: { post: mocks.apiPost } }));
+vi.mock('@/api/client', () => ({
+  apiClient: { post: mocks.apiPost },
+  setApiBaseUrl: vi.fn(),
+  getApiBaseUrl: () => '',
+  apiUrl: (path: string) => path,
+  longRequestTimeoutMs: () => 300000,
+}));
 vi.mock('@/store/toastStore', () => {
   const useToastStore: any = (selector: any) => selector({ addToast: mocks.addToast });
   useToastStore.getState = () => ({ addToast: mocks.addToast });

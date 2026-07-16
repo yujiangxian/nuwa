@@ -140,7 +140,7 @@ pub struct ChatError {
 }
 
 fn default_model() -> String {
-    "gemma4:e4b".to_string()
+    crate::constants::FALLBACK_LLM_MODEL.to_string()
 }
 
 /// Model_Selection 回退顺序：current_llm_model → 请求体 model。

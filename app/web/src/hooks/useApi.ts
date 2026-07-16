@@ -2,7 +2,7 @@
 // Copyright (c) 2025-2026 yujiangxian
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient, apiUrl } from '@/api/client';
+import { apiClient, apiUrl, longRequestTimeoutMs } from '@/api/client';
 import type { Model, Voice, AppConfig } from '@/store';
 import type {
   ModelType,
@@ -141,10 +141,8 @@ export function useSynthesize() {
           ref_audio: args.refAudio ?? '',
           ref_text: args.refText ?? '',
         },
-        // TTS 经 Python 子进程每次冷加载模型（CosyVoice 冷启 ~20s）且当前 ONNX
-        // 回退 CPU 推理（RTF≈3.9），合成一句正常长度回复实测可达 ~140s，
-        // 120s 会在后端实际成功前 abort 并误报失败；放宽到 300s。
-        { timeout: 300000 }
+        // TTS 经 Python 子进程冷加载，默认 300s（可用 VITE_API_LONG_TIMEOUT_MS 覆盖）。
+        { timeout: longRequestTimeoutMs() }
       );
       return data;
     },

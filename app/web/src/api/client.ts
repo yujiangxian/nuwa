@@ -25,6 +25,14 @@ function resolveTimeoutMs(): number {
   return Number.isFinite(n) && n > 0 ? n : 30_000;
 }
 
+/** Long-running requests (TTS / agent stream kickoff). `VITE_API_LONG_TIMEOUT_MS`, default 300s. */
+export function longRequestTimeoutMs(): number {
+  const raw =
+    typeof import.meta !== 'undefined' ? import.meta.env?.VITE_API_LONG_TIMEOUT_MS : undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 300_000;
+}
+
 /** Current API origin from settings (`''` = same-origin / Vite proxy). */
 let apiBaseUrl = '';
 
