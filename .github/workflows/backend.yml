@@ -7,11 +7,12 @@ on:
       - 'backend/**'
       - '.github/workflows/backend.yml'
   pull_request:
-    paths:
-      - 'backend/**'
+    # Always run on PRs so branch-protection required checks can complete
+    # even when the PR does not touch backend paths.
 
 jobs:
   check:
+    name: backend-check
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -28,6 +29,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
   test:
+    name: backend-test
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -41,6 +43,7 @@ jobs:
       - run: cargo test --workspace
 
   audit:
+    name: backend-audit
     runs-on: ubuntu-latest
     defaults:
       run:

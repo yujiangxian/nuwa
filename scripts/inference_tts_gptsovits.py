@@ -6,7 +6,8 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 import torch
-torch.backends.cudnn.enabled = False
+from nuwa_torch_device import resolve_torch_device
+_DEVICE = resolve_torch_device(torch)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--sovits-path', required=True, help='SoVITS 权重路径 (.pth)')
@@ -30,7 +31,7 @@ try:
     tts_config = TTS_Config({
         'sovits_path': args.sovits_path,
         'gpt_path': args.gpt_path,
-        'device': 'cuda' if torch.cuda.is_available() else 'cpu',
+        'device': _DEVICE,
         'is_half': False,
     })
     tts_pipeline = TTS(tts_config)

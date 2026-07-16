@@ -27,6 +27,8 @@ checkpoints/
 # Rust
 target/
 *.rs.bk
+# Local cargo mirror/overrides (machine-specific)
+**/.cargo/
 # 前端
 node_modules/
 dist/

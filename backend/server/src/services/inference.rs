@@ -6,6 +6,17 @@
 use std::path::{Path, PathBuf};
 
 use crate::util;
+use crate::util::gpu_backend::{self, GpuBackend};
+
+/// Inject `NUWA_GPU_BACKEND` (and default `CUDA_VISIBLE_DEVICES` for CUDA) into a subprocess.
+fn apply_inference_env(cmd: &mut tokio::process::Command) -> GpuBackend {
+    let backend = gpu_backend::resolve_backend();
+    cmd.env("NUWA_GPU_BACKEND", backend.as_str());
+    if backend == GpuBackend::Cuda && std::env::var_os("CUDA_VISIBLE_DEVICES").is_none() {
+        cmd.env("CUDA_VISIBLE_DEVICES", "0");
+    }
+    backend
+}
 
 /// Maximum wall-clock time for a single inference subprocess (seconds).
 /// Beyond this the subprocess is killed and an error returned to the caller.
@@ -119,10 +130,13 @@ pub async fn transcribe(audio_path: &Path, model_id: &str) -> Result<String, Str
         script_path.display()
     );
 
+    let mut cmd = tokio::process::Command::new(util::python_exe());
+    let backend = apply_inference_env(&mut cmd);
+    tracing::info!(backend = backend.as_str(), "ASR inference Python env");
+
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(INFERENCE_TIMEOUT_SECS),
-        tokio::process::Command::new(util::python_exe())
-            .arg(&script_path)
+        cmd.arg(&script_path)
             .arg("--model-path")
             .arg(&model_path)
             .arg("--audio")
@@ -202,10 +216,13 @@ pub async fn synthesize(
         output_path.display()
     );
 
+    let mut cmd = tokio::process::Command::new(util::python_exe());
+    let backend = apply_inference_env(&mut cmd);
+    tracing::info!(backend = backend.as_str(), "TTS inference Python env");
+
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(INFERENCE_TIMEOUT_SECS),
-        tokio::process::Command::new(util::python_exe())
-            .arg(&script_path)
+        cmd.arg(&script_path)
             .arg("--model-path")
             .arg(&model_path)
             .arg("--text")
@@ -299,10 +316,13 @@ pub async fn synthesize_script(
         output_path.display()
     );
 
+    let mut cmd = tokio::process::Command::new(util::python_exe());
+    let backend = apply_inference_env(&mut cmd);
+    tracing::info!(backend = backend.as_str(), "TTS script inference Python env");
+
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(INFERENCE_TIMEOUT_SECS),
-        tokio::process::Command::new(util::python_exe())
-            .arg(&script_path)
+        cmd.arg(&script_path)
             .arg("--model-path")
             .arg(&model_path)
             .arg("--segments")
