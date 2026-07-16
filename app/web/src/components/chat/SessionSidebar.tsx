@@ -38,8 +38,8 @@ function renderHighlightedSnippet(snippet: string, highlights: HighlightRange[])
 }
 
 export type SessionSidebarProps = {
-  currentCharacterId: string;
-  createSession: (characterId: string) => void;
+  currentAgentId: string;
+  createSession: (agentId: string) => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   showSearch: boolean;
@@ -68,7 +68,7 @@ export type SessionSidebarProps = {
 };
 
 export function SessionSidebar({
-  currentCharacterId,
+  currentAgentId,
   createSession,
   searchQuery,
   setSearchQuery,
@@ -100,7 +100,7 @@ export function SessionSidebar({
     <aside className="hidden md:flex w-[260px] flex-col shrink-0" style={{ borderRight: '1px solid var(--border)' }}>
       <div className="p-4">
         <button
-          onClick={() => createSession(currentCharacterId)}
+          onClick={() => createSession(currentAgentId)}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl cursor-pointer transition-all"
           style={{ background: 'rgba(72,202,228,0.08)', color: 'var(--primary)', border: '1px solid rgba(72,202,228,0.15)', fontSize: 13, fontWeight: 500 }}
         >

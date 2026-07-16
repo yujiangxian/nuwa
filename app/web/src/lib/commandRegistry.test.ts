@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+﻿// SPDX-License-Identifier: MIT
 // Copyright (c) 2025-2026 yujiangxian
 
 // Feature: command-palette — Command_Registry builder 单元测试（任务 4.2，Req 2, 5）
@@ -24,7 +24,7 @@ function makeCtx(overrides: Partial<CommandRegistryContext> = {}): {
     setSettingsOpen,
     updateSetting,
     createSession,
-    currentCharacterId: 'assistant',
+    currentAgentId: 'assistant',
     platform: 'other',
     ...overrides,
   };
@@ -45,10 +45,10 @@ describe('buildCommandRegistry — 结构', () => {
     }
   });
 
-  it('7 个 App_Page 各有导航命令（Req 2.2）', () => {
+  it('各 App_Page 均有导航命令（含 agents）', () => {
     const { ctx } = makeCtx();
     const items = buildCommandRegistry(ctx);
-    const pages: AppPage[] = ['home', 'chat', 'voice', 'transcribe', 'models', 'characters', 'presets'];
+    const pages: AppPage[] = ['home', 'chat', 'agents', 'voice', 'transcribe', 'models', 'presets'];
     for (const page of pages) {
       expect(items.some((i) => i.id === `nav.${page}` && i.group === 'navigation')).toBe(true);
     }
@@ -113,8 +113,8 @@ describe('buildCommandRegistry — run 副作用接线', () => {
     expect(updateSetting).toHaveBeenCalledWith('language', LOCALE_LABELS.en);
   });
 
-  it('新建会话 run 调用 createSession(currentCharacterId) + setPage("chat")（Req 5.5）', () => {
-    const { ctx, createSession, setPage } = makeCtx({ currentCharacterId: 'socrates' });
+  it('新建会话 run 调用 createSession(currentAgentId) + setPage("chat")（Req 5.5）', () => {
+    const { ctx, createSession, setPage } = makeCtx({ currentAgentId: 'socrates' });
     const items = buildCommandRegistry(ctx);
     items.find((i) => i.id === 'session.new')!.run();
     expect(createSession).toHaveBeenCalledWith('socrates');
