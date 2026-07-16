@@ -7,11 +7,12 @@ on:
       - 'app/web/**'
       - '.github/workflows/frontend.yml'
   pull_request:
-    paths:
-      - 'app/web/**'
+    # Always run on PRs so branch-protection required checks can complete
+    # even when the PR does not touch frontend paths.
 
 jobs:
   typecheck:
+    name: frontend-typecheck
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -27,6 +28,7 @@ jobs:
       - run: npx tsc --noEmit
 
   lint:
+    name: frontend-lint
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -42,6 +44,7 @@ jobs:
       - run: npm run lint
 
   test:
+    name: frontend-test
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -57,6 +60,7 @@ jobs:
       - run: npx vitest run --reporter=github-actions
 
   audit:
+    name: frontend-audit
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -72,6 +76,7 @@ jobs:
         run: npm audit --audit-level=high
 
   e2e:
+    name: frontend-e2e
     runs-on: ubuntu-latest
     defaults:
       run:
