@@ -156,6 +156,8 @@ export interface GpuInfo {
   used_vram_mb: number;
   free_vram_mb: number;
   usage_percent: number;
+  /** Resolved Nuwa GPU backend: cuda | rocm | cpu */
+  backend?: string;
 }
 
 /**

@@ -38,7 +38,9 @@ const SAFE_CHARS = [
 const wordArb = fc.stringOf(fc.constantFrom(...SAFE_CHARS), { minLength: 1, maxLength: 12 });
 const textArb = fc
   .array(wordArb, { minLength: 1, maxLength: 8 })
-  .map((words) => words.join(' '));
+  .map((words) => words.join(' '))
+  // GFM treats "1. foo" as an ordered list, which drops the "1. " from visible text.
+  .filter((text) => !/(?:^|\s)\d+\.\s/.test(text));
 
 describe('MarkdownMessage 纯文本语义保留', () => {
   it('Property 1: 纯文本语义保留', () => {
