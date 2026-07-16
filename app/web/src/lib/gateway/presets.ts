@@ -66,4 +66,25 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     baseUrl: 'http://localhost:1234/v1',
     defaultModel: '',
   },
+  {
+    id: 'xai-supergrok',
+    label: 'xAI SuperGrok（订阅）',
+    protocol: 'xai-oauth',
+    baseUrl: 'nuwa://xai-oauth',
+    defaultModel: 'grok-build-0.1',
+  },
+  {
+    id: 'claude-code',
+    label: 'Claude Code（本机）',
+    protocol: 'claude-code',
+    baseUrl: 'nuwa://claude-code',
+    defaultModel: 'sonnet',
+  },
+  {
+    id: 'cursor-agent',
+    label: 'Cursor Agent（本机）',
+    protocol: 'cursor-sdk',
+    baseUrl: 'nuwa://cursor-sdk',
+    defaultModel: 'composer-2.5',
+  },
 ];

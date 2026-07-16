@@ -11,15 +11,16 @@ import { useAudioQueue } from '@/hooks/useAudioQueue';
 import { resolveVoiceRef } from '@/lib/voice';
 import { organizeSessions } from '@/lib/sessionOrganize';
 import { resolveContextLength } from '@/lib/contextWindow';
+import { configLlmModelId, displayModelLabel } from '@/lib/displayModel';
 import { resolveReservedTokens, computeBudget } from '@/lib/contextBudget';
 import { normalizeQuery, DEBOUNCE_INTERVAL, type SearchResult } from '@/lib/chatSearch';
 import { INPUT_MAX_LENGTH, processTemplateVariables } from '@/lib/promptPreset';
 import {
   isSlashActive, parseSlashQuery, buildCommandCatalog, filterCommands,
-  clampHighlightIndex, buildInsertedPresetText, type CommandItem,
+  clampHighlightIndex, buildInsertedPresetText, parseMediaSlash, type CommandItem,
 } from '@/lib/slashCommand';
 import { ArrowLeft, Settings, User, Monitor, Code } from 'lucide-react';
-import { apiUrl } from '@/api/client';
+import { apiClient, apiUrl } from '@/api/client';
 import { useAssistantStream } from './useAssistantStream';
 import { SessionSidebar, DRAFT_KEY } from './SessionSidebar';
 import { MessageList } from './MessageList';
@@ -46,6 +47,7 @@ export function ChatPage() {
   const renameSession = useUIStore((s) => s.renameSession);
   const togglePin = useUIStore((s) => s.togglePin);
   const appendMessage = useUIStore((s) => s.appendMessage);
+  const updateMessageMedia = useUIStore((s) => s.updateMessageMedia);
   const deleteMessage = useUIStore((s) => s.deleteMessage);
   const regenerateLast = useUIStore((s) => s.regenerateLast);
   const editAndResend = useUIStore((s) => s.editAndResend);
@@ -75,10 +77,10 @@ export function ChatPage() {
   const recorder = useRecorder();
   const player = useAudioQueue();
 
-  // 当前 ASR/TTS 模型：优先 current_models[type]，回退兼容字段
+  // 当前 ASR/TTS 模型：优先 current_models[type]，回退兼容字段（可为空，不伪造 ID）
   const currentAsrModel = config?.current_models?.asr ?? config?.current_asr_model ?? undefined;
   const currentTtsModel = config?.current_models?.tts ?? config?.current_tts_model ?? undefined;
-  const currentLlmModel = config?.current_models?.llm ?? config?.current_llm_model ?? 'gemma4:e4b';
+  const configuredLlmModel = configLlmModelId(config);
 
   // Character dropdown state → Agent picker
   const [charMenuOpen, setCharMenuOpen] = useState(false);
@@ -115,14 +117,17 @@ export function ChatPage() {
   const currentAgent = agents.find((a) => a.id === currentAgentId);
   const activePersona = currentAgent;
   const currentVoice = voices.find((v) => v.id === activePersona?.voiceId)?.name ?? '默认音色';
+  const modelDisplayLabel = displayModelLabel(currentAgent, config);
 
   // Context_Window：当前 LLM 模型上下文长度候选值。InstalledModel 元数据暂无该字段，
   // 故为 undefined → Context_Resolver 回退默认值并标记为估算（forward-compatible）。
   const activeModelContextLength: number | undefined = useMemo(() => {
-    if (!currentLlmModel) return undefined;
-    const model = models.find((m: { id: string; context_length?: number }) => m.id === `llm/${currentLlmModel}` || m.id === currentLlmModel);
+    if (!configuredLlmModel) return undefined;
+    const model = models.find((m: { id: string; context_length?: number }) =>
+      m.id === `llm/${configuredLlmModel}` || m.id === configuredLlmModel,
+    );
     return model?.context_length ?? undefined;
-  }, [currentLlmModel, models]);
+  }, [configuredLlmModel, models]);
 
   const {
     isTyping,
@@ -243,9 +248,104 @@ export function ChatPage() {
     }
   }, [activePersona, voices, currentTtsModel, synthesize, player, addToast, setTtsLoadingId]);
 
+  const runMediaGeneration = useCallback(async (kind: 'image' | 'video', prompt: string) => {
+    const userMsg: ChatMessage = {
+      id: `${Date.now()}-u`,
+      role: 'user',
+      content: `/${kind} ${prompt}`,
+    };
+    await appendMessage(userMsg);
+    const assistantId = `${Date.now()}-a`;
+    await appendMessage({
+      id: assistantId,
+      role: 'assistant',
+      content: kind === 'image' ? '正在生成图像…' : '正在生成视频…',
+      media: { kind, url: '', prompt, status: 'pending' },
+    });
+
+    try {
+      if (kind === 'image') {
+        const resp = await apiClient.post('/api/xai/images', { prompt }, { timeout: 180_000 });
+        const data = resp.data as { url: string; prompt?: string };
+        updateMessageMedia(assistantId, {
+          kind: 'image',
+          url: data.url,
+          prompt,
+          status: 'done',
+        });
+        useUIStore.setState((s) => ({
+          messages: s.messages.map((m) =>
+            m.id === assistantId ? { ...m, content: prompt } : m,
+          ),
+        }));
+      } else {
+        const submit = await apiClient.post('/api/xai/videos', { prompt, duration: 8 }, { timeout: 60_000 });
+        const { request_id } = submit.data as { request_id: string };
+        let done = false;
+        for (let i = 0; i < 90 && !done; i++) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const poll = await apiClient.get(`/api/xai/videos/${request_id}`);
+          const data = poll.data as {
+            status: string;
+            url?: string;
+            error?: string;
+          };
+          if (data.status === 'done' && data.url) {
+            updateMessageMedia(assistantId, {
+              kind: 'video',
+              url: data.url,
+              prompt,
+              status: 'done',
+            });
+            useUIStore.setState((s) => ({
+              messages: s.messages.map((m) =>
+                m.id === assistantId ? { ...m, content: prompt } : m,
+              ),
+            }));
+            done = true;
+          } else if (data.status === 'failed' || data.status === 'expired') {
+            throw new Error(data.error || '视频生成失败');
+          }
+        }
+        if (!done) throw new Error('视频生成超时');
+      }
+    } catch (e: unknown) {
+      const msg = errorMessage(e, '生成失败');
+      updateMessageMedia(assistantId, {
+        kind,
+        url: '',
+        prompt,
+        status: 'error',
+        error: msg,
+      });
+      useUIStore.setState((s) => ({
+        messages: s.messages.map((m) =>
+          m.id === assistantId ? { ...m, content: `生成失败：${msg}` } : m,
+        ),
+      }));
+      addToast({ message: msg, type: 'error' });
+    }
+  }, [appendMessage, updateMessageMedia, addToast]);
+
   const handleSend = useCallback(async () => {
     if (!inputText.trim() || isTyping || sendingRef.current) return;
     sendingRef.current = true;
+
+    const mediaCmd = parseMediaSlash(inputText);
+    if (mediaCmd) {
+      setInputText('');
+      if (currentSessionId) {
+        localStorage.setItem(`${DRAFT_KEY}:${currentSessionId}`, '');
+      }
+      const ta = document.querySelector('textarea');
+      if (ta) { ta.style.height = 'auto'; ta.focus(); }
+      try {
+        await runMediaGeneration(mediaCmd.kind, mediaCmd.prompt);
+      } finally {
+        sendingRef.current = false;
+      }
+      return;
+    }
 
     // 1) 用户消息落库（appendMessage 负责 push、自动标题、更新 updatedAt 与持久化）。
     const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', content: inputText };
@@ -265,8 +365,12 @@ export function ChatPage() {
     //    交由可复用的 runAssistantStream 完成建连/流式/降级/定型/朗读。
     const history = messages.map((m) => ({ role: m.role, content: m.content }));
     const payloadMessages = [...history, { role: 'user', content: userMsg.content }];
-    await runAssistantStream(payloadMessages);
-  }, [inputText, isTyping, messages, setInputText, appendMessage, runAssistantStream, currentSessionId, sendingRef]);
+    try {
+      await runAssistantStream(payloadMessages);
+    } finally {
+      sendingRef.current = false;
+    }
+  }, [inputText, isTyping, messages, setInputText, appendMessage, runAssistantStream, currentSessionId, sendingRef, runMediaGeneration]);
 
   // Keyboard shortcuts: Ctrl+K for palette, Ctrl+N for new session, Escape for stop/clear
   useEffect(() => {
@@ -487,6 +591,14 @@ export function ChatPage() {
         case 'presets':
           setPage('presets'); // Req 5.7
           break;
+        case 'image':
+          setInputText('/image ');
+          inputRef.current?.focus();
+          break;
+        case 'video':
+          setInputText('/video ');
+          inputRef.current?.focus();
+          break;
       }
     }
     closeSlashMenu(); // 任一选中后关闭菜单（Req 5.2）。
@@ -530,7 +642,7 @@ export function ChatPage() {
         <div className="flex items-center gap-2">
           <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full glass" style={{ border: '1px solid var(--border)' }}>
             <Monitor size={14} style={{ color: 'var(--text-secondary)' }} />
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{currentLlmModel?.replace(/^llm\//, '')}</span>
+            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{modelDisplayLabel}</span>
           </div>
           {/* Agent dropdown */}
           <div className="relative">
@@ -725,7 +837,7 @@ export function ChatPage() {
             setThinkOpen={setThinkOpen}
             thinkRef={thinkRef}
             streamingContent={streamingContent}
-            currentLlmModel={currentLlmModel}
+            currentLlmModel={modelDisplayLabel}
             accRef={accRef}
             ttsStartedAtRef={ttsStartedAtRef}
             autoPlay={autoPlay}

@@ -8,10 +8,10 @@
  */
 
 import type { GatewayProbeArgs, GatewayProbeResult, GatewayStreamArgs } from './types';
+import { probeRequireModel, requireExternalModel } from './requireModel';
 import { anthropicMessagesUrl, anthropicModelsUrl, normalizeBaseUrl } from './url';
 
 const ANTHROPIC_VERSION = '2023-06-01';
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
 /** Anthropic 的 max_tokens 为必填；8192 对当前全系模型（≥64k 输出）都安全。 */
 const DEFAULT_MAX_TOKENS = 8192;
 
@@ -59,6 +59,7 @@ function clampTemperature(t: number): number {
 export async function streamAnthropic(args: GatewayStreamArgs): Promise<void> {
   const base = normalizeBaseUrl(args.baseUrl);
   if (!base) throw new Error('缺少外部 Agent 地址');
+  const model = requireExternalModel(args.model);
 
   const messages = toAnthropicMessages(args.messages);
   if (messages.length === 0) throw new Error('对话内容为空');
@@ -68,7 +69,7 @@ export async function streamAnthropic(args: GatewayStreamArgs): Promise<void> {
     headers: anthropicHeaders(args.apiKey),
     signal: args.signal,
     body: JSON.stringify({
-      model: args.model || DEFAULT_MODEL,
+      model,
       max_tokens: args.maxTokens ?? DEFAULT_MAX_TOKENS,
       stream: true,
       messages,
@@ -142,13 +143,18 @@ export async function probeAnthropic(opts: GatewayProbeArgs): Promise<GatewayPro
     /* fall through to messages probe */
   }
 
+  const model = probeRequireModel(opts.model);
+  if (!model) {
+    return { ok: false, message: '请填写模型 ID' };
+  }
+
   try {
     const res = await fetch(anthropicMessagesUrl(base), {
       method: 'POST',
       headers,
       signal: opts.signal,
       body: JSON.stringify({
-        model: opts.model || DEFAULT_MODEL,
+        model,
         max_tokens: 1,
         messages: [{ role: 'user', content: 'ping' }],
       }),

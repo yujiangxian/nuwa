@@ -140,12 +140,14 @@ pub struct ChatError {
 }
 
 fn default_model() -> String {
-    crate::constants::FALLBACK_LLM_MODEL.to_string()
+    String::new()
 }
 
-/// Model_Selection 回退顺序：current_llm_model → 请求体 model。
+/// Model_Selection 回退顺序：current_llm_model → 请求体 model（均可为空）。
 pub fn resolve_model(current_llm_model: Option<String>, request_model: &str) -> String {
-    current_llm_model.unwrap_or_else(|| request_model.to_string())
+    current_llm_model
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| request_model.trim().to_string())
 }
 
 /// 把内部模型 ID 规范化为 Ollama 实际模型名（Ollama_Model_Name）。
@@ -221,6 +223,11 @@ pub async fn chat(
     };
 
     let model = resolve_model(config.current_llm_model, &req.model);
+    if model.trim().is_empty() {
+        return Err(Json(ChatError {
+            error: "请先在模型管理中选择对话模型".into(),
+        }));
+    }
     // 规范化为 Ollama 裸模型名（剥离内部 `llm/` 前缀），否则 Ollama 报 model not found。
     let model = ollama_model_name(&model).to_string();
 
@@ -287,8 +294,7 @@ mod tests {
 
     // Feature: streaming-chat-output, Property 4: Model_Selection 回退顺序
     // Validates: Requirements 1.2, 7.2
-    // 对任意 (current_llm_model, current_model_id, request_model)（前两者各可 Some/None），
-    // resolve_model 返回值等于 current_llm_model 若 Some，否则 request_model。
+    // current_llm_model 非空优先；空 / None 时用 request_model.trim()。
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(200))]
 
@@ -298,7 +304,9 @@ mod tests {
             request_model in ".*",
         ) {
             let result = resolve_model(llm.clone(), &request_model);
-            let expected = llm.unwrap_or_else(|| request_model.clone());
+            let expected = llm
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| request_model.trim().to_string());
             prop_assert_eq!(result, expected);
         }
     }
@@ -311,6 +319,13 @@ mod tests {
     #[test]
     fn resolve_model_falls_back_to_request_model() {
         assert_eq!(resolve_model(None, "c"), "c");
+        assert_eq!(resolve_model(Some("".into()), "c"), "c");
+        assert_eq!(resolve_model(Some("  ".into()), "c"), "c");
+    }
+
+    #[test]
+    fn default_model_is_empty() {
+        assert_eq!(default_model(), "");
     }
 
     #[test]

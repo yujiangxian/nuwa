@@ -238,6 +238,11 @@ pub async fn chat_stream(
     };
 
     let model = resolve_model(config.current_llm_model, &req.model);
+    if model.trim().is_empty() {
+        return ndjson_response(StreamState::SingleError(
+            "请先在模型管理中选择对话模型".into(),
+        ));
+    }
     // 规范化为 Ollama 裸模型名（剥离内部 `llm/` 前缀），否则 Ollama 报 model not found。
     let model = ollama_model_name(&model).to_string();
 

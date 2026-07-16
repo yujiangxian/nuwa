@@ -9,16 +9,41 @@ pub const OLLAMA_CHAT_URL: &str = "http://localhost:11434/api/chat";
 /// Ollama `/api/tags` 端点默认地址（模型列表扫描）。
 pub const OLLAMA_TAGS_URL: &str = "http://localhost:11434/api/tags";
 
-/// 默认 TTS 参考音频路径 — 季莹莹 音色。
+/// 默认 TTS 参考音频路径（可被 `NUWA_DEFAULT_REF_AUDIO` 覆盖）。
 pub const DEFAULT_REF_AUDIO: &str = "assets/datasets/voices/jyy_000.wav";
 
-/// 默认 TTS 参考音频对应文本。
+/// 默认 TTS 参考音频对应文本（可被 `NUWA_DEFAULT_REF_TEXT` 覆盖）。
 pub const DEFAULT_REF_TEXT: &str = "穿上它能更好完成任务它很美";
 
-/// 当 `AppConfig` 未选择模型时的回退 ID（registry / 调度器用）。
-pub const FALLBACK_LLM_MODEL: &str = "gemma4:e4b";
-pub const FALLBACK_ASR_MODEL: &str = "asr/paraformer-large";
-pub const FALLBACK_TTS_MODEL: &str = "tts/glm-tts-full";
+/// 解析默认参考音频路径：`NUWA_DEFAULT_REF_AUDIO` → 内置路径。
+pub fn default_ref_audio() -> String {
+    env_nonempty("NUWA_DEFAULT_REF_AUDIO").unwrap_or_else(|| DEFAULT_REF_AUDIO.to_string())
+}
+
+/// 解析默认参考文本：`NUWA_DEFAULT_REF_TEXT` → 内置文本。
+pub fn default_ref_text() -> String {
+    env_nonempty("NUWA_DEFAULT_REF_TEXT").unwrap_or_else(|| DEFAULT_REF_TEXT.to_string())
+}
+
+/// 运维可选回退（无默认值）。配置与扫描列表都空时才使用。
+pub fn env_fallback_llm_model() -> Option<String> {
+    env_nonempty("NUWA_FALLBACK_LLM_MODEL")
+}
+
+pub fn env_fallback_asr_model() -> Option<String> {
+    env_nonempty("NUWA_FALLBACK_ASR_MODEL")
+}
+
+pub fn env_fallback_tts_model() -> Option<String> {
+    env_nonempty("NUWA_FALLBACK_TTS_MODEL")
+}
+
+fn env_nonempty(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
 
 /// Resolve the Ollama chat endpoint (env `OLLAMA_CHAT_URL` or [`OLLAMA_CHAT_URL`]).
 pub fn ollama_chat_url() -> String {
