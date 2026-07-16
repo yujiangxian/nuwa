@@ -7,8 +7,11 @@
 //! - `downloader`: 模型下载封装
 
 pub mod agent_scheduler;
+pub mod coding_cli;
 pub mod downloader;
 pub mod inference;
 pub mod model_scanner;
 pub mod repo_fetcher;
 pub mod voice_library;
+pub mod xai_client;
+pub mod xai_oauth;

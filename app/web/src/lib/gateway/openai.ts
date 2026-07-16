@@ -7,6 +7,7 @@
  */
 
 import type { GatewayProbeArgs, GatewayProbeResult, GatewayStreamArgs } from './types';
+import { probeRequireModel, requireExternalModel } from './requireModel';
 import { normalizeBaseUrl } from './url';
 
 /**
@@ -16,6 +17,7 @@ import { normalizeBaseUrl } from './url';
 export async function streamOpenAICompatible(args: GatewayStreamArgs): Promise<void> {
   const base = normalizeBaseUrl(args.baseUrl);
   if (!base) throw new Error('缺少外部 Agent 地址');
+  const model = requireExternalModel(args.model);
 
   const url = `${base}/chat/completions`;
   const bodyMessages = [...args.messages];
@@ -33,7 +35,7 @@ export async function streamOpenAICompatible(args: GatewayStreamArgs): Promise<v
     headers,
     signal: args.signal,
     body: JSON.stringify({
-      model: args.model || 'gpt-4o-mini',
+      model,
       stream: true,
       messages: bodyMessages,
       ...(typeof args.temperature === 'number' ? { temperature: args.temperature } : {}),
@@ -97,13 +99,18 @@ export async function probeOpenAICompatible(opts: GatewayProbeArgs): Promise<Gat
     /* fall through to chat probe */
   }
 
+  const model = probeRequireModel(opts.model);
+  if (!model) {
+    return { ok: false, message: '请填写模型 ID' };
+  }
+
   try {
     const res = await fetch(`${base}/chat/completions`, {
       method: 'POST',
       headers,
       signal: opts.signal,
       body: JSON.stringify({
-        model: opts.model || 'gpt-4o-mini',
+        model,
         stream: false,
         max_tokens: 1,
         messages: [{ role: 'user', content: 'ping' }],

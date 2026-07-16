@@ -27,7 +27,7 @@ export interface CommandItem {
 }
 
 /** 内置命令的稳定 key（供选中分发使用）。 */
-export type BuiltinKey = 'clear' | 'retry' | 'presets';
+export type BuiltinKey = 'clear' | 'retry' | 'presets' | 'image' | 'video';
 
 /** Filtered_Commands 为空时 Highlight_Index 的约定空值。 */
 export const EMPTY_HIGHLIGHT = -1;
@@ -62,13 +62,24 @@ export function buildSlashText(query: string): string {
   return `/${query}`;
 }
 
-/** 固定内置命令集合（顺序稳定：clear, retry, presets）（Req 2.1）。 */
+/** 固定内置命令集合（顺序稳定：clear, retry, presets, image, video）（Req 2.1）。 */
 export function buildBuiltinCommands(): CommandItem[] {
   return [
     { kind: 'builtin', commandKey: 'clear', title: '/clear', description: '清空当前输入' },
     { kind: 'builtin', commandKey: 'retry', title: '/retry', description: '重新生成上一条回复' },
     { kind: 'builtin', commandKey: 'presets', title: '/presets', description: '打开提示词预设页' },
+    { kind: 'builtin', commandKey: 'image', title: '/image', description: '用 SuperGrok 生成图像（后接提示词）' },
+    { kind: 'builtin', commandKey: 'video', title: '/video', description: '用 SuperGrok 生成视频（后接提示词）' },
   ];
+}
+
+/** 解析 `/image|video <prompt>`；不匹配返回 null。 */
+export function parseMediaSlash(text: string): { kind: 'image' | 'video'; prompt: string } | null {
+  const m = text.trim().match(/^\/(image|video)\s+(.+)$/is);
+  if (!m) return null;
+  const prompt = m[2].trim();
+  if (!prompt) return null;
+  return { kind: m[1].toLowerCase() as 'image' | 'video', prompt };
 }
 
 /** 由单条预设标题派生可匹配的 commandKey：标题去空白后小写，为空则退回 id 小写（Req 2.6）。 */

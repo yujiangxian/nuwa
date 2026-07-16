@@ -14,10 +14,32 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::OnceLock;
 
 use crate::constants::{
-    ollama_chat_url, ollama_stream_timeout_secs, ollama_timeout_secs, DEFAULT_REF_AUDIO,
-    DEFAULT_REF_TEXT, FALLBACK_ASR_MODEL, FALLBACK_LLM_MODEL, FALLBACK_TTS_MODEL,
+    default_ref_audio, default_ref_text, env_fallback_asr_model, env_fallback_llm_model,
+    env_fallback_tts_model, ollama_chat_url, ollama_stream_timeout_secs, ollama_timeout_secs,
 };
 use crate::state::{AppConfig, ModelInfo};
+
+/// 从扫描列表取首个匹配类型的模型 ID（llm 会剥离 `llm/` 前缀供 Ollama 使用）。
+fn first_scanned_model(models: &[ModelInfo], model_type: &str) -> Option<String> {
+    models.iter().find_map(|m| {
+        let matches = m.model_type == model_type
+            || (model_type == "llm" && m.id.starts_with("llm/"))
+            || (model_type == "asr" && m.id.starts_with("asr/"))
+            || (model_type == "tts" && m.id.starts_with("tts/"));
+        if !matches {
+            return None;
+        }
+        let id = m.id.trim();
+        if id.is_empty() {
+            return None;
+        }
+        if model_type == "llm" {
+            Some(id.strip_prefix("llm/").unwrap_or(id).to_string())
+        } else {
+            Some(id.to_string())
+        }
+    })
+}
 
 /// Runtime defaults for agent registry / pipeline fallbacks (from AppConfig).
 #[derive(Debug, Clone)]
@@ -43,18 +65,24 @@ impl RuntimeDefaults {
             .as_deref()
             .map(|id| id.strip_prefix("llm/").unwrap_or(id))
             .filter(|s| !s.is_empty())
-            .unwrap_or(FALLBACK_LLM_MODEL)
-            .to_string();
+            .map(|s| s.to_string())
+            .or_else(|| first_scanned_model(models, "llm"))
+            .or_else(env_fallback_llm_model)
+            .unwrap_or_default();
         let asr = cfg
             .current_asr_model
             .clone()
             .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| FALLBACK_ASR_MODEL.to_string());
+            .or_else(|| first_scanned_model(models, "asr"))
+            .or_else(env_fallback_asr_model)
+            .unwrap_or_default();
         let tts = cfg
             .current_tts_model
             .clone()
             .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| FALLBACK_TTS_MODEL.to_string());
+            .or_else(|| first_scanned_model(models, "tts"))
+            .or_else(env_fallback_tts_model)
+            .unwrap_or_default();
         let model_paths = models
             .iter()
             .filter(|m| !m.path.trim().is_empty())
@@ -64,8 +92,8 @@ impl RuntimeDefaults {
             llm_model: llm,
             asr_model: asr,
             tts_model: tts,
-            ref_audio: DEFAULT_REF_AUDIO.to_string(),
-            ref_text: DEFAULT_REF_TEXT.to_string(),
+            ref_audio: default_ref_audio(),
+            ref_text: default_ref_text(),
             model_paths,
         }
     }
@@ -447,6 +475,27 @@ impl AgentScheduler {
                 .and_then(|v| v.as_str())
                 .map(|id| id.strip_prefix("llm/").unwrap_or(id))
                 .unwrap_or(defaults.llm_model.as_str());
+            if model_id.trim().is_empty() {
+                let error_msg = "请先在模型管理中选择对话模型".to_string();
+                let sched = scheduler();
+                {
+                    let mut tasks = sched.tasks.write().await;
+                    if let Some(t) = tasks.get_mut(&tid) {
+                        t.status = TaskStatus::Failed;
+                        t.error = Some(error_msg.clone());
+                    }
+                }
+                let _ = tx.send(TaskEvent {
+                    task_id: tid.clone(),
+                    status: TaskStatus::Failed,
+                    step: None,
+                    progress: None,
+                    message: Some(error_msg),
+                    delta: None,
+                    thinking: None,
+                });
+                return;
+            }
             let system_prompt = input.get("system").and_then(|v| v.as_str());
 
             let mut ollama_msgs = Vec::new();
@@ -771,33 +820,36 @@ impl AgentScheduler {
                         .and_then(|v| v.as_str())
                         .map(|id| id.strip_prefix("llm/").unwrap_or(id))
                         .unwrap_or(defaults.llm_model.as_str());
+                    if model_id.trim().is_empty() {
+                        Err("请先在模型管理中选择对话模型".to_string())
+                    } else {
+                        // 通过 Ollama API 调用
+                        let ollama_body = serde_json::json!({
+                            "model": model_id,
+                            "messages": [{"role": "user", "content": prompt}],
+                            "stream": false,
+                        });
 
-                    // 通过 Ollama API 调用
-                    let ollama_body = serde_json::json!({
-                        "model": model_id,
-                        "messages": [{"role": "user", "content": prompt}],
-                        "stream": false,
-                    });
-
-                    let client = reqwest::Client::new();
-                    match client
-                        .post(ollama_chat_url())
-                        .json(&ollama_body)
-                        .timeout(std::time::Duration::from_secs(ollama_timeout_secs()))
-                        .send()
-                        .await
-                    {
-                        Ok(resp) => match resp.json::<serde_json::Value>().await {
-                            Ok(body) => {
-                                let content = body["message"]["content"]
-                                    .as_str()
-                                    .unwrap_or("")
-                                    .to_string();
-                                Ok(serde_json::json!({ "text": content, "role": "assistant" }))
-                            }
-                            Err(e) => Err(format!("解析 Ollama 响应失败: {}", e)),
-                        },
-                        Err(e) => Err(format!("Ollama 请求失败: {}", e)),
+                        let client = reqwest::Client::new();
+                        match client
+                            .post(ollama_chat_url())
+                            .json(&ollama_body)
+                            .timeout(std::time::Duration::from_secs(ollama_timeout_secs()))
+                            .send()
+                            .await
+                        {
+                            Ok(resp) => match resp.json::<serde_json::Value>().await {
+                                Ok(body) => {
+                                    let content = body["message"]["content"]
+                                        .as_str()
+                                        .unwrap_or("")
+                                        .to_string();
+                                    Ok(serde_json::json!({ "text": content, "role": "assistant" }))
+                                }
+                                Err(e) => Err(format!("解析 Ollama 响应失败: {}", e)),
+                            },
+                            Err(e) => Err(format!("Ollama 请求失败: {}", e)),
+                        }
                     }
                 }
                 _ => Err(format!("未实现的能力: {}", step.agent_id)),
@@ -907,7 +959,7 @@ mod tests {
         assert_eq!(d.llm_model, "my-model:latest");
         assert_eq!(d.asr_model, "asr/whisper-tiny");
         assert_eq!(d.tts_model, "tts/cosyvoice2");
-        assert_eq!(d.ref_audio, DEFAULT_REF_AUDIO);
+        assert_eq!(d.ref_audio, default_ref_audio());
         assert_eq!(
             d.installed_path("asr/whisper-tiny"),
             Some("models/asr/whisper-tiny")
@@ -915,11 +967,67 @@ mod tests {
     }
 
     #[test]
-    fn runtime_defaults_fallback_when_unset() {
+    fn runtime_defaults_empty_when_unset_and_no_scan() {
         let d = RuntimeDefaults::fallback();
-        assert_eq!(d.llm_model, FALLBACK_LLM_MODEL);
-        assert_eq!(d.asr_model, FALLBACK_ASR_MODEL);
-        assert_eq!(d.tts_model, FALLBACK_TTS_MODEL);
+        assert!(d.llm_model.is_empty());
+        assert!(d.asr_model.is_empty());
+        assert!(d.tts_model.is_empty());
+    }
+
+    #[test]
+    fn runtime_defaults_prefer_first_scanned_when_config_empty() {
+        let cfg = AppConfig::default();
+        let models = vec![
+            ModelInfo {
+                id: "llm/qwen3:8b".into(),
+                name: "q".into(),
+                version: String::new(),
+                quant: String::new(),
+                path: String::new(),
+                sample_rate: 0,
+                model_type: "llm".into(),
+                size_mb: 0.0,
+                files: 0,
+                main_files: vec![],
+                description: String::new(),
+                source: "ollama".into(),
+                context_length: None,
+            },
+            ModelInfo {
+                id: "asr/whisper-tiny".into(),
+                name: "w".into(),
+                version: String::new(),
+                quant: String::new(),
+                path: "models/asr/whisper-tiny".into(),
+                sample_rate: 16000,
+                model_type: "asr".into(),
+                size_mb: 0.0,
+                files: 0,
+                main_files: vec![],
+                description: String::new(),
+                source: "local".into(),
+                context_length: None,
+            },
+            ModelInfo {
+                id: "tts/cosyvoice2".into(),
+                name: "t".into(),
+                version: String::new(),
+                quant: String::new(),
+                path: "models/tts/cosyvoice2".into(),
+                sample_rate: 24000,
+                model_type: "tts".into(),
+                size_mb: 0.0,
+                files: 0,
+                main_files: vec![],
+                description: String::new(),
+                source: "local".into(),
+                context_length: None,
+            },
+        ];
+        let d = RuntimeDefaults::from_app_state(&cfg, &models);
+        assert_eq!(d.llm_model, "qwen3:8b");
+        assert_eq!(d.asr_model, "asr/whisper-tiny");
+        assert_eq!(d.tts_model, "tts/cosyvoice2");
     }
 
     #[test]
@@ -929,8 +1037,8 @@ mod tests {
             llm_model: "qwen3:8b".into(),
             asr_model: "asr/whisper-tiny".into(),
             tts_model: "tts/openvoice".into(),
-            ref_audio: DEFAULT_REF_AUDIO.into(),
-            ref_text: DEFAULT_REF_TEXT.into(),
+            ref_audio: default_ref_audio(),
+            ref_text: default_ref_text(),
             model_paths: HashMap::new(),
         };
         let reg = sched.registry(&d);

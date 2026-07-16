@@ -23,7 +23,22 @@ export interface AgentStep {
 }
 
 /** 外部 Agent 接入协议（AI 网关按此分派适配器）。 */
-export type ExternalProtocol = 'openai-compatible' | 'anthropic';
+export type ExternalProtocol =
+  | 'openai-compatible'
+  | 'anthropic'
+  | 'xai-oauth'
+  | 'claude-code'
+  | 'cursor-sdk';
+
+/** Chat 消息内嵌媒体（SuperGrok Imagine 等）。 */
+export interface ChatMedia {
+  kind: 'image' | 'video';
+  url: string;
+  prompt?: string;
+  /** pending | done | error */
+  status?: 'pending' | 'done' | 'error';
+  error?: string;
+}
 
 export interface Agent {
   id: string;
@@ -123,6 +138,8 @@ export interface ChatMessage {
   voiceName?: string;
   duration?: string;
   feedback?: 'up' | 'down';
+  /** SuperGrok / Imagine 等生成的图像或视频。 */
+  media?: ChatMedia;
   /** Opaque persistence sequence: only set at append, reused by updateMessageAudio. */
   _seq?: number;
 }
