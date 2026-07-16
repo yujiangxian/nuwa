@@ -202,11 +202,20 @@ export function useAssistantStream({
         // V3: external Agent — 经 AI 网关按协议分派（openai-compatible / anthropic）
         if (currentAgent?.kind === 'external') {
           try {
-            if (!currentAgent.endpoint?.trim()) {
+            const needsUrl = currentAgent.protocol !== 'xai-oauth'
+              && currentAgent.protocol !== 'claude-code'
+              && currentAgent.protocol !== 'cursor-sdk'
+              && !currentAgent.endpoint?.trim();
+            if (needsUrl) {
               addToast({ message: '请先在 Agent 页配置外部地址', type: 'error' });
             } else {
               await streamChat(currentAgent.protocol, {
-                baseUrl: currentAgent.endpoint,
+                baseUrl: currentAgent.endpoint
+                  || (currentAgent.protocol === 'claude-code'
+                    ? 'nuwa://claude-code'
+                    : currentAgent.protocol === 'cursor-sdk'
+                      ? 'nuwa://cursor-sdk'
+                      : 'nuwa://xai-oauth'),
                 apiKey: loadExternalApiKey(currentAgent.id),
                 model: currentAgent.externalModel,
                 system: system ?? undefined,

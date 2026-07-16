@@ -17,6 +17,9 @@ describe('gateway registry', () => {
   it('parseProtocol accepts known protocols and rejects the rest', () => {
     expect(parseProtocol('openai-compatible')).toBe('openai-compatible');
     expect(parseProtocol('anthropic')).toBe('anthropic');
+    expect(parseProtocol('xai-oauth')).toBe('xai-oauth');
+    expect(parseProtocol('claude-code')).toBe('claude-code');
+    expect(parseProtocol('cursor-sdk')).toBe('cursor-sdk');
     expect(parseProtocol('acp')).toBeUndefined();
     expect(parseProtocol(42)).toBeUndefined();
     expect(parseProtocol(undefined)).toBeUndefined();
@@ -39,6 +42,7 @@ describe('gateway registry', () => {
 
     await streamChat(undefined, {
       baseUrl: 'https://x.example.com/v1',
+      model: 'gpt-4o-mini',
       messages: [{ role: 'user', content: 'hi' }],
       onDelta: () => {},
     });
@@ -46,6 +50,7 @@ describe('gateway registry', () => {
 
     await streamChat('anthropic', {
       baseUrl: 'https://y.example.com',
+      model: 'claude-sonnet-4-6',
       messages: [{ role: 'user', content: 'hi' }],
       onDelta: () => {},
     });

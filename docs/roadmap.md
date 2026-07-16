@@ -35,6 +35,8 @@
 - [x] V2 工作流步骤编排并入 Agent（`lib/agentWorkflow`）
 - [x] V3 外部 OpenAI 兼容 Agent（`lib/externalAgent`）
 - [x] 角色并入 Agent（删除角色页；迁移 + 会话绑定 `agentId`）
+- [x] V4 AI 网关多协议 + V5 SuperGrok 订阅（OAuth / 图像 / 视频）
+- [x] V6 本机 Claude Code / Cursor coding Agent MVP（`docs/features/local-coding-agents.md`）
 
 ### 2.1 Rust Agent 调度器 ✅
 - [x] `services/agent_scheduler.rs` — Agent 注册表 + 流水线定义 + Semaphore 并发控制

@@ -11,6 +11,7 @@ import ParamPanel from '@/components/ParamPanel';
 import UsageIndicator from '@/components/UsageIndicator';
 import MarkdownMessage from '@/components/MarkdownMessage';
 import { buildRequestFragment } from '@/lib/generationParams';
+import { configLlmModelId } from '@/lib/displayModel';
 import { resolveContextLength } from '@/lib/contextWindow';
 import { computeBudget, resolveReservedTokens } from '@/lib/contextBudget';
 import { estimateText } from '@/lib/tokenEstimate';
@@ -57,12 +58,29 @@ export default function PlaygroundPage() {
   const [presetsOpen, setPresetsOpen] = useState(false);
 
   const llmModels = allModels.filter((m) => m.model_type === 'llm' || m.id.startsWith('llm/'));
-  const defaultModel = config?.current_models?.llm ?? config?.current_llm_model ?? 'llm/gemma4:e4b';
-  const [modelId, setModelId] = useState(defaultModel);
+  const configuredLlm = configLlmModelId(config);
+  const preferredModelId =
+    (configuredLlm
+      ? llmModels.find((m) => m.id === configuredLlm || m.id === `llm/${configuredLlm}`)?.id
+      : undefined) ?? llmModels[0]?.id ?? '';
+  const [modelId, setModelId] = useState(preferredModelId);
   const currentModel = modelId?.replace(/^llm\//, '');
+
+  // 配置 / 扫描结果就绪后，若当前选择为空或已不在列表中，对齐到可用模型。
+  useEffect(() => {
+    if (!preferredModelId) {
+      if (modelId) setModelId('');
+      return;
+    }
+    if (!modelId || !llmModels.some((m) => m.id === modelId)) {
+      setModelId(preferredModelId);
+    }
+  }, [preferredModelId, llmModels, modelId]);
 
   const selectedModel = llmModels.find((m) => m.id === modelId);
   const selectedCompareModel = compareModelId ? llmModels.find((m) => m.id === compareModelId) : undefined;
+  const selectedContext = resolveContextLength(selectedModel?.context_length);
+  const compareContext = resolveContextLength(selectedCompareModel?.context_length);
 
   // Format size for display
   const formatSize = (mb: number | undefined): string => {
@@ -72,7 +90,7 @@ export default function PlaygroundPage() {
   };
 
   const budget = (() => {
-    const { contextLength } = resolveContextLength(undefined);
+    const { contextLength } = selectedContext;
     const reservedTokens = resolveReservedTokens(chatGenParams);
     const allMessages = [
       ...history.map((h, i) => ({ id: `hist-${i}`, role: h.role as 'user' | 'assistant', content: h.content })),
@@ -310,7 +328,7 @@ export default function PlaygroundPage() {
         <div className="flex items-center gap-2">
           <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full glass" style={{ border: '1px solid var(--border)' }}>
             <Monitor size={14} style={{ color: 'var(--text-secondary)' }} />
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{currentModel}</span>
+            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{currentModel || '未选择模型'}</span>
           </div>
           <button
             className="flex items-center justify-center"
@@ -332,10 +350,13 @@ export default function PlaygroundPage() {
               <select
                 value={modelId}
                 onChange={(e) => setModelId(e.target.value)}
+                disabled={llmModels.length === 0}
                 className="w-full text-sm rounded-xl outline-none px-3 py-2"
                 style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
               >
-                {llmModels.length > 0 ? (
+                {llmModels.length === 0 ? (
+                  <option value="">暂无 LLM（请先在模型页扫描 / 拉取）</option>
+                ) : (
                   llmModels.map((m) => {
                     const sizeStr = m.size_mb != null ? formatSize(m.size_mb) : '';
                     const quantStr = m.quant || '';
@@ -346,11 +367,6 @@ export default function PlaygroundPage() {
                       </option>
                     );
                   })
-                ) : (
-                  <>
-                    <option value="gemma4:e4b">gemma4:e4b</option>
-                    <option value="gemma3:1b">gemma3:1b</option>
-                  </>
                 )}
               </select>
 
@@ -362,7 +378,10 @@ export default function PlaygroundPage() {
                 >
                   <div>Size: {formatSize(selectedModel.size_mb)}</div>
                   <div>Quant: {selectedModel.quant || '--'}</div>
-                  <div>Context: 4096 tokens</div>
+                  <div>
+                    Context: {selectedContext.contextLength} tokens
+                    {selectedContext.isEstimated ? '（估算）' : ''}
+                  </div>
                 </div>
               )}
             </div>
@@ -387,10 +406,13 @@ export default function PlaygroundPage() {
                 <select
                   value={compareModelId}
                   onChange={(e) => setCompareModelId(e.target.value)}
+                  disabled={llmModels.filter((m) => m.id !== modelId).length === 0}
                   className="w-full text-sm rounded-xl outline-none px-3 py-2"
                   style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                 >
-                  {llmModels.length > 0 ? (
+                  {llmModels.filter((m) => m.id !== modelId).length === 0 ? (
+                    <option value="">暂无对比模型</option>
+                  ) : (
                     llmModels.filter((m) => m.id !== modelId).map((m) => {
                       const sizeStr = m.size_mb != null ? formatSize(m.size_mb) : '';
                       const quantStr = m.quant || '';
@@ -401,11 +423,6 @@ export default function PlaygroundPage() {
                         </option>
                       );
                     })
-                  ) : (
-                    <>
-                      <option value="gemma3:1b">gemma3:1b</option>
-                      <option value="gemma4:e4b">gemma4:e4b</option>
-                    </>
                   )}
                 </select>
                 {selectedCompareModel && (
@@ -415,7 +432,10 @@ export default function PlaygroundPage() {
                   >
                     <div>Size: {formatSize(selectedCompareModel.size_mb)}</div>
                     <div>Quant: {selectedCompareModel.quant || '--'}</div>
-                    <div>Context: 4096 tokens</div>
+                    <div>
+                      Context: {compareContext.contextLength} tokens
+                      {compareContext.isEstimated ? '（估算）' : ''}
+                    </div>
                   </div>
                 )}
               </div>

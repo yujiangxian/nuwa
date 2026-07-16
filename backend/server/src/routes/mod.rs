@@ -123,4 +123,22 @@ pub fn create_router() -> Router<Arc<RwLock<AppState>>> {
         )
         // SSE 进度推送
         .route("/api/sse/progress", get(handlers::sse::progress_stream))
+        // SuperGrok / xAI OAuth + Imagine
+        .route("/api/xai/auth/start", post(handlers::xai::auth_start))
+        .route("/api/xai/auth/status", get(handlers::xai::auth_status))
+        .route("/api/xai/auth/import", post(handlers::xai::auth_import))
+        .route("/api/xai/auth/logout", post(handlers::xai::auth_logout))
+        .route("/api/xai/status", get(handlers::xai::status))
+        .route("/api/xai/chat/stream", post(handlers::xai::chat_stream))
+        .route("/api/xai/images", post(handlers::xai::images))
+        .route("/api/xai/videos", post(handlers::xai::videos_submit))
+        .route("/api/xai/videos/{id}", get(handlers::xai::videos_poll))
+        .route("/api/media/xai/{filename}", get(handlers::xai::serve_media))
+        // 本机 Claude Code / Cursor Agent
+        .route("/api/coding/claude/status", get(handlers::coding::claude_status))
+        .route("/api/coding/claude/stream", post(handlers::coding::claude_stream))
+        .route("/api/coding/claude/key", post(handlers::coding::claude_set_key))
+        .route("/api/coding/cursor/status", get(handlers::coding::cursor_status))
+        .route("/api/coding/cursor/stream", post(handlers::coding::cursor_stream))
+        .route("/api/coding/cursor/key", post(handlers::coding::cursor_set_key))
 }
