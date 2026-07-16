@@ -17,7 +17,7 @@ import { trimMessages } from '@/lib/contextTrim';
 import { estimateText } from '@/lib/tokenEstimate';
 import { extractNewSentences } from '@/lib/sentenceSplit';
 import { resolvePipelineFromSteps, shouldAutoTts } from '@/lib/agentWorkflow';
-import { loadExternalApiKey, streamOpenAICompatible } from '@/lib/externalAgent';
+import { loadExternalApiKey, streamChat } from '@/lib/gateway';
 
 function formatDuration(secs: number): string {
   const m = Math.floor(secs / 60);
@@ -199,13 +199,13 @@ export function useAssistantStream({
         let connectFailed = false;
         let agentFailed = false;
 
-        // V3: external OpenAI-compatible Agent
+        // V3: external Agent — 经 AI 网关按协议分派（openai-compatible / anthropic）
         if (currentAgent?.kind === 'external') {
           try {
             if (!currentAgent.endpoint?.trim()) {
               addToast({ message: '请先在 Agent 页配置外部地址', type: 'error' });
             } else {
-              await streamOpenAICompatible({
+              await streamChat(currentAgent.protocol, {
                 baseUrl: currentAgent.endpoint,
                 apiKey: loadExternalApiKey(currentAgent.id),
                 model: currentAgent.externalModel,

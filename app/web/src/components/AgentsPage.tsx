@@ -23,7 +23,10 @@ import {
 import {
   loadExternalApiKey,
   probeExternalAgent,
-} from '@/lib/externalAgent';
+  parseProtocol,
+  DEFAULT_PROTOCOL,
+} from '@/lib/gateway';
+import ExternalAgentFields from '@/components/agents/ExternalAgentFields';
 import {
   ArrowLeft, Settings, Plus, Bot, Pencil, Trash2, Check, X, Loader2,
   AlertCircle, Download, Upload, Copy, GripVertical,
@@ -61,7 +64,7 @@ const PIPELINE_OPTIONS: { id: AgentPipeline; label: string }[] = [
 const KIND_OPTIONS: { id: AgentKind; label: string; hint: string }[] = [
   { id: 'local', label: '本地', hint: '绑定固定流水线' },
   { id: 'workflow', label: '工作流', hint: '自定义 ASR/LLM/TTS 步骤' },
-  { id: 'external', label: '外部', hint: 'OpenAI 兼容 API' },
+  { id: 'external', label: '外部', hint: 'AI 网关（OpenAI 兼容 / Anthropic）' },
 ];
 
 type FormState = AgentInput & { apiKey: string };
@@ -131,7 +134,7 @@ export default function AgentsPage() {
       topP: a.topP,
       endpoint: a.endpoint ?? '',
       externalModel: a.externalModel ?? 'gpt-4o-mini',
-      protocol: a.protocol ?? 'openai-compatible',
+      protocol: a.protocol ?? DEFAULT_PROTOCOL,
       apiKey: loadExternalApiKey(a.id),
     });
     setNameError(false);
@@ -195,7 +198,7 @@ export default function AgentsPage() {
   const handleProbe = async () => {
     setProbing(true);
     try {
-      const result = await probeExternalAgent({
+      const result = await probeExternalAgent(form.protocol, {
         baseUrl: form.endpoint || '',
         apiKey: form.apiKey,
         model: form.externalModel,
@@ -225,7 +228,7 @@ export default function AgentsPage() {
         steps: form.kind === 'workflow' ? form.steps : undefined,
         endpoint: form.kind === 'external' ? form.endpoint : undefined,
         externalModel: form.kind === 'external' ? form.externalModel : undefined,
-        protocol: form.kind === 'external' ? 'openai-compatible' : undefined,
+        protocol: form.kind === 'external' ? (form.protocol ?? DEFAULT_PROTOCOL) : undefined,
         apiKey: form.kind === 'external' ? form.apiKey : undefined,
       };
       if (formMode?.kind === 'create') {
@@ -284,7 +287,7 @@ export default function AgentsPage() {
         topP: typeof data.topP === 'number' ? data.topP : 0.9,
         endpoint: data.endpoint,
         externalModel: data.externalModel,
-        protocol: data.protocol === 'openai-compatible' ? 'openai-compatible' : undefined,
+        protocol: parseProtocol(data.protocol),
       });
       addToast({ message: '已导入 Agent', type: 'success' });
     } catch {
@@ -342,7 +345,7 @@ export default function AgentsPage() {
                   {a.kind === 'workflow' && a.steps
                     ? a.steps.map((s) => s.label).join(' → ')
                     : a.kind === 'external'
-                      ? (a.endpoint || '未配置地址')
+                      ? `${a.protocol === 'anthropic' ? 'Anthropic · ' : ''}${a.endpoint || '未配置地址'}`
                       : (PIPELINE_OPTIONS.find((o) => o.id === a.pipeline)?.label ?? a.pipeline)}
                 </p>
               </div>
@@ -483,31 +486,18 @@ export default function AgentsPage() {
             )}
 
             {form.kind === 'external' && (
-              <>
-                <label className="text-xs" style={{ color: 'var(--text-secondary)' }}>Base URL（OpenAI 兼容）</label>
-                <input value={form.endpoint ?? ''} onChange={(e) => setForm((f) => ({ ...f, endpoint: e.target.value }))}
-                  placeholder="https://api.openai.com/v1"
-                  className="rounded-xl px-3 py-2 text-sm outline-none"
-                  style={{ background: 'var(--surface)', border: `1px solid ${endpointError ? '#FF6B6B' : 'var(--border)'}`, color: 'var(--text-primary)' }} />
-                {endpointError && <span className="text-[11px] flex items-center gap-1" style={{ color: '#FF6B6B' }}><AlertCircle size={12} />请填写地址</span>}
-
-                <label className="text-xs" style={{ color: 'var(--text-secondary)' }}>模型 ID</label>
-                <input value={form.externalModel ?? ''} onChange={(e) => setForm((f) => ({ ...f, externalModel: e.target.value }))}
-                  className="rounded-xl px-3 py-2 text-sm outline-none"
-                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
-
-                <label className="text-xs" style={{ color: 'var(--text-secondary)' }}>API Key（仅存本机）</label>
-                <input type="password" value={form.apiKey} onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value }))}
-                  autoComplete="off"
-                  className="rounded-xl px-3 py-2 text-sm outline-none"
-                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }} />
-                <button type="button" onClick={() => void handleProbe()} disabled={probing}
-                  className="self-start text-xs px-3 py-1.5 rounded-lg cursor-pointer flex items-center gap-1"
-                  style={{ background: 'var(--surface-hover)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
-                  {probing ? <Loader2 size={12} className="animate-spin" /> : null}
-                  测试连通性
-                </button>
-              </>
+              <ExternalAgentFields
+                value={{
+                  endpoint: form.endpoint ?? '',
+                  externalModel: form.externalModel ?? '',
+                  protocol: form.protocol ?? DEFAULT_PROTOCOL,
+                  apiKey: form.apiKey,
+                }}
+                endpointError={endpointError}
+                probing={probing}
+                onPatch={(patch) => setForm((f) => ({ ...f, ...patch }))}
+                onProbe={() => void handleProbe()}
+              />
             )}
 
             {form.kind !== 'external' && (

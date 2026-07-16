@@ -22,7 +22,8 @@ export interface AgentStep {
   label: string;
 }
 
-export type ExternalProtocol = 'openai-compatible';
+/** 外部 Agent 接入协议（AI 网关按此分派适配器）。 */
+export type ExternalProtocol = 'openai-compatible' | 'anthropic';
 
 export interface Agent {
   id: string;
