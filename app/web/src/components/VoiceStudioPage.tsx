@@ -4,7 +4,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useUIStore } from '@/store/uiStore';
 import { useToastStore } from '@/store/toastStore';
-import { apiClient } from '@/api/client';
+import { apiClient, apiUrl } from '@/api/client';
 import { errorMessage } from '@/lib/errorDetail';
 import { useVoices, useSynthesize, useConfig, useUploadVoice, useDeleteVoice, voiceAudioUrl } from '@/hooks/useApi';
 import { useAudioPlayer } from '@/hooks/useAudioPlayer';
@@ -279,7 +279,7 @@ export default function VoiceStudioPage() {
         setSynthHistory((prev) => [...prev, { path, text: synthText, time: Date.now() }]);
         addToast({ message: '合成完成', type: 'success' });
         if (autoPlay) {
-          void player.play(SYNTH_KEY, `/api/audio/${path}`);
+          void player.play(SYNTH_KEY, apiUrl(`/api/audio/${path}`));
         }
       } else {
         const msg = data.error || '合成失败';
@@ -314,7 +314,7 @@ export default function VoiceStudioPage() {
         setGeneratedPath(data.output_path);
         setSynthHistory((prev) => [...prev, { path: data.output_path, text: synthScript, time: Date.now() }]);
         addToast({ message: '多段合成完成', type: 'success' });
-        if (autoPlay) void player.play(SYNTH_KEY, `/api/audio/${data.output_path}`);
+        if (autoPlay) void player.play(SYNTH_KEY, apiUrl(`/api/audio/${data.output_path}`));
       } else {
         const msg = data.error || '合成失败';
         setSynthError(msg);
@@ -663,7 +663,7 @@ export default function VoiceStudioPage() {
                         </button>
                         {v.path && (
                           <button
-                            onClick={(e) => { e.stopPropagation(); void player.play(`voice-preview-${v.id}`, `/api/audio/${v.path}`); }}
+                            onClick={(e) => { e.stopPropagation(); void player.play(`voice-preview-${v.id}`, apiUrl(`/api/audio/${v.path}`)); }}
                             className="flex items-center justify-center shrink-0 mr-1"
                             style={{
                               width: 24, height: 24, borderRadius: 6,
@@ -740,7 +740,7 @@ export default function VoiceStudioPage() {
               {generatedPath && !synthError && (
                 <div className="mt-4 pt-3 flex items-center gap-3" style={{ borderTop: '1px solid var(--border)' }}>
                   <button
-                    onClick={() => player.play(SYNTH_KEY, `/api/audio/${generatedPath}`)}
+                    onClick={() => player.play(SYNTH_KEY, apiUrl(`/api/audio/${generatedPath}`))}
                     className="flex items-center gap-2"
                     style={{ background: 'rgba(72,202,228,0.08)', color: 'var(--primary)', borderRadius: 10, padding: '8px 16px', fontWeight: 600, fontSize: 13, border: '1px solid rgba(72,202,228,0.15)', cursor: 'pointer' }}
                   >
@@ -763,7 +763,7 @@ export default function VoiceStudioPage() {
                     return (
                       <div key={`${entry.time}-${idx}`} className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                         <button
-                          onClick={() => player.play(historyKey, `/api/audio/${entry.path}`)}
+                          onClick={() => player.play(historyKey, apiUrl(`/api/audio/${entry.path}`))}
                           className="flex items-center justify-center shrink-0"
                           style={{ width: 28, height: 28, borderRadius: 8, color: 'var(--primary)', background: 'rgba(72,202,228,0.08)', border: 'none', cursor: 'pointer' }}
                           title={isPlayingHistory ? '停止' : '重播'}

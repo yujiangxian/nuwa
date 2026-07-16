@@ -3,7 +3,7 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useUIStore, type ChatMessage, type Agent } from '@/store/uiStore';
-import { apiClient } from '@/api/client';
+import { apiClient, apiUrl } from '@/api/client';
 import { type ErrorDetail } from '@/lib/errorDetail';
 import type { TtsResponse } from '@/hooks/useApi';
 import type { UseAudioQueue } from '@/hooks/useAudioQueue';
@@ -181,7 +181,7 @@ export function useAssistantStream({
                     const dur = streamTotalDurRef.current > 0 ? formatDuration(streamTotalDurRef.current) : undefined;
                     useUIStore.getState().updateMessageAudio(streamMsgId, streamAudioPathsRef.current.join(','), dur);
                     if (!abortedTtsRef.current) {
-                      player.enqueue(`${streamMsgId}-s${sentenceNum}`, `/api/audio/${res.output_path}`);
+                      player.enqueue(`${streamMsgId}-s${sentenceNum}`, apiUrl(`/api/audio/${res.output_path}`));
                     }
                   }
                 }).catch(() => {
@@ -252,7 +252,7 @@ export function useAssistantStream({
               };
               ctrl.signal.addEventListener('abort', cleanup, { once: true });
 
-              const eventSource = new EventSource(`/api/agents/tasks/${taskId}/events`);
+              const eventSource = new EventSource(apiUrl(`/api/agents/tasks/${taskId}/events`));
               eventSource.onmessage = (e) => {
                 try {
                   const ev = JSON.parse(e.data);
@@ -345,7 +345,7 @@ export function useAssistantStream({
                 const dur = res.duration_sec ? formatDuration(res.duration_sec) : undefined;
                 useUIStore.getState().updateMessageAudio(finalMsg.id, res.output_path, dur);
                 if (wantTts && !player.playing && !abortedTtsRef.current) {
-                  player.playNow(finalMsg.id, `/api/audio/${res.output_path}`);
+                  player.playNow(finalMsg.id, apiUrl(`/api/audio/${res.output_path}`));
                 }
               }
             }).catch(() => {}).finally(() => {
