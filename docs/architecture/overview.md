@@ -6,7 +6,7 @@
 
 ## 1. 产品定位
 
-**目标**：在本地 Windows PC（AMD RX 9070 XT）上运行一个类似"豆包 APP"的智能交互终端，支持：
+**目标**：在本地 Windows PC（AMD ROCm 或 NVIDIA CUDA）上运行一个类似"豆包 APP"的智能交互终端，支持：
 - 语音对话（说 → 听 → 回答）
 - 文本对话
 - 声音克隆与合成
@@ -14,8 +14,9 @@
 
 **核心约束**：
 - 所有推理本地运行，零数据外传
-- 支持 AMD ROCm（RX 9070 XT）和国产 DCU 双环境
+- 支持 AMD ROCm（如 RX 9070 XT）与 NVIDIA CUDA（如 RTX 5070）；国产 DCU 为远期兼容目标
 - 模型文件大（数十 GB），需精细管理显存和磁盘
+- GPU 后端由 `NUWA_GPU_BACKEND` + SMI 自动检测选择（见 `docs/nvidia_cuda_setup.md` / `docs/rx9070xt_ai_setup.md`）
 
 ---
 

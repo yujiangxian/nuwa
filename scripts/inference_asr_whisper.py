@@ -5,7 +5,8 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 import torch
-torch.backends.cudnn.enabled = False
+from nuwa_torch_device import resolve_torch_device
+_DEVICE = resolve_torch_device(torch)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model-path', required=True, help='模型目录路径（含 pytorch_model.bin）')
@@ -18,7 +19,7 @@ try:
     import whisper
     t0 = time.time()
     # Whisper 从目录加载
-    model = whisper.load_model(args.model_path, device='cuda' if torch.cuda.is_available() else 'cpu')
+    model = whisper.load_model(args.model_path, device=_DEVICE)
     load_time = time.time() - t0
 
     t0 = time.time()

@@ -3,6 +3,8 @@
 
 //! Shared utilities — paths, formatting, helpers that are used across multiple modules.
 
+pub mod gpu_backend;
+
 use std::path::{Component, Path, PathBuf};
 
 /// Returns the project root directory.
@@ -33,22 +35,12 @@ pub fn project_root() -> PathBuf {
         })
 }
 
-/// Returns the Python executable path, preferring virtual environments.
+/// Returns the Python executable for the resolved GPU backend.
+///
+/// Prefers `envs/ai-cuda` or `envs/ai-rocm`, then `envs/ai` / `ai_env`, then `python`.
 pub fn python_exe() -> PathBuf {
-    let candidates = [
-        project_root().join("envs/ai/Scripts/python.exe"),
-        project_root().join("envs/ai/bin/python"),
-        project_root().join("ai_env/Scripts/python.exe"),
-        project_root().join("ai_env/bin/python"),
-        PathBuf::from("python"),
-        PathBuf::from("python3"),
-    ];
-    for c in &candidates {
-        if c.exists() || c.to_string_lossy() == "python" || c.to_string_lossy() == "python3" {
-            return c.clone();
-        }
-    }
-    PathBuf::from("python")
+    let backend = gpu_backend::resolve_backend();
+    gpu_backend::resolve_python_exe(&project_root(), backend)
 }
 
 /// Resolve a path to absolute — if relative, join with project_root.
