@@ -8,7 +8,7 @@ import { createAgentDb, type AgentDb } from '@/lib/agentDb';
 import { createCharacterDb } from '@/lib/characterDb';
 import { validateName, generateAgentId, needsAgentSeeding, pickNextAgentId } from '@/lib/agent';
 import { makeSteps, resolvePipelineFromSteps } from '@/lib/agentWorkflow';
-import { saveExternalApiKey, deleteExternalApiKey } from '@/lib/externalAgent';
+import { saveExternalApiKey, deleteExternalApiKey } from '@/lib/gateway';
 import { useToastStore } from '@/store/toastStore';
 import type { Agent, AgentInput, Character } from './types';
 

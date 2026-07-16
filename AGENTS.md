@@ -47,9 +47,9 @@ React 19 frontend, Rust Axum backend, Python inference subprocesses.
 | `components/VoiceStudioPage.tsx` | Voice library + TTS synthesis |
 | `components/TranscribePage.tsx` | ASR recording + upload |
 | `components/ModelsPage.tsx` | Model management |
-| `components/CharactersPage.tsx` | Character/persona manager |
+| `components/AgentsPage.tsx` | Agent factory (local / workflow / external via AI gateway) |
 | `components/PromptPresetsPage.tsx` | Prompt preset manager |
-| `store/uiStore.ts` | Zustand: sessions, characters, presets, settings, navigation |
+| `store/uiStore.ts` | Zustand: sessions, agents, presets, settings, navigation |
 | `store/index.ts` | Zustand: config, models, voices |
 | `store/toastStore.ts` | Toast notification state |
 | `hooks/useApi.ts` | TanStack Query: all API hooks |
